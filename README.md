@@ -26,8 +26,11 @@ uv run run_backend.py       # http://127.0.0.1:8100（含 Web UI 与 MCP）
 手册放进 `pdf/`（或 `.env` 的 `PDF_ROOT`），然后在 Web「索引状态」页点**增量索引**。
 
 > **部署**（另起机器 / 容器）：
-> - 容器、生产（当前 NAS 形态）→ **[DEPLOY-NAS.md](DEPLOY-NAS.md)**
 > - 裸机、交付包解压 → **[DEPLOY.md](DEPLOY.md)**
+> - 容器、NAS 生产形态 → `DEPLOY-NAS.md`（内网运维文档，含具体地址与账号，**不入库**）
+
+仓库内还有一份 **[BENCHMARKS.md](BENCHMARKS.md)**：检索质量基线、历次参数实验
+（含否定性结果）与测试方法学。
 
 ## 目录结构
 
@@ -46,6 +49,8 @@ ocr_service.py    本机 OCR 服务（独立进程，依赖 ocr-env，可选）
 run_backend.py    后端守护：崩溃自愈 + 单例锁
 eval_retrieval.py 检索质量评测
 eval_queries.json 评测集（55 条）
+BENCHMARKS.md     评测结果与历次实验记录（调参/换模型前先读）
+DEPLOY.md         部署指南（裸机 / 交付包）
 tools/            开发期诊断与维护脚本（见下）
 web/              前端源码（Vue 3 + Vite + naive-ui）
 index.lance/      LanceDB 索引（运行时生成）
@@ -141,10 +146,6 @@ ADMIN_TOKEN=                                  # 留空则 /api/admin/* 一律 40
 | `GET /api/categories` | 全部类别目录 |
 | `GET /api/files?category=` | 文件清单与元数据（含提取质量字段） |
 | `GET /api/extract/report?limit=` | 逐文档提取质量体检（低文本页标记） |
-
-所有接受 `file` 的端点只认**语料库内的相对路径**（正斜杠；Windows 风格反斜杠会自动
-归一），绝对路径与 `..` 穿越一律拒绝。`/api/search` 与 `/api/grep` 的 `file` 过滤按
-**字面子串**匹配（`%`/`_` 不作通配符解释）。
 | `GET /api/history` | 索引历史 |
 | `GET /api/state` | 索引进度 |
 | `GET /api/config` | 读全部可调参数（含中文名/默认值/范围/是否被覆盖） |
@@ -157,6 +158,10 @@ ADMIN_TOKEN=                                  # 留空则 /api/admin/* 一律 40
 | `POST /api/import/inspect` · `POST /api/import/bundle` | 导入预检 / 执行导入 |
 | `POST /api/admin/restart` | 重启后端（需 `X-Admin-Token`） |
 | `POST /api/admin/shutdown` | 关闭后端（需 `X-Admin-Token`） |
+
+所有接受 `file` 的端点只认**语料库内的相对路径**（正斜杠；Windows 风格反斜杠会自动
+归一），绝对路径与 `..` 穿越一律拒绝。`/api/search` 与 `/api/grep` 的 `file` 过滤按
+**字面子串**匹配（`%`/`_` 不作通配符解释）。
 
 ## 索引
 
