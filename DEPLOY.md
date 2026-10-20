@@ -192,7 +192,18 @@ uv run python -m backend.ingest --rebuild   # 全量重建
 - 加了新 PDF 后：把文件放进 `pdf/<类别>/` 再跑增量索引。
 - **换了嵌入模型后：必须 `--rebuild`**（增量不会重算已有文档的向量）。
 - 重建的进度实时写入 `run_state.json`，Web「索引状态」页可看。
-- 索引里存的是**相对路径**（如 `01_传感器\xxx.PDF`），所以移动整个 `pdf/` 目录不影响，改 `PDF_ROOT` 即可。
+- 索引里存的是**相对路径**（如 `01_传感器/xxx.PDF`），所以移动整个 `pdf/` 目录不影响，改 `PDF_ROOT` 即可。
+
+**碎片整理**：增量索引每跑一次留一个新版本，长期累积磁盘占用远超真实数据（实测本仓库
+8561 块真实数据约 26 MB，目录曾涨到 248 MB / 517 版本 / 1457 文件，约 9 倍）：
+
+```bash
+uv run python tools/compact_index.py            # 合并碎片 + 清理 1h 前的旧版本
+uv run python tools/compact_index.py --dry-run  # 只看现状
+```
+
+不改任何一行数据。作者最近一次实测：**128 MB / 521 版本 / 228 文件 → 43 MB / 8 文件**，
+行数与全文索引不变，检索结果一致。清理后重启后端，让它在最新版本上重新持有句柄。
 
 ## 七、数据包（迁移到另一套实例）
 
@@ -226,8 +237,8 @@ curl -X POST -H "Content-Type: application/json" \
 | 重启/关闭 | `POST /api/admin/restart` / `/api/admin/shutdown`，需 `X-Admin-Token` 头 |
 | 守护 | `run_backend.py` 拉起 uvicorn，异常退出后自动重启；日志 `logs/backend.log` |
 | 单例锁 | `run_backend.lock` 用文件字节锁，进程崩溃由系统释放，**不会出现"锁被永久占用"** |
-| 配置改动 | 改 `.env` 或 `data/settings.json` 后**必须重启后端**才生效 |
-| 可调参数 | 36 项，Web「配置」页可运行时修改；覆盖值存 `data/settings.json`（不入版本库） |
+| 配置改动 | 改 `.env` 后需重启后端；`data/settings.json`（可调参数）即时生效，无需重启 |
+| 可调参数 | 51 项 / 9 组，Web「检索配置」页可运行时修改、**即时生效**；覆盖值存 `data/settings.json`（不入版本库） |
 | 日志 | `logs/backend.log`（后端）、`logs/ocr.log`（OCR） |
 
 ## 九、常见问题
@@ -250,3 +261,35 @@ curl -X POST -H "Content-Type: application/json" \
 **Q：端口 8100 被占用？** 守护启动时会等待 30s，仍被占用则退出并记日志。改 `BACKEND_PORT`，或找到占用进程释放。
 
 **Q：后台进程看起来有两层 PID？** 正常。`uv` 创建的 venv 里 `python.exe` 是启动器存根，会再 exec 真正的解释器，所以一个逻辑进程显示为两层 PID，**不要当成重复进程去 kill**。
+
+
+## 十、API 参考（完整端点表）
+
+| 端点 | 说明 |
+|---|---|
+| `GET /api/search?q=&category=&top_k=&mode=&rerank=&file=&max_per_doc=` | 混合检索 |
+| `GET /api/grep?pattern=&category=&file=&max_hits=&context=&flex_separator=` | 正则精确检索 |
+| `GET /api/page?file=&page=` | 单页原文（低文本页回退 OCR） |
+| `GET /api/pages?file=&pages=62-65` | 多页 |
+| `GET /api/outline?file=` | 书签目录 |
+| `GET /api/pdf?file=` | 原文内联（PDF 可用 `#page=N` 深链；MD 走下载） |
+| `GET /api/stats` | 文档数/块数/类别分布/索引历史 |
+| `GET /api/categories` | 全部类别目录 |
+| `GET /api/files?category=` | 文件清单与元数据（含提取质量字段） |
+| `GET /api/extract/report?limit=` | 逐文档提取质量体检（低文本页标记） |
+| `GET /api/history` | 索引历史 |
+| `GET /api/state` | 索引进度 |
+| `GET /api/config` | 读全部可调参数（含中文名/默认值/范围/是否被覆盖） |
+| `PUT /api/config` | 保存可调参数（即时生效） |
+| `POST /api/config/reset` | 恢复默认（全部或指定项） |
+| `GET /api/ocr/health` | OCR 配置 + 最近一次真实调用（不探测） |
+| `POST /api/ingest?rebuild=` · `POST /api/ingest/files` | 触发索引 / 重跑指定文件 |
+| `GET /api/export/config` · `POST /api/import/config` | 配置导出导入（不含密钥） |
+| `POST /api/export/bundle` · `GET /api/export/bundles` · `GET /api/export/download` · `DELETE /api/export/bundle` | 数据包构建/列表/下载/删除 |
+| `POST /api/import/inspect` · `POST /api/import/bundle` | 导入预检 / 执行导入 |
+| `POST /api/admin/restart` | 重启后端（需 `X-Admin-Token`） |
+| `POST /api/admin/shutdown` | 关闭后端（需 `X-Admin-Token`） |
+
+所有接受 `file` 的端点只认**语料库内的相对路径**（正斜杠；Windows 风格反斜杠会自动
+归一），绝对路径与 `..` 穿越一律拒绝。`/api/search` 与 `/api/grep` 的 `file` 过滤按
+**字面子串**匹配（`%`/`_` 不作通配符解释）。

@@ -22,6 +22,14 @@
 | mined(自动挖掘) | 41 | 100% | 54% | 90% |
 | topic(主题型) | 4 | 100% | 100% | 100% |
 
+匹配规则与数据格式:
+
+- `expect` 按**文件名**(正/反斜杠都认)子串匹配,与目录无关——类别目录会被重组,
+  完整路径断言会把"检索其实找对了"误判成失败;expect 可列多份等价文档,命中任一即满分。
+- `must_contain` 判定对空白/下标分隔符宽容("500 Ω" 命中 "500Ω")。
+- `_` 前缀字段(`_page`、`_n_chunks_with_val`)是策展溯源信息,评测不使用;
+  `tools/curate_eval.py` 从 `tools/mined_cases.json` + 内置手写用例重新生成评测集。
+
 ### 1.1 评测集本身曾有两处数据问题(已修)
 
 - **反斜杠路径假阴性**:78% 的 `expect` 是早期 Windows 索引留下的反斜杠路径,而
@@ -154,7 +162,19 @@ lfm-2.5-embedding-350m、llama-nemotron-embed-vl-1b-v2。注意:Cohere 系**强�
 | 结果缓存二次查询 | 0ms | TTL 600s / 256 条;降级结果不入缓存 |
 | 后端启动(import 链) | ~0.55–1.0s | lancedb 924ms、fastmcp 302ms、fastapi 160ms、fitz 47ms;一次性成本,懒加载无收益 |
 | 生产容器 RSS | ~610MiB | 287 文档 / 12421 块 |
-| 检索热路径 | 见 README「性能要点」表 | `scan_arrow` 54→16ms、`version` 探测 37ms、`setdefault` 20→1ms 等 |
+| 检索热路径 | 见下「代码级优化实测」 | 回退会明显变慢 |
+
+### 4.1 代码级优化实测(回退会明显变慢)
+
+| 位置 | 做法 | 实测原因 |
+|---|---|---|
+| `library.scan_arrow` | 投影下推 `search().select(cols).limit(count_rows())` | 直接 `to_arrow()` 会把 768 维向量列(26MB)也读进内存再丢:54ms → 16ms |
+| `main._table` / `server._get_table` | 只比对 `table.version` | 曾用 `to_arrow().num_rows` 探测句柄,等于每请求物化全表(37ms) |
+| `library.cached` | 元数据按 `table.version` 缓存 | `/api/files`、`/categories`、`/extract/report` 各扫一遍全表,实际只在 ingest 后变化 |
+| `/api/files` 聚合 | `if k not in seen` 而非 `setdefault` | `setdefault` 的默认 dict 每行都构造,让 `product_label` 正则跑满每块(20ms → 1ms) |
+| 前端 `getSWR` | 切回页面先用上次结果、后台刷新 | 每次进入都全量重拉是纯开销 |
+| `SelectiveGZip` | JSON 压缩,跳过 `/mcp`(SSE)与 `/api/pdf`(已压缩) | JS bundle 708KB 裸传 → gzip;`/api/files` 59KB → 9KB |
+| 索引碎片整理 | `tools/compact_index.py` | 长期增量后 248MB/517 版本 → 43MB/8 版本,行数与检索结果不变 |
 
 ## 5. 安全与路径实测
 
