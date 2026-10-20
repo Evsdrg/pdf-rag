@@ -129,6 +129,7 @@ uv run python eval_retrieval.py
 ```
 
 `eval_retrieval.py` 末尾会打印 `degraded` 计数——**若不为 0 说明嵌入接口被限流**，该次分数不代表系统水平，请稍后重跑。
+当前基线与历次实验记录见 [BENCHMARKS.md](BENCHMARKS.md)。
 
 ## 四、MCP 接入（给 LLM 用）
 
