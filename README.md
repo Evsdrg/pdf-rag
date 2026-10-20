@@ -145,8 +145,15 @@ cd web && pnpm install && pnpm dev    # 前端开发（Vite 代理 /api 到 8100
 cd web && pnpm build                  # 构建 → web/dist，Dockerfile 会 COPY 它
 ```
 
-**测试**：没有自动化测试套件。改动检索/索引逻辑后，用 `eval_retrieval.py` 对比 `snippet@1`
-判断是否回退；改动前端用 `pnpm build` 的类型检查兜底。
+**测试**：关键路径单测在 `tests/`（纯逻辑，不访问网络与索引，57 个用例）：
+
+```bash
+uv run python -m unittest discover -s tests
+```
+
+覆盖：路径边界防护、分块、版本合并去重、融合排序与平局裁决、缓存失效、file 过滤字面
+语义、片段窗口。改动检索/索引逻辑后跑一遍；端到端质量另用 `eval_retrieval.py` 对比
+`snippet@1`；改动前端用 `pnpm build` 的类型检查兜底。
 
 ## 鸣谢
 
