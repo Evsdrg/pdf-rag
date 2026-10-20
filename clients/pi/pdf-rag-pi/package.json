@@ -1,0 +1,16 @@
+{
+  "name": "pi-pdf-rag",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PDF-RAG 元器件手册库检索:pi 原生工具(扩展)+ 领域知识(技能)",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions/pdf-rag.ts"],
+    "skills": ["./skills"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}

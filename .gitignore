@@ -1,0 +1,48 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+# 只忽略根级构建目录;web/dist 是前端产物,Dockerfile 要 COPY 它,不能忽略
+/dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+ocr-env/
+
+# Secrets
+.env
+
+# Runtime artifacts
+index.lance/
+logs/
+run_state.json
+ingest_history.json
+ingest.lock
+
+# 运行时配置覆盖值(每台机器各不同,默认值在 backend/config.py 里)
+data/settings.json
+
+# 解析后数据的导出(由 tools/export_parsed.py 生成,可随时重导)
+parsed/
+
+# 索引备份(体积大,可重建)
+index.lance.bak/
+index.lance.bak-*/
+
+# 导出的数据包
+data/exports/
+
+# 交付包构建产物(tools/build_release.py 生成,含当时的索引规模快照)
+MANIFEST.txt
+
+# 内部运维文档:含具体内网地址/主机路径/账号,不随开源发布
+DEPLOY-NAS.md
+
+# 手册语料:版权归各厂商,且体积大,不入版本库(索引已在上面 Runtime artifacts 忽略)
+pdf/
+
+# Local ZCode workspace config (contains machine-specific absolute paths)
+.zcode/
+.paddlex_cache/
+run_backend.lock

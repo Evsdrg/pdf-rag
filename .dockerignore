@@ -1,0 +1,28 @@
+# 数据目录不进镜像 —— 由 compose 以 bind mount 提供(NAS 上与镜像解耦,便于备份/迁移)
+pdf/
+parsed/
+index.lance/
+logs/
+data/
+.paddlex_cache/
+run_backend.lock
+
+# 本机运行产物
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# 前端只保留已构建的 dist(改前端才需要 src,见 DEPLOY.md)
+web/node_modules/
+web/src/
+web/public/
+web/index.html
+web/package.json
+web/pnpm-lock.yaml
+web/vite.config.ts
+web/tsconfig*.json
+
+# 配置与文档不进镜像(.env 绝不入镜像)
+.env
+*.tar.zst

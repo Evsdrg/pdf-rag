@@ -1,0 +1,663 @@
+[
+ {
+  "query": "W25Q32 供电电压",
+  "expect": [
+   "W25Q32JW"
+  ],
+  "must_contain": [
+   "3.6"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 453
+ },
+ {
+  "query": "DS18B20 温度传感器 精度",
+  "expect": [
+   "DS18B20"
+  ],
+  "must_contain": [
+   "0.5"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 1030
+ },
+ {
+  "query": "CH592 蓝牙 SoC RISC-V",
+  "expect": [
+   "CH592"
+  ],
+  "must_contain": [
+   "RISC-V"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 65
+ },
+ {
+  "query": "TPS63020 升降压转换器 开关频率",
+  "expect": [
+   "TPS63020"
+  ],
+  "must_contain": [
+   "2.4"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 463
+ },
+ {
+  "query": "QMC6308 供电电压 VDD 范围",
+  "expect": [
+   "QMC6308"
+  ],
+  "must_contain": [
+   "1.65",
+   "1.95"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 185
+ },
+ {
+  "query": "QMC6309 供电电压 VDD 范围",
+  "expect": [
+   "QMC6309"
+  ],
+  "must_contain": [
+   "2.5",
+   "3.6"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 785
+ },
+ {
+  "query": "MSM8916 VDD_APC 绝对最大值",
+  "expect": [
+   "MSM8216"
+  ],
+  "must_contain": [
+   "1.62"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 20
+ },
+ {
+  "query": "LSM6DS3TR-C 陀螺仪加速度计电流消耗",
+  "expect": [
+   "LSM6DS3TR-C"
+  ],
+  "must_contain": [
+   "0.45"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 106
+ },
+ {
+  "query": "ML307R VBAT 供电范围",
+  "expect": [
+   "ML307R"
+  ],
+  "must_contain": [
+   "4.5"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 445
+ },
+ {
+  "query": "CH592 BLE 发送功率电流",
+  "expect": [
+   "CH592"
+  ],
+  "must_contain": [
+   "17.2"
+  ],
+  "source": "hand",
+  "_n_chunks_with_val": 29
+ },
+ {
+  "query": "TPS55289 升降压转换器 输出电流限值",
+  "expect": [
+   "04_电源管理/C5942077_DC-DC电源芯片_TPS55289RYQR_规格书_WJ381257.PDF"
+  ],
+  "must_contain": [
+   "2.25 A"
+  ],
+  "source": "topic",
+  "_page": 34,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "TPS55289 升降压转换器 输出电压纹波",
+  "expect": [
+   "04_电源管理/C5942077_DC-DC电源芯片_TPS55289RYQR_规格书_WJ381257.PDF",
+   "17_升降压DC-DC/tps55288.pdf",
+   "17_升降压DC-DC/tps552882.pdf"
+  ],
+  "must_contain": [
+   "±50 mV"
+  ],
+  "source": "topic",
+  "_page": 34,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "高边栅极驱动 自举电容",
+  "expect": [
+   "BDR2L00"
+  ],
+  "must_contain": [
+   "680nF"
+  ],
+  "source": "topic",
+  "_page": 2,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "继电器 额定绝缘电压",
+  "expect": [
+   "G5Q-14-DC12"
+  ],
+  "must_contain": [
+   "320V"
+  ],
+  "source": "topic",
+  "_page": 10,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "MAX30101 ADC SR = ADC FULL",
+  "expect": [
+   "01_传感器/MAX30101_血氧心率传感器_规格书.pdf"
+  ],
+  "must_contain": [
+   "8nA"
+  ],
+  "source": "mined",
+  "_page": 8,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "Quectel LTE-FDD B1 (10 MHz)",
+  "expect": [
+   "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf"
+  ],
+  "must_contain": [
+   "-99.5 dBm"
+  ],
+  "source": "mined",
+  "_page": 52,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "Quectel LTE-FDD B3 (10 MHz)",
+  "expect": [
+   "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf"
+  ],
+  "must_contain": [
+   "-99.0 dBm"
+  ],
+  "source": "mined",
+  "_page": 52,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "Quectel LTE-FDD B5 (10 MHz)",
+  "expect": [
+   "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf"
+  ],
+  "must_contain": [
+   "-98.5 dBm"
+  ],
+  "source": "mined",
+  "_page": 52,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "Quectel LTE-FDD B8 (10 MHz)",
+  "expect": [
+   "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf"
+  ],
+  "must_contain": [
+   "-99.0 dBm"
+  ],
+  "source": "mined",
+  "_page": 52,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "Quectel LTE-TDD B34 (10 MHz)",
+  "expect": [
+   "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf"
+  ],
+  "must_contain": [
+   "-100.0 dBm"
+  ],
+  "source": "mined",
+  "_page": 52,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "IP2111A IP5312",
+  "expect": [
+   "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF"
+  ],
+  "must_contain": [
+   "15W"
+  ],
+  "source": "mined",
+  "_page": 5,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "RT9465GQW CV set =",
+  "expect": [
+   "04_电源管理/C2976600_电池管理_RT9465GQW_规格书_RICHTEK(立锜)电池管理规格书-1.PDF"
+  ],
+  "must_contain": [
+   "4.44V"
+  ],
+  "source": "mined",
+  "_page": 8,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "RFECA3216060A1T Impedance",
+  "expect": [
+   "06_天线/C127620_天线_RFECA3216060A1T_规格书_WJ274360.PDF"
+  ],
+  "must_contain": [
+   "50Ω"
+  ],
+  "source": "mined",
+  "_page": 3,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "MLCC 30 300±10℃max.",
+  "expect": [
+   "08_分立器件与无源/MLCC_电容_规格书_三星.pdf"
+  ],
+  "must_contain": [
+   "20W max."
+  ],
+  "source": "mined",
+  "_page": 78,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "esp32-c3 RC FAST CLK (17.5 MHz)",
+  "expect": [
+   "09_MCU与SoC/esp32-c3_datasheet_cn.pdf",
+   "09_MCU与SoC/esp32-c3_technical_reference_manual_cn.pdf"
+  ],
+  "must_contain": [
+   "1.75 kHz"
+  ],
+  "source": "mined",
+  "_page": 779,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "MSM8216-MSM8616-MSM8916 VDD MEM",
+  "expect": [
+   "09_MCU与SoC/MSM8216-MSM8616-MSM8916.pdf"
+  ],
+  "must_contain": [
+   "500 pH"
+  ],
+  "source": "mined",
+  "_page": 65,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "MSM8216-MSM8616-MSM8916 VDD CORE",
+  "expect": [
+   "09_MCU与SoC/MSM8216-MSM8616-MSM8916.pdf"
+  ],
+  "must_contain": [
+   "250 pH"
+  ],
+  "source": "mined",
+  "_page": 65,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "MSM8216-MSM8616-MSM8916 VDD APC",
+  "expect": [
+   "09_MCU与SoC/MSM8216-MSM8616-MSM8916.pdf"
+  ],
+  "must_contain": [
+   "200 pH"
+  ],
+  "source": "mined",
+  "_page": 65,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "D882H Ta=25",
+  "expect": [
+   "15_三极管BJT/C41375123_三极管(BJT)_D882H_规格书_D882H_REV2.0.PDF"
+  ],
+  "must_contain": [
+   "5.6mA"
+  ],
+  "source": "mined",
+  "_page": 2,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "TPS55289RYQR Output current limit",
+  "expect": [
+   "17_升降压DC-DC/C5942077_DC-DC电源芯片_TPS55289RYQR_规格书_WJ381257.PDF"
+  ],
+  "must_contain": [
+   "2.25 A"
+  ],
+  "source": "mined",
+  "_page": 34,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "LT8350SAV#PBF RT =",
+  "expect": [
+   "17_升降压DC-DC/C36812631_DC-DC电源芯片_LT8350SAV#PBF_规格书_WJ1622061.PDF"
+  ],
+  "must_contain": [
+   "43.2kΩ"
+  ],
+  "source": "mined",
+  "_page": 13,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "lm5176-q1 I BIAS(FB)",
+  "expect": [
+   "17_升降压DC-DC/lm5176-q1.pdf"
+  ],
+  "must_contain": [
+   "5 nA"
+  ],
+  "source": "mined",
+  "_page": 6,
+  "_n_chunks_with_val": 1
+ },
+ {
+  "query": "MAX30101 VLED =",
+  "expect": [
+   "01_传感器/MAX30101_血氧心率传感器_规格书.pdf"
+  ],
+  "must_contain": [
+   "5.25V"
+  ],
+  "source": "mined",
+  "_page": 7,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "TMP114 SDA，SCL R PULLUP",
+  "expect": [
+   "01_传感器/TMP114_温度传感器_规格书.pdf"
+  ],
+  "must_contain": [
+   "1.2kΩ"
+  ],
+  "source": "mined",
+  "_page": 39,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "LSM6DSRTR FTYPE [2:0]",
+  "expect": [
+   "01_传感器/C784817_姿态传感器-陀螺仪_LSM6DSRTR_规格书_WJ00130.PDF"
+  ],
+  "must_contain": [
+   "6.67 kHz"
+  ],
+  "source": "mined",
+  "_page": 79,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "MPU-9250 Room Temp Offset",
+  "expect": [
+   "01_传感器/C71459_姿态传感器-陀螺仪_MPU-9250_规格书_WJ142217.PDF"
+  ],
+  "must_contain": [
+   "21°C"
+  ],
+  "source": "mined",
+  "_page": 12,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "tps63900 Unlimited",
+  "expect": [
+   "04_电源管理/tps63900.pdf"
+  ],
+  "must_contain": [
+   "26 mA"
+  ],
+  "source": "mined",
+  "_page": 17,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "WS2812E-1313 发光强度",
+  "expect": [
+   "05_LED/C5446700_RGB+LED(内置IC)_WS2812E-1313_规格书_WJ1058658.PDF"
+  ],
+  "must_contain": [
+   "12.5mA"
+  ],
+  "source": "mined",
+  "_page": 3,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "74LVC1G04GV 2.3 V to 2.7 V",
+  "expect": [
+   "07_接口与逻辑/C19829589_反相器_74LVC1G04GV_规格书_WJ1055833.PDF",
+   "07_接口与逻辑/C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF"
+  ],
+  "must_contain": [
+   "500 Ω"
+  ],
+  "source": "mined",
+  "_page": 9,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "74LVC1G04GV 3.0 V to 3.6 V",
+  "expect": [
+   "07_接口与逻辑/C19829589_反相器_74LVC1G04GV_规格书_WJ1055833.PDF",
+   "07_接口与逻辑/C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF"
+  ],
+  "must_contain": [
+   "500 Ω"
+  ],
+  "source": "mined",
+  "_page": 9,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "74LVC1G04GV 4.5 V to 5.5 V",
+  "expect": [
+   "07_接口与逻辑/C19829589_反相器_74LVC1G04GV_规格书_WJ1055833.PDF",
+   "07_接口与逻辑/C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF"
+  ],
+  "must_contain": [
+   "500 Ω"
+  ],
+  "source": "mined",
+  "_page": 9,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "74LVC1G04GW 2.3 V to 2.7 V",
+  "expect": [
+   "07_接口与逻辑/C19829650_反相器_74LVC1G04GW_规格书_WJ1055876.PDF",
+   "07_接口与逻辑/C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF"
+  ],
+  "must_contain": [
+   "500 Ω"
+  ],
+  "source": "mined",
+  "_page": 9,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "74LVC1G04GW 3.0 V to 3.6 V",
+  "expect": [
+   "07_接口与逻辑/C19829650_反相器_74LVC1G04GW_规格书_WJ1055876.PDF",
+   "07_接口与逻辑/C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF"
+  ],
+  "must_contain": [
+   "500 Ω"
+  ],
+  "source": "mined",
+  "_page": 9,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "LQW15AN1N5C00D Tip temperature",
+  "expect": [
+   "08_分立器件与无源/C167468_功率电感_LQW15AN1N5C00D_规格书_WJ332994.PDF"
+  ],
+  "must_contain": [
+   "350°C max."
+  ],
+  "source": "mined",
+  "_page": 10,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "LQW15AN1N5C00D Soldering iron output",
+  "expect": [
+   "08_分立器件与无源/C167468_功率电感_LQW15AN1N5C00D_规格书_WJ332994.PDF"
+  ],
+  "must_contain": [
+   "80W max."
+  ],
+  "source": "mined",
+  "_page": 10,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "esp32-c3 APB CLK (80 MHz)",
+  "expect": [
+   "09_MCU与SoC/esp32-c3_datasheet_cn.pdf",
+   "09_MCU与SoC/esp32-c3_technical_reference_manual_cn.pdf"
+  ],
+  "must_contain": [
+   "10 kHz"
+  ],
+  "source": "mined",
+  "_page": 779,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "BDR2L00 Cbst",
+  "expect": [
+   "13_栅极驱动芯片/C5371998_栅极驱动芯片_BDR2L00_规格书_WJ361855.PDF"
+  ],
+  "must_contain": [
+   "680nF"
+  ],
+  "source": "mined",
+  "_page": 2,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "G5Q-14-DC12 额定绝缘电压",
+  "expect": [
+   "16_继电器/C225715_功率继电器_G5Q-14-DC12_规格书_WJ1742388.PDF"
+  ],
+  "must_contain": [
+   "320V"
+  ],
+  "source": "mined",
+  "_page": 10,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "lm5176-q1 R OUT(VCC)",
+  "expect": [
+   "17_升降压DC-DC/lm5176-q1.pdf"
+  ],
+  "must_contain": [
+   "6 Ω"
+  ],
+  "source": "mined",
+  "_page": 6,
+  "_n_chunks_with_val": 2
+ },
+ {
+  "query": "MLCC 1,500G",
+  "expect": [
+   "08_分立器件与无源/MLCC_电容_规格书_三星.pdf"
+  ],
+  "must_contain": [
+   "0.5ms"
+  ],
+  "source": "mined",
+  "_page": 69,
+  "_n_chunks_with_val": 3
+ },
+ {
+  "query": "TPS55289RYQR Output voltage ripple",
+  "expect": [
+   "17_升降压DC-DC/C5942077_DC-DC电源芯片_TPS55289RYQR_规格书_WJ381257.PDF"
+  ],
+  "must_contain": [
+   "±50 mV"
+  ],
+  "source": "mined",
+  "_page": 34,
+  "_n_chunks_with_val": 3
+ },
+ {
+  "query": "IP2111A IP5310",
+  "expect": [
+   "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF"
+  ],
+  "must_contain": [
+   "3.1A"
+  ],
+  "source": "mined",
+  "_page": 5,
+  "_n_chunks_with_val": 4
+ },
+ {
+  "query": "BY25FQ32ELTIG(T) VCC Current",
+  "expect": [
+   "02_存储/C50172599_NOR+FLASH_BY25FQ32ELTIG(T)_规格书_BY25FQ32EL_V1.5 QA-DT-014.PDF"
+  ],
+  "must_contain": [
+   "-100mA"
+  ],
+  "source": "mined",
+  "_page": 76,
+  "_n_chunks_with_val": 5
+ },
+ {
+  "query": "IP2111A IP5318Q",
+  "expect": [
+   "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF"
+  ],
+  "must_contain": [
+   "18W"
+  ],
+  "source": "mined",
+  "_page": 5,
+  "_n_chunks_with_val": 5
+ },
+ {
+  "query": "SS8050 Ta=25℃",
+  "expect": [
+   "15_三极管BJT/C7420370_三极管(BJT)_SS8050_规格书_SS8050+REV_2.0.PDF"
+  ],
+  "must_contain": [
+   "9mA"
+  ],
+  "source": "mined",
+  "_page": 2,
+  "_n_chunks_with_val": 5
+ }
+]

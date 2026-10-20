@@ -1,0 +1,1022 @@
+[
+ {
+  "model": "MAX30101",
+  "param": "ADC SR = ADC FULL",
+  "val": "8nA",
+  "file": "01_传感器/MAX30101_血氧心率传感器_规格书.pdf",
+  "page": 8,
+  "category": "01_传感器",
+  "d": 1,
+  "query": "MAX30101 ADC SR = ADC FULL"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-FDD B1 (10 MHz)",
+  "val": "-99.5 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-FDD B1 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-FDD B1 (10 MHz)",
+  "val": "-96.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-FDD B1 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-FDD B3 (10 MHz)",
+  "val": "-99.0 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-FDD B3 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-FDD B3 (10 MHz)",
+  "val": "-93.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-FDD B3 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-FDD B5 (10 MHz)",
+  "val": "-98.5 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-FDD B5 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-FDD B5 (10 MHz)",
+  "val": "-94.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-FDD B5 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-FDD B8 (10 MHz)",
+  "val": "-99.0 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-FDD B8 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-FDD B8 (10 MHz)",
+  "val": "-93.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-FDD B8 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B34 (10 MHz)",
+  "val": "-100.0 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B34 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B34 (10 MHz)",
+  "val": "-96.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B34 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B38 (10 MHz)",
+  "val": "-99.0 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B38 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B38 (10 MHz)",
+  "val": "-96.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B38 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B39 (10 MHz)",
+  "val": "-100.0 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B39 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B39 (10 MHz)",
+  "val": "-96.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B39 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B40 (10 MHz)",
+  "val": "-100.5 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B40 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B40 (10 MHz)",
+  "val": "-96.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B40 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B41 (10 MHz)",
+  "val": "-99.0 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B41 (10 MHz)"
+ },
+ {
+  "model": "Quectel",
+  "param": "LTE-TDD B41 (10 MHz)",
+  "val": "-94.3 dBm",
+  "file": "03_无线模块/Quectel_EC800M-CN_硬件设计手册_V1.2.pdf",
+  "page": 52,
+  "category": "03_无线模块",
+  "d": 1,
+  "query": "Quectel LTE-TDD B41 (10 MHz)"
+ },
+ {
+  "model": "IP2111A",
+  "param": "IP5312",
+  "val": "15W",
+  "file": "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF",
+  "page": 5,
+  "category": "04_电源管理",
+  "d": 1,
+  "query": "IP2111A IP5312"
+ },
+ {
+  "model": "IP2342",
+  "param": "120K",
+  "val": "1.25A",
+  "file": "04_电源管理/C52287148_电池管理_IP2342_3S_规格书_IP2342_DATASHEET_CN_V1.10.PDF",
+  "page": 10,
+  "category": "04_电源管理",
+  "d": 1,
+  "query": "IP2342 120K"
+ },
+ {
+  "model": "RT9465GQW",
+  "param": "CV set =",
+  "val": "4.44V",
+  "file": "04_电源管理/C2976600_电池管理_RT9465GQW_规格书_RICHTEK(立锜)电池管理规格书-1.PDF",
+  "page": 8,
+  "category": "04_电源管理",
+  "d": 1,
+  "query": "RT9465GQW CV set ="
+ },
+ {
+  "model": "RFECA3216060A1T",
+  "param": "Impedance",
+  "val": "50Ω",
+  "file": "06_天线/C127620_天线_RFECA3216060A1T_规格书_WJ274360.PDF",
+  "page": 3,
+  "category": "06_天线",
+  "d": 1,
+  "query": "RFECA3216060A1T Impedance"
+ },
+ {
+  "model": "MLCC",
+  "param": "30 300±10℃max.",
+  "val": "20W max.",
+  "file": "08_分立器件与无源/MLCC_电容_规格书_三星.pdf",
+  "page": 78,
+  "category": "08_分立器件与无源",
+  "d": 1,
+  "query": "MLCC 30 300±10℃max."
+ },
+ {
+  "model": "esp32-c3",
+  "param": "RC FAST CLK (17.5 MHz)",
+  "val": "1.75 kHz",
+  "file": "09_MCU与SoC/esp32-c3_technical_reference_manual_cn.pdf",
+  "page": 779,
+  "category": "09_MCU与SoC",
+  "d": 1,
+  "query": "esp32-c3 RC FAST CLK (17.5 MHz)"
+ },
+ {
+  "model": "MSM8216-MSM8616-MSM8916",
+  "param": "VDD MEM",
+  "val": "500 pH",
+  "file": "09_MCU与SoC/MSM8216-MSM8616-MSM8916.pdf",
+  "page": 65,
+  "category": "09_MCU与SoC",
+  "d": 1,
+  "query": "MSM8216-MSM8616-MSM8916 VDD MEM"
+ },
+ {
+  "model": "MSM8216-MSM8616-MSM8916",
+  "param": "VDD CORE",
+  "val": "250 pH",
+  "file": "09_MCU与SoC/MSM8216-MSM8616-MSM8916.pdf",
+  "page": 65,
+  "category": "09_MCU与SoC",
+  "d": 1,
+  "query": "MSM8216-MSM8616-MSM8916 VDD CORE"
+ },
+ {
+  "model": "MSM8216-MSM8616-MSM8916",
+  "param": "VDD APC",
+  "val": "200 pH",
+  "file": "09_MCU与SoC/MSM8216-MSM8616-MSM8916.pdf",
+  "page": 65,
+  "category": "09_MCU与SoC",
+  "d": 1,
+  "query": "MSM8216-MSM8616-MSM8916 VDD APC"
+ },
+ {
+  "model": "ina226",
+  "param": "第 6 步",
+  "val": "25mW",
+  "file": "14_电流检测/ina226.pdf",
+  "page": 15,
+  "category": "14_电流检测",
+  "d": 1,
+  "query": "ina226 第 6 步"
+ },
+ {
+  "model": "ina226",
+  "param": "第 6 步",
+  "val": "119.82W",
+  "file": "14_电流检测/ina226.pdf",
+  "page": 15,
+  "category": "14_电流检测",
+  "d": 1,
+  "query": "ina226 第 6 步"
+ },
+ {
+  "model": "D882H",
+  "param": "Ta=25",
+  "val": "5.6mA",
+  "file": "15_三极管BJT/C41375123_三极管(BJT)_D882H_规格书_D882H_REV2.0.PDF",
+  "page": 2,
+  "category": "15_三极管BJT",
+  "d": 1,
+  "query": "D882H Ta=25"
+ },
+ {
+  "model": "TPS55289RYQR",
+  "param": "Output current limit",
+  "val": "2.25 A",
+  "file": "17_升降压DC-DC/C5942077_DC-DC电源芯片_TPS55289RYQR_规格书_WJ381257.PDF",
+  "page": 34,
+  "category": "17_升降压DC-DC",
+  "d": 1,
+  "query": "TPS55289RYQR Output current limit"
+ },
+ {
+  "model": "LT8350SAV#PBF",
+  "param": "RT =",
+  "val": "43.2kΩ",
+  "file": "17_升降压DC-DC/C36812631_DC-DC电源芯片_LT8350SAV#PBF_规格书_WJ1622061.PDF",
+  "page": 13,
+  "category": "17_升降压DC-DC",
+  "d": 1,
+  "query": "LT8350SAV#PBF RT ="
+ },
+ {
+  "model": "lm5176-q1",
+  "param": "I BIAS(FB)",
+  "val": "5 nA",
+  "file": "17_升降压DC-DC/lm5176-q1.pdf",
+  "page": 6,
+  "category": "17_升降压DC-DC",
+  "d": 1,
+  "query": "lm5176-q1 I BIAS(FB)"
+ },
+ {
+  "model": "MAX30101",
+  "param": "VLED =",
+  "val": "5.25V",
+  "file": "01_传感器/MAX30101_血氧心率传感器_规格书.pdf",
+  "page": 7,
+  "category": "01_传感器",
+  "d": 2,
+  "query": "MAX30101 VLED ="
+ },
+ {
+  "model": "TMP114",
+  "param": "SDA，SCL R PULLUP",
+  "val": "1.2kΩ",
+  "file": "01_传感器/TMP114_温度传感器_规格书.pdf",
+  "page": 39,
+  "category": "01_传感器",
+  "d": 2,
+  "query": "TMP114 SDA，SCL R PULLUP"
+ },
+ {
+  "model": "LSM6DSRTR",
+  "param": "FTYPE [2:0]",
+  "val": "6.67 kHz",
+  "file": "01_传感器/C784817_姿态传感器-陀螺仪_LSM6DSRTR_规格书_WJ00130.PDF",
+  "page": 79,
+  "category": "01_传感器",
+  "d": 2,
+  "query": "LSM6DSRTR FTYPE [2:0]"
+ },
+ {
+  "model": "MPU-9250",
+  "param": "Room Temp Offset",
+  "val": "21°C",
+  "file": "01_传感器/C71459_姿态传感器-陀螺仪_MPU-9250_规格书_WJ142217.PDF",
+  "page": 12,
+  "category": "01_传感器",
+  "d": 2,
+  "query": "MPU-9250 Room Temp Offset"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD5F1GM7UE",
+  "val": "133MHZ",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 27,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD5F1GM7UE"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD5F2GM7UE",
+  "val": "133MHZ",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 27,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD5F2GM7UE"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD5F4GQ6UE",
+  "val": "104MHZ",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 27,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD5F4GQ6UE"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD5F4GM8UE",
+  "val": "133MHZ",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 27,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD5F4GM8UE"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD5F4GQ6RE",
+  "val": "80MHZ",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 27,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD5F4GQ6RE"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD5F4GM8RE",
+  "val": "104MHZ",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 27,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD5F4GM8RE"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD5F2GQ5UE",
+  "val": "104MHZ",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 27,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD5F2GQ5UE"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD5F2GQ5RE",
+  "val": "80MHZ",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 27,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD5F2GQ5RE"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FU1G8F2D",
+  "val": "12ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD9FU1G8F2D"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FS1GxF2A",
+  "val": "45ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD9FS1GxF2A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FS1GxF3A",
+  "val": "45ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 2,
+  "query": "GD25WQ32ESIGR GD9FS1GxF3A"
+ },
+ {
+  "model": "IP2111A",
+  "param": "IP5312",
+  "val": "3.6A",
+  "file": "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF",
+  "page": 5,
+  "category": "04_电源管理",
+  "d": 2,
+  "query": "IP2111A IP5312"
+ },
+ {
+  "model": "tps63900",
+  "param": "Unlimited",
+  "val": "26 mA",
+  "file": "04_电源管理/tps63900.pdf",
+  "page": 17,
+  "category": "04_电源管理",
+  "d": 2,
+  "query": "tps63900 Unlimited"
+ },
+ {
+  "model": "WS2812E-1313",
+  "param": "发光强度",
+  "val": "12.5mA",
+  "file": "05_LED/C5446700_RGB+LED(内置IC)_WS2812E-1313_规格书_WJ1058658.PDF",
+  "page": 3,
+  "category": "05_LED",
+  "d": 2,
+  "query": "WS2812E-1313 发光强度"
+ },
+ {
+  "model": "74LVC1G04GV",
+  "param": "2.3 V to 2.7 V",
+  "val": "500 Ω",
+  "file": "07_接口与逻辑/C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 2,
+  "query": "74LVC1G04GV 2.3 V to 2.7 V"
+ },
+ {
+  "model": "74LVC1G04GV",
+  "param": "3.0 V to 3.6 V",
+  "val": "500 Ω",
+  "file": "07_接口与逻辑/C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 2,
+  "query": "74LVC1G04GV 3.0 V to 3.6 V"
+ },
+ {
+  "model": "74LVC1G04GV",
+  "param": "4.5 V to 5.5 V",
+  "val": "500 Ω",
+  "file": "07_接口与逻辑/C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 2,
+  "query": "74LVC1G04GV 4.5 V to 5.5 V"
+ },
+ {
+  "model": "74LVC1G04GW",
+  "param": "2.3 V to 2.7 V",
+  "val": "500 Ω",
+  "file": "07_接口与逻辑/C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 2,
+  "query": "74LVC1G04GW 2.3 V to 2.7 V"
+ },
+ {
+  "model": "74LVC1G04GW",
+  "param": "3.0 V to 3.6 V",
+  "val": "500 Ω",
+  "file": "07_接口与逻辑/C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 2,
+  "query": "74LVC1G04GW 3.0 V to 3.6 V"
+ },
+ {
+  "model": "74LVC1G04GW",
+  "param": "4.5 V to 5.5 V",
+  "val": "500 Ω",
+  "file": "07_接口与逻辑/C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 2,
+  "query": "74LVC1G04GW 4.5 V to 5.5 V"
+ },
+ {
+  "model": "LQW15AN1N5C00D",
+  "param": "Tip temperature",
+  "val": "350°C max.",
+  "file": "08_分立器件与无源/C167468_功率电感_LQW15AN1N5C00D_规格书_WJ332994.PDF",
+  "page": 10,
+  "category": "08_分立器件与无源",
+  "d": 2,
+  "query": "LQW15AN1N5C00D Tip temperature"
+ },
+ {
+  "model": "LQW15AN1N5C00D",
+  "param": "Soldering iron output",
+  "val": "80W max.",
+  "file": "08_分立器件与无源/C167468_功率电感_LQW15AN1N5C00D_规格书_WJ332994.PDF",
+  "page": 10,
+  "category": "08_分立器件与无源",
+  "d": 2,
+  "query": "LQW15AN1N5C00D Soldering iron output"
+ },
+ {
+  "model": "esp32-c3",
+  "param": "APB CLK (80 MHz)",
+  "val": "10 kHz",
+  "file": "09_MCU与SoC/esp32-c3_technical_reference_manual_cn.pdf",
+  "page": 779,
+  "category": "09_MCU与SoC",
+  "d": 2,
+  "query": "esp32-c3 APB CLK (80 MHz)"
+ },
+ {
+  "model": "BDR2L00",
+  "param": "Cbst",
+  "val": "680nF",
+  "file": "13_栅极驱动芯片/C5371998_栅极驱动芯片_BDR2L00_规格书_WJ361855.PDF",
+  "page": 2,
+  "category": "13_栅极驱动芯片",
+  "d": 2,
+  "query": "BDR2L00 Cbst"
+ },
+ {
+  "model": "ina226",
+  "param": "第 3 步",
+  "val": "11.98V",
+  "file": "14_电流检测/ina226.pdf",
+  "page": 15,
+  "category": "14_电流检测",
+  "d": 2,
+  "query": "ina226 第 3 步"
+ },
+ {
+  "model": "G5Q-14-DC12",
+  "param": "额定绝缘电压",
+  "val": "320V",
+  "file": "16_继电器/C225715_功率继电器_G5Q-14-DC12_规格书_WJ1742388.PDF",
+  "page": 10,
+  "category": "16_继电器",
+  "d": 2,
+  "query": "G5Q-14-DC12 额定绝缘电压"
+ },
+ {
+  "model": "lm5176-q1",
+  "param": "R OUT(VCC)",
+  "val": "6 Ω",
+  "file": "17_升降压DC-DC/lm5176-q1.pdf",
+  "page": 6,
+  "category": "17_升降压DC-DC",
+  "d": 2,
+  "query": "lm5176-q1 R OUT(VCC)"
+ },
+ {
+  "model": "IP2342",
+  "param": "200K",
+  "val": "0.8A",
+  "file": "04_电源管理/C52287148_电池管理_IP2342_3S_规格书_IP2342_DATASHEET_CN_V1.10.PDF",
+  "page": 10,
+  "category": "04_电源管理",
+  "d": 3,
+  "query": "IP2342 200K"
+ },
+ {
+  "model": "MLCC",
+  "param": "1,500G",
+  "val": "0.5ms",
+  "file": "08_分立器件与无源/MLCC_电容_规格书_三星.pdf",
+  "page": 69,
+  "category": "08_分立器件与无源",
+  "d": 3,
+  "query": "MLCC 1,500G"
+ },
+ {
+  "model": "TPS55289RYQR",
+  "param": "Output voltage ripple",
+  "val": "±50 mV",
+  "file": "17_升降压DC-DC/C5942077_DC-DC电源芯片_TPS55289RYQR_规格书_WJ381257.PDF",
+  "page": 34,
+  "category": "17_升降压DC-DC",
+  "d": 3,
+  "query": "TPS55289RYQR Output voltage ripple"
+ },
+ {
+  "model": "MP4248GQV-0000-Z",
+  "param": "Feedback voltage",
+  "val": "-3%",
+  "file": "17_升降压DC-DC/C41608959_DC-DC电源芯片_MP4248GQV-0000-Z_规格书_WJ1592660.PDF",
+  "page": 7,
+  "category": "17_升降压DC-DC",
+  "d": 3,
+  "query": "MP4248GQV-0000-Z Feedback voltage"
+ },
+ {
+  "model": "LT8350SAV#PBF",
+  "param": "BST1",
+  "val": "47V",
+  "file": "17_升降压DC-DC/C36812631_DC-DC电源芯片_LT8350SAV#PBF_规格书_WJ1622061.PDF",
+  "page": 6,
+  "category": "17_升降压DC-DC",
+  "d": 3,
+  "query": "LT8350SAV#PBF BST1"
+ },
+ {
+  "model": "tps552882",
+  "param": "Output voltage ripple",
+  "val": "±50 mV",
+  "file": "17_升降压DC-DC/tps552882.pdf",
+  "page": 21,
+  "category": "17_升降压DC-DC",
+  "d": 3,
+  "query": "tps552882 Output voltage ripple"
+ },
+ {
+  "model": "tps55288",
+  "param": "Output voltage ripple",
+  "val": "±50 mV",
+  "file": "17_升降压DC-DC/tps55288.pdf",
+  "page": 36,
+  "category": "17_升降压DC-DC",
+  "d": 3,
+  "query": "tps55288 Output voltage ripple"
+ },
+ {
+  "model": "TMP114",
+  "param": "电源电压",
+  "val": "98 V",
+  "file": "01_传感器/TMP114_温度传感器_规格书.pdf",
+  "page": 4,
+  "category": "01_传感器",
+  "d": 4,
+  "query": "TMP114 电源电压"
+ },
+ {
+  "model": "TMP114",
+  "param": "I/O 电压",
+  "val": "98 V",
+  "file": "01_传感器/TMP114_温度传感器_规格书.pdf",
+  "page": 4,
+  "category": "01_传感器",
+  "d": 4,
+  "query": "TMP114 I/O 电压"
+ },
+ {
+  "model": "IP2111A",
+  "param": "IP5310",
+  "val": "3.1A",
+  "file": "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF",
+  "page": 5,
+  "category": "04_电源管理",
+  "d": 4,
+  "query": "IP2111A IP5310"
+ },
+ {
+  "model": "74LVC1G04GV",
+  "param": "1.65 V to 1.95 V",
+  "val": "30 pF",
+  "file": "07_接口与逻辑/C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 4,
+  "query": "74LVC1G04GV 1.65 V to 1.95 V"
+ },
+ {
+  "model": "74LVC1G04GV",
+  "param": "2.3 V to 2.7 V",
+  "val": "30 pF",
+  "file": "07_接口与逻辑/C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 4,
+  "query": "74LVC1G04GV 2.3 V to 2.7 V"
+ },
+ {
+  "model": "74LVC1G04GW",
+  "param": "1.65 V to 1.95 V",
+  "val": "30 pF",
+  "file": "07_接口与逻辑/C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 4,
+  "query": "74LVC1G04GW 1.65 V to 1.95 V"
+ },
+ {
+  "model": "74LVC1G04GW",
+  "param": "2.3 V to 2.7 V",
+  "val": "30 pF",
+  "file": "07_接口与逻辑/C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+  "page": 9,
+  "category": "07_接口与逻辑",
+  "d": 4,
+  "query": "74LVC1G04GW 2.3 V to 2.7 V"
+ },
+ {
+  "model": "ina226",
+  "param": "第 3 步",
+  "val": "1.25mV",
+  "file": "14_电流检测/ina226.pdf",
+  "page": 15,
+  "category": "14_电流检测",
+  "d": 4,
+  "query": "ina226 第 3 步"
+ },
+ {
+  "model": "MP4248GQV-0000-Z",
+  "param": "EN rising threshold",
+  "val": "-5%",
+  "file": "17_升降压DC-DC/C41608959_DC-DC电源芯片_MP4248GQV-0000-Z_规格书_WJ1592660.PDF",
+  "page": 7,
+  "category": "17_升降压DC-DC",
+  "d": 4,
+  "query": "MP4248GQV-0000-Z EN rising threshold"
+ },
+ {
+  "model": "lm5176-q1",
+  "param": "I EN(STBY)",
+  "val": "3 µA",
+  "file": "17_升降压DC-DC/lm5176-q1.pdf",
+  "page": 6,
+  "category": "17_升降压DC-DC",
+  "d": 4,
+  "query": "lm5176-q1 I EN(STBY)"
+ },
+ {
+  "model": "BY25FQ32ELTIG(T)",
+  "param": "VCC Current",
+  "val": "-100mA",
+  "file": "02_存储/C50172599_NOR+FLASH_BY25FQ32ELTIG(T)_规格书_BY25FQ32EL_V1.5 QA-DT-014.PDF",
+  "page": 76,
+  "category": "02_存储",
+  "d": 5,
+  "query": "BY25FQ32ELTIG(T) VCC Current"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FU1GxF2A",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FU1GxF2A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FU1GxF3A",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FU1GxF3A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FU4GxF4B",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FU4GxF4B"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FU8GxE4B",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FU8GxE4B"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FS2GxF2A",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FS2GxF2A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FS2GxF3A",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FS2GxF3A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FS4GxF2A",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FS4GxF2A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FS4GxF3A",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FS4GxF3A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FS8GxE2A",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FS8GxE2A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9FS8GxE3A",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9FS8GxE3A"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9AS2GxF3A*",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9AS2GxF3A*"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9AS4GxF3A*",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9AS4GxF3A*"
+ },
+ {
+  "model": "GD25WQ32ESIGR",
+  "param": "GD9AS8GxE3A*",
+  "val": "25ns",
+  "file": "02_存储/C2973995_NOR+FLASH_GD25WQ32ESIGR_规格书_WJ666180.PDF",
+  "page": 28,
+  "category": "02_存储",
+  "d": 5,
+  "query": "GD25WQ32ESIGR GD9AS8GxE3A*"
+ },
+ {
+  "model": "IP2111A",
+  "param": "IP5318Q",
+  "val": "18W",
+  "file": "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF",
+  "page": 5,
+  "category": "04_电源管理",
+  "d": 5,
+  "query": "IP2111A IP5318Q"
+ },
+ {
+  "model": "IP2111A",
+  "param": "IP5318",
+  "val": "18W",
+  "file": "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF",
+  "page": 5,
+  "category": "04_电源管理",
+  "d": 5,
+  "query": "IP2111A IP5318"
+ },
+ {
+  "model": "IP2111A",
+  "param": "IP5322",
+  "val": "18W",
+  "file": "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF",
+  "page": 5,
+  "category": "04_电源管理",
+  "d": 5,
+  "query": "IP2111A IP5322"
+ },
+ {
+  "model": "IP2111A",
+  "param": "IP5328",
+  "val": "18W",
+  "file": "04_电源管理/C207770_电池管理_IP2111A_规格书_WJ309770.PDF",
+  "page": 5,
+  "category": "04_电源管理",
+  "d": 5,
+  "query": "IP2111A IP5328"
+ },
+ {
+  "model": "esp32-c3",
+  "param": "XTAL CLK (40 MHz)",
+  "val": "4 kHz",
+  "file": "09_MCU与SoC/esp32-c3_technical_reference_manual_cn.pdf",
+  "page": 779,
+  "category": "09_MCU与SoC",
+  "d": 5,
+  "query": "esp32-c3 XTAL CLK (40 MHz)"
+ },
+ {
+  "model": "SS8050",
+  "param": "Ta=25℃",
+  "val": "9mA",
+  "file": "15_三极管BJT/C7420370_三极管(BJT)_SS8050_规格书_SS8050+REV_2.0.PDF",
+  "page": 2,
+  "category": "15_三极管BJT",
+  "d": 5,
+  "query": "SS8050 Ta=25℃"
+ }
+]

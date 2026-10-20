@@ -1,0 +1,19 @@
+[project]
+name = "pdf-rag"
+version = "0.1.0"
+description = "本地元器件手册 PDF 检索:向量+全文混合召回、表格识别、扫描页 OCR、Web 与 MCP 双入口"
+readme = "README.md"
+requires-python = ">=3.13"
+# AGPL-3.0-or-later:直接依赖 PyMuPDF(MuPDF),它本身是 AGPL-3.0 双许可,
+# 故整体只能以 AGPL-3.0 分发(详见 README「许可证」)。
+license = { text = "AGPL-3.0-or-later" }
+dependencies = [
+    "fastapi>=0.141.1",
+    "fastmcp>=3.4.5",
+    "httpx>=0.28.1",
+    "lancedb>=0.36.0",
+    "pymupdf>=1.28.0",
+    "python-dotenv>=1.2.2",
+    "uvicorn>=0.52.1",
+    "zstandard>=0.25.0",
+]
