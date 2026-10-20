@@ -182,7 +182,7 @@ uv run python tools/compact_index.py            # 合并碎片 + 清理 1h 前�
 uv run python tools/compact_index.py --dry-run  # 只看现状
 ```
 
-不改任何一行数据。最近一次实测：**128 MB / 521 版本 / 228 文件 → 43 MB / 8 文件**，
+不改任何一行数据。作者最近一次实测：**128 MB / 521 版本 / 228 文件 → 43 MB / 8 文件**，
 行数与全文索引不变，检索结果一致。清理后重启后端，让它在最新版本上重新持有句柄。
 
 ## 数据包（导出 / 导入）
@@ -285,12 +285,6 @@ cd web && pnpm build
 
 本项目以 **GNU AGPL v3.0 或更高版本**（`AGPL-3.0-or-later`）发布，见 [LICENSE](LICENSE)。
 
-### 为什么是 AGPL-3.0
-
-不是偏好，是**依赖约束**：本项目直接依赖 **PyMuPDF**（引擎为 MuPDF），它以
-**AGPL-3.0 / Artifex 商业许可**双许可发布。AGPL 的传染性适用于与其链接/组合的作品，
-因此整体必须按 AGPL-3.0 分发——除非另外向 Artifex 购买商业许可。
-
 **这对你意味着什么**：
 
 | 场景 | 是否可以 |
@@ -300,9 +294,6 @@ cd web && pnpm build
 | 分发修改版 | ✅ 可以，但须同样以 AGPL 开放源码 |
 | 闭源 SaaS / 闭源分发 | ❌ 需要 Artifex 商业许可，或替换掉 PyMuPDF |
 
-如果将来需要闭源分发，最干净的路径是把 PyMuPDF 换成 AGPL-free 的 PDF 引擎
-（如 `pypdf` / `pdfplumber`），这会涉及 `doc_utils.py`、`ingest.py`、`library.py`
-三处的读页与表格提取逻辑。
 
 ### 依赖许可清单
 
