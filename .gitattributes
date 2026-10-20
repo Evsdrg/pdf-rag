@@ -1,0 +1,2 @@
+# 统一文本行尾为 LF(仓库早期混入 CRLF,跨平台 diff 噪声大);二进制由 git 自动识别
+* text=auto eol=lf
