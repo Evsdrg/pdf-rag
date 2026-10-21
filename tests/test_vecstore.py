@@ -21,7 +21,7 @@ class UidTest(unittest.TestCase):
     def test_identical_text_on_same_page_still_unique(self):
         # 历史 bug:用 file+page+text 做哈希,同页逐字相同的块会碰撞(实测 9 处)。
         # uid 必须含页内块序,与文本无关。
-        uids = vecstore.chunk_uids("a.pdf", 5, 3)
+        uids = [vecstore.make_uid("a.pdf", 5, i) for i in range(3)]
         self.assertEqual(len(set(uids)), 3)
 
     def test_length_fixed(self):

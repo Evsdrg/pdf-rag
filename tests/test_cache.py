@@ -52,7 +52,8 @@ class EmbedQueryCacheTest(unittest.TestCase):
 
     def _fake_post(self, calls, dim=768):
         def fake(url, payload):
-            calls.append((payload.get("dimensions"), payload["input"][0]))
+            calls.append((payload.get("dimensions"), payload["input"][0],
+                          payload.get("model")))
             return FakeResponse(payload.get("dimensions") or dim)
         return fake
 
@@ -97,6 +98,52 @@ class EmbedQueryCacheTest(unittest.TestCase):
         retrieval.reset_cache()
         self.assertEqual(len(retrieval._EMBED_CACHE), 0)
         self.assertEqual(len(retrieval._RESULT_CACHE), 0)
+
+
+class EmbedQueryModelOverrideTest(unittest.TestCase):
+    """查询向量必须按**分区的** model/dim/input_type 生成。
+
+    最危险的组合是两个模型维度相同(都截断到 768):此时维度检查通不出任何异常,
+    拿 A 模型的查询向量去搜 B 模型建的向量不会报错,只会静默给出无意义的相似度。
+    """
+
+    def setUp(self):
+        retrieval.reset_cache()
+        self.calls = []
+
+    def tearDown(self):
+        retrieval.reset_cache()
+
+    def _run(self, **kwargs):
+        def fake(url, payload):
+            self.calls.append(payload)
+            return FakeResponse(payload.get("dimensions") or 768)
+        with mock.patch.object(retrieval, "_post_retry", side_effect=fake):
+            return retrieval.embed_query("查询", **kwargs)
+
+    def test_model_override_used_in_request(self):
+        self._run(model_override="nemotron-3-embed-1b", dim_override=2048,
+                  input_type_override="search_query")
+        self.assertEqual(self.calls[0]["model"], "nemotron-3-embed-1b")
+        self.assertEqual(self.calls[0]["dimensions"], 2048)
+        self.assertEqual(self.calls[0]["input_type"], "search_query")
+
+    def test_override_beats_global_config(self):
+        with override_config(embed_model="global-model"):
+            self._run(model_override="partition-model")
+        self.assertEqual(self.calls[0]["model"], "partition-model")
+
+    def test_no_override_uses_global_config(self):
+        with override_config(embed_model="global-model"):
+            self._run()
+        self.assertEqual(self.calls[0]["model"], "global-model")
+
+    def test_cache_separates_same_dim_different_model(self):
+        # 同一维度、不同模型:必须各发一次请求,不能复用同一缓存条目
+        self._run(model_override="model-a", dim_override=768)
+        self._run(model_override="model-b", dim_override=768)
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual({c["model"] for c in self.calls}, {"model-a", "model-b"})
 
 
 if __name__ == "__main__":

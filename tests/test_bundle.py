@@ -108,3 +108,49 @@ class ApplyPartitionPriorityTest(unittest.TestCase):
         config.override_local({"vector_models_priority": ""})
         self.assertEqual(bundle._apply_partition_priority(m), [])
         self.assertEqual(config.get("vector_models_priority"), "")
+
+
+class SettingsRestoreOrderTest(unittest.TestCase):
+    """包内 settings 恢复后,后续配置写入必须以它为基础,不能覆盖回旧值。
+
+    历史 bug:import_bundle 先 copy settings、后调 _apply_partition_priority,
+    后者 set_many() 落盘的是**内存里的旧 _overrides** —— 刚导入的配置被整个覆盖,
+    界面却提示"已恢复配置覆盖值"。
+    """
+
+    def setUp(self):
+        import json
+        import pathlib
+        import shutil
+        import tempfile
+        self._json = json
+        self._shutil = shutil
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.before = config.SETTINGS_FILE
+        config.SETTINGS_FILE = self.tmp / "settings.json"
+        config.reload()
+
+    def tearDown(self):
+        config.SETTINGS_FILE = self.before
+        config.reload()
+        self._shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _write_bundle_settings(self, values):
+        p = self.tmp / "incoming.json"
+        p.write_text(self._json.dumps(values), encoding="utf-8")
+        self._shutil.copy2(p, config.SETTINGS_FILE)
+        config.reload()
+
+    def test_reload_picks_up_file_changes(self):
+        config.set_many({"rrf_k": 60})
+        self._write_bundle_settings({"rrf_k": 42})
+        self.assertEqual(config.get("rrf_k"), 42)
+
+    def test_priority_write_keeps_restored_values(self):
+        self._write_bundle_settings({"rrf_k": 42, "snippet_width": 1200})
+        m = mk_manifest([{"slug": "a", "model": str(config.get("embed_model")), "dim": 768}])
+        bundle._apply_partition_priority(m)
+        disk = self._json.loads(config.SETTINGS_FILE.read_text(encoding="utf-8"))
+        self.assertEqual(disk["rrf_k"], 42)
+        self.assertEqual(disk["snippet_width"], 1200)
+        self.assertEqual(disk["vector_models_priority"], "a")
