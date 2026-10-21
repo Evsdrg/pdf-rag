@@ -473,46 +473,106 @@ def _hydrate(main_table, uids: list[str]) -> dict[str, dict]:
     return {r["uid"]: r for r in rows}
 
 
+_COV_CACHE: dict[tuple, float] = {}
+
+
+def _partition_coverage_ratio(db, table, slug: str) -> float | None:
+    """分区对主表的块覆盖比例,按 (slug, 主表版本, 分区版本) 缓存。
+
+    统计要扫全分区 uid,实测 12421 块 13ms;每个检索请求都算一遍太浪费,
+    而它与 ingest 同步变化 —— 用两个 version 做失效信号即可。
+    """
+    from . import vecstore
+    part = vecstore.open_partition(db, slug)
+    if part is None:
+        return None
+    key = (slug, table.version, part.version)
+    if key in _COV_CACHE:
+        return _COV_CACHE[key]
+    cov = vecstore.coverage(db, table, slug)
+    ratio = cov["ratio"]
+    _COV_CACHE[key] = ratio
+    # 只保留最新一条,避免长期累积
+    for k in [k for k in _COV_CACHE if k[0] == slug and k != key]:
+        _COV_CACHE.pop(k, None)
+    return ratio
+
+
 def _channel_vector(table, query: str, limit: int, category, file, cands, degraded):
     """向量通道:在分区表上检索,命中 uid 回主表取元数据。
 
     分区与查询向量必须成对:分区记录了建库时的 model/dim/input_type,查询侧用该
     分区的 input_type_query 生成向量,而不是用当前全局配置 —— 否则是"用 A 契约的
     查询向量检索 B 契约建的分区",相似度无意义。
+
+    多分区按 `vector_models_priority` 的顺序依次检索。**一个块只用一个模型的向量**:
+    某块若在靠前分区已命中,靠后分区的同名命中直接丢弃(按 uid 去重),否则它会被
+    重复累加 RRF 分,让"被多个模型索引过的块"凭空获得权重优势。不同模型的向量
+    也绝不混在一次距离计算里 —— 空间不可比。
     """
     from . import library, vecstore
     db = library.get_db()
     if db is None:
         degraded.append("vector")
         return
-    slug = vecstore.current_slug()
-    part = vecstore.open_partition(db, slug)
-    if part is None:
+    parts = vecstore.select_partitions(db)
+    if not parts:
         degraded.append("vector")
-        log.warning("向量分区不存在(%s);跑一次索引或迁移即可生成", slug)
+        log.warning("没有可用的向量分区;检查向量模型优先级/排除配置,或跑一次索引")
         return
-    meta = vecstore.get_partition_meta(db, slug) or {}
-    try:
-        vec = embed_query(query, input_type_override=meta.get("input_type_query"),
-                          dim_override=meta.get("dim"))
-        want = part.schema.field("vector").type.list_size
-        if len(vec) != want:
-            raise ValueError(
-                f"查询向量维度 {len(vec)} 与分区 {slug} 的 {want} 不符;"
-                f"检查「向量维度」配置(EmbedDimensions)是否与建库时一致")
-        found = _apply_filter(part.search(vec, query_type="vector"),
-                              category, file).limit(limit).to_list()
-    except Exception as e:
-        degraded.append("vector")
-        log.warning("向量检索失败: %s", e)
-        return
-    hits = [r for r in found if _accepts(r, category, file)]
-    rows = _hydrate(table, [r["uid"] for r in hits])
-    for rank, r in enumerate(hits):
-        row = rows.get(r["uid"])
-        if row is None:          # 主表已无(孤儿),丢弃
+
+    covered: set[str] = set()
+    seen_uid: set[str] = set()
+    for meta in parts:
+        slug = meta["slug"]
+        part = vecstore.open_partition(db, slug)
+        if part is None:
             continue
-        cands.add(row, rank)
+        try:
+            vec = embed_query(query, input_type_override=meta.get("input_type_query"),
+                              dim_override=meta.get("dim"))
+            want = part.schema.field("vector").type.list_size
+            if len(vec) != want:
+                raise ValueError(
+                    f"查询向量维度 {len(vec)} 与分区 {slug} 的 {want} 不符;"
+                    f"检查「向量维度」配置(EmbedDimensions)是否与建库时一致")
+            found = _apply_filter(part.search(vec, query_type="vector"),
+                                  category, file).limit(limit).to_list()
+        except Exception as e:
+            log.warning("向量检索失败(%s): %s", slug, e)
+            continue
+        hits = [r for r in found if _accepts(r, category, file)]
+        rows = _hydrate(table, [r["uid"] for r in hits])
+        for rank, r in enumerate(hits):
+            # 一个块在多个分区都命中时只计一次 —— 否则它会被重复累加 RRF 分,
+            # 让"被多个模型索引过的块"凭空获得权重优势。按优先级先到的为准。
+            if r["uid"] in seen_uid:
+                continue
+            row = rows.get(r["uid"])
+            if row is None:          # 主表已无(孤儿),丢弃
+                continue
+            seen_uid.add(r["uid"])
+            cands.add(row, rank)
+            covered.add(r["uid"])
+
+    if not covered:
+        degraded.append("vector")
+        log.warning("所有向量分区均未召回;检查分区覆盖率与嵌入服务")
+        return
+    # 覆盖率是"分区覆盖了主表多少块"的静态属性,不是本次召回数 —— 一次检索只取
+    # 几十块,用召回数除以总量必然接近 0,会把正常检索误判成降级。
+    min_ratio = float(config.get("vector_coverage_min"))
+    if min_ratio > 0:
+        low = []
+        for meta in parts:
+            ratio = _partition_coverage_ratio(db, table, meta["slug"])
+            if ratio is not None and ratio < min_ratio:
+                low.append(f"{meta['slug']}={ratio:.0%}")
+        if low:
+            degraded.append("vector")
+            log.warning("向量分区覆盖率低于下限 %.0f%%: %s;"
+                        "对这些模型补跑一次索引可恢复",
+                        min_ratio * 100, ", ".join(low))
 
 
 # ==================== 跨版本去重 ====================
@@ -638,6 +698,8 @@ _CACHE_PARAM_KEYS = (
     "num_unit_bonus", "toc_scan_chars", "penalty_cover", "penalty_toc_rev",
     "block_sim_threshold", "rerank_on_window", "rerank_meta",
     "reranker_model", "embed_model", "embed_input_type_query", "embed_dimensions",
+    # 向量分区选择同样改变结果:换优先级/排除后必须重算,否则会返回旧分区的排序
+    "vector_models_priority", "vector_models_exclude",
 )
 
 
@@ -646,9 +708,10 @@ def _params_fingerprint() -> tuple:
 
 
 def reset_cache() -> None:
-    """清空结果缓存与查询向量缓存(配置变更、索引替换后调用)。"""
+    """清空结果缓存、查询向量缓存与覆盖率缓存(配置变更、索引替换后调用)。"""
     _RESULT_CACHE.clear()
     _EMBED_CACHE.clear()
+    _COV_CACHE.clear()
 
 
 def _cache_key(table, query, category, top_k, mode, rerank, file, max_per_doc):

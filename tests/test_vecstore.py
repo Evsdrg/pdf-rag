@@ -132,3 +132,55 @@ class PartitionStoreTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SelectPartitionsTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.db = lancedb.connect(self.dir)
+        for slug, model, dim in (("m_a__768__", "model-a", 768),
+                                 ("m_b__768__", "model-b", 768),
+                                 ("m_a__1024__", "model-a", 1024)):
+            vecstore.ensure_partition(self.db, slug, 4)
+            vecstore.upsert_partition_meta(self.db, slug, blocks=1, files=1,
+                                           model=model, dim=dim)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _slugs(self):
+        return [m["slug"] for m in vecstore.select_partitions(self.db)]
+
+    def test_default_uses_current_slug_only(self):
+        with override_config(vector_models_priority="", vector_models_exclude=""):
+            slugs = self._slugs()
+        cur = vecstore.current_slug()
+        self.assertEqual(slugs, [cur] if cur in ("m_a__768__", "m_b__768__", "m_a__1024__") else [])
+
+    def test_priority_order_respected(self):
+        with override_config(vector_models_priority="m_b__768__, m_a__768__"):
+            self.assertEqual(self._slugs(), ["m_b__768__", "m_a__768__"])
+
+    def test_model_name_matches_all_its_partitions(self):
+        with override_config(vector_models_priority="model-a"):
+            self.assertEqual(sorted(self._slugs()), ["m_a__1024__", "m_a__768__"])
+
+    def test_exclude_wins_over_priority(self):
+        # 冲突时以排除为准(fail-closed)
+        with override_config(vector_models_priority="m_a__768__, m_b__768__",
+                             vector_models_exclude="m_a__768__"):
+            self.assertEqual(self._slugs(), ["m_b__768__"])
+
+    def test_exclude_by_model_name(self):
+        with override_config(vector_models_priority="model-a, m_b__768__",
+                             vector_models_exclude="model-a"):
+            self.assertEqual(self._slugs(), ["m_b__768__"])
+
+    def test_unknown_slug_ignored(self):
+        with override_config(vector_models_priority="nope, m_b__768__"):
+            self.assertEqual(self._slugs(), ["m_b__768__"])
+
+    def test_empty_meta_returns_empty(self):
+        db2 = lancedb.connect(tempfile.mkdtemp())
+        with override_config(vector_models_priority="x"):
+            self.assertEqual(vecstore.select_partitions(db2), [])

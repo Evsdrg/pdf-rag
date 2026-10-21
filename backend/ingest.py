@@ -464,11 +464,78 @@ def extract_one(args):
             pass
 
 
+def _run_rebuild_vectors(db, args):
+    """对指定模型重算**全部块**的向量(显式操作,与默认的增量相反)。
+
+    与增量索引的区别:增量只处理 md5 变化的文件;这里对主表已有的**所有块**重算,
+    用于"这个模型的分区不完整/想用新参数重来"。
+
+    默认**保留**该模型原有分区数据 —— 同 uid 覆盖写入即等于替换,不必先删。
+    `--drop-old-vectors` 才清空,用于清理已删除文件留下的残留。
+    """
+    want = args.rebuild_vectors
+    cur = str(config.get("embed_model"))
+    if want != cur:
+        sys.exit(f"--rebuild-vectors {want} 与当前 EMBED_MODEL({cur}) 不一致。\n"
+                 f"分区标识由 模型+维度+建库 input_type 决定,必须先把 embed_model 设成 {want}"
+                 f"(以及配套的 EMBED_DIMENSIONS / EMBED_INPUT_TYPE_DOC),否则算出的向量"
+                 f"会落到错误的分区")
+    if "chunks" not in vecstore.table_names(db):
+        sys.exit("主表不存在,先跑一次普通索引")
+    table = db.open_table("chunks")
+    dim = config.get("embed_dimensions")
+    if not dim:
+        sys.exit("EMBED_DIMENSIONS 未设置;分区表需要明确维度")
+    slug = vecstore.current_slug()
+    if args.drop_old_vectors:
+        existed = vecstore.drop_partition(db, slug)
+        print(f"已清空分区 {slug}" if existed else f"分区 {slug} 原本不存在")
+
+    rows = table.to_arrow().select(["uid", "file", "page", "category", "md5", "text"]).to_pylist()
+    if not rows:
+        print("主表为空,无需重建")
+        return
+    print(f"对模型 {cur} 重算 {len(rows)} 块的向量 → 分区 {slug}", flush=True)
+
+    part = vecstore.ensure_partition(db, slug, dim)
+    # 每批先按 uid 删旧行再写入:不能"先全删再写"——中途失败会把分区清空,
+    # 而 --drop-old-vectors 默认关的语义正是"保留可用的旧数据"。
+    batch = config.get("embed_batch")
+    client = _new_client()
+    t0, done = time.time(), 0
+    for start in range(0, len(rows), batch):
+        chunk = rows[start:start + batch]
+        vecs = embed_batch(client, [r["text"] for r in chunk])
+        part_rows = [{"uid": r["uid"], "file": r["file"], "page": int(r["page"]),
+                      "category": r.get("category", ""), "md5": r.get("md5", ""),
+                      "vector": v}
+                     for r, v in zip(chunk, vecs)]
+        quoted = ",".join("'" + r["uid"] + "'" for r in chunk)
+        part.delete(f"uid IN ({quoted})")
+        part.add(part_rows)
+        done += len(chunk)
+        el = time.time() - t0
+        eta = (len(rows) - done) / (done / el) if done and el else 0
+        print(f"  {done}/{len(rows)}  {done/el:.1f} 块/s  ETA {eta:.0f}s", flush=True)
+
+    meta = vecstore.upsert_partition_meta(
+        db, slug, blocks=part.count_rows(),
+        files=len({r["file"] for r in rows}))
+    print(f"完成: 分区 {slug} 现有 {part.count_rows()} 行 ({meta['files']} 个文件),"
+          f"耗时 {time.time()-t0:.0f}s")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--rebuild", action="store_true", help="清空索引全量重建")
+    ap.add_argument("--rebuild", action="store_true",
+                    help="清空**主表**全量重建(向量分区不动:文件没变则 uid 不变,向量仍有效)")
     ap.add_argument("--force", nargs="*", default=None,
                     help="强制重处理:指定文件(相对路径),不带参数则全部文件")
+    ap.add_argument("--rebuild-vectors", metavar="MODEL", default=None,
+                    help="对指定模型重算**全部块**的向量(需先把它设为当前 embed_model)。"
+                         "默认保留该模型原有分区数据(按 uid 覆盖写入)")
+    ap.add_argument("--drop-old-vectors", action="store_true",
+                    help="配合 --rebuild-vectors:重建前清空该模型分区(默认关闭)")
     args = ap.parse_args()
 
     acquire_lock()
@@ -616,8 +683,15 @@ def _run(args):
         sys.exit(f"PDF_ROOT 不存在: {root}")
 
     db = lancedb.connect(config.DB_PATH)
+    if args.drop_old_vectors and not args.rebuild_vectors:
+        sys.exit("--drop-old-vectors 只能与 --rebuild-vectors 一起用"
+                 "(它是「重建这个模型时是否先清空」的开关)")
+    if args.rebuild_vectors:
+        _run_rebuild_vectors(db, args)
+        return
+
     table, known = None, {}
-    if db.list_tables() and not args.rebuild:
+    if vecstore.table_names(db) and "chunks" in vecstore.table_names(db) and not args.rebuild:
         table = db.open_table("chunks")
         pairs = table.to_arrow().select(["file", "md5"]).to_pylist()
         known = {r["file"]: r["md5"] for r in pairs}

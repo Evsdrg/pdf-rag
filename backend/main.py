@@ -16,7 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import bundle, config, doc_utils, library, retrieval
+from . import bundle, config, doc_utils, library, retrieval, vecstore
 
 ROOT = Path(__file__).resolve().parent
 
@@ -216,7 +216,42 @@ def get_stats() -> dict:
         "last_index": state.get("finished_at"),
         "history": hist,
         "skipped": state.get("skipped", []),
+        "vectors": _vector_status(table),
     }
+
+
+def _vector_status(table) -> dict:
+    """各向量分区的覆盖率与当前选用情况。
+
+    覆盖率**按块**(向量化的输入单位就是块);同时报文件数与"部分覆盖的文件数"
+    —— 后者是"某份文档只有一部分块有向量"的信号,最容易被人忽略。
+    计算含全表扫描,按 (主表版本, 分区版本) 缓存,避免每次刷 stats 都算。
+    """
+    db = library.get_db()
+    if db is None:
+        return {"partitions": [], "selected": [], "current": None}
+    metas = vecstore.list_partitions(db)
+
+    def produce():
+        out = []
+        for m in metas:
+            cov = vecstore.coverage(db, table, m["slug"])
+            out.append({
+                "slug": m["slug"], "model": m.get("model"), "dim": m.get("dim"),
+                "input_type_doc": m.get("input_type_doc") or "",
+                "blocks_covered": cov["blocks_covered"], "blocks_total": cov["blocks_total"],
+                "files_covered": cov["files_covered"], "files_total": cov["files_total"],
+                "files_partial": cov["files_partial"], "ratio": round(cov["ratio"], 4),
+                "updated_at": m.get("updated_at"),
+            })
+        return out
+
+    # 分区有增删时 metas 会变,把它进缓存键,避免沿用旧的分区清单
+    key = "vecstatus:" + ",".join(m["slug"] for m in metas)
+    parts = library.cached(key, table, produce)
+    selected = [m["slug"] for m in vecstore.select_partitions(db)]
+    return {"partitions": parts, "selected": selected,
+            "current": vecstore.current_slug()}
 
 
 @app.get("/api/categories")

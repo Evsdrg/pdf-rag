@@ -67,6 +67,50 @@ def current_slug() -> str:
                       str(config.get("embed_input_type_doc") or ""))
 
 
+def _split_csv(raw) -> list[str]:
+    return [s.strip() for s in str(raw or "").split(",") if s.strip()]
+
+
+def select_partitions(db) -> list[dict]:
+    """按优先级/排除配置挑出本次检索可用的分区,按优先级排序。
+
+    语义(见 docs/VECTOR-PARTITION.md §3.3):
+    * 一项可写分区 slug,也可写模型名(匹配该模型的任意分区,含不同 input_type)。
+    * 排除优先于优先级:同时出现在两边时以排除为准(fail-closed)。
+    * 优先级留空 = 只用当前配置对应的那个分区。
+    * 每次检索中,一个块只用一个模型的向量 —— 调用方按返回顺序依次检索,
+      同一块在靠前分区命中后就不再消费靠后分区的结果。
+
+    返回 vec_meta 行(含 slug/model/dim/input_type_query),不存在的分区被跳过。
+    """
+    metas = {m["slug"]: m for m in list_partitions(db)}
+    if not metas:
+        return []
+
+    def match(term: str) -> list[dict]:
+        return [m for s, m in metas.items() if term == s or term == m.get("model")]
+
+    excluded = {m["slug"] for term in _split_csv(config.get("vector_models_exclude"))
+                for m in match(term)}
+
+    order = _split_csv(config.get("vector_models_priority"))
+    picked: list[dict] = []
+    seen: set[str] = set()
+    if order:
+        for term in order:
+            for m in match(term):
+                if m["slug"] in excluded or m["slug"] in seen:
+                    continue
+                picked.append(m)
+                seen.add(m["slug"])
+    else:
+        cur = current_slug()
+        m = metas.get(cur)
+        if m is not None and cur not in excluded:
+            picked.append(m)
+    return picked
+
+
 # ---------- 分区元数据 ----------
 
 _META_SCHEMA = pa.schema([
