@@ -30,6 +30,7 @@ uv run run_backend.py       # http://127.0.0.1:8100（含 Web UI 与 MCP）
 | [DEPLOY.md](DEPLOY.md) | 部署指南、REST API 全表、索引与数据包运维（另附内网形态文档 `DEPLOY-NAS.md`，不入库） |
 | [BENCHMARKS.md](BENCHMARKS.md) | 检索质量基线、历次参数实验（含否定性结果）、测试方法学——**调参/换模型前先读** |
 | [THIRD-PARTY.md](THIRD-PARTY.md) | 依赖许可清单与第三方声明 |
+| [docs/VECTOR-PARTITION.md](docs/VECTOR-PARTITION.md) | 设计稿：按模型分区的向量存储（多模型混用、换模型只做增量） |
 
 ## 目录结构
 
