@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { NCard, NEmpty, NDataTable, NAlert, NSpin } from 'naive-ui'
+import { h, onMounted, ref } from 'vue'
+import { NCard, NEmpty, NDataTable, NAlert, NSpin, NTag, NProgress } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { getStats, getSWR } from '../api'
-import type { Stats, HistoryEntry } from '../api'
+import type { Stats, HistoryEntry, VectorPartition } from '../api'
 import CategoryBar from '../components/CategoryBar.vue'
 
 const stats = ref<Stats | null>(null)
@@ -17,6 +17,50 @@ onMounted(async () => {
     err.value = `无法连接后端服务:${(e as Error).message}`
   }
 })
+
+function pct(v: number) { return Math.round(v * 100) }
+
+/** 覆盖率颜色:100% 绿、<100% 黄、0 红 */
+function covStatus(v: number): 'success' | 'warning' | 'error' {
+  if (v >= 1) return 'success'
+  return v > 0 ? 'warning' : 'error'
+}
+
+const partCols: DataTableColumns<VectorPartition> = [
+  {
+    title: '分区', key: 'slug',
+    render: (r) => r.slug,
+  },
+  { title: '模型', key: 'model', render: (r) => r.model || '-' },
+  { title: '维度', key: 'dim', width: 70, render: (r) => (r.dim ?? '-') },
+  {
+    title: '块覆盖', key: 'ratio', width: 150,
+    render: (r) => h(NProgress, {
+      type: 'line', percentage: pct(r.ratio), status: covStatus(r.ratio),
+      height: 8, showIndicator: false,
+    }),
+  },
+  {
+    title: '块数', key: 'blocks_covered', width: 130,
+    render: (r) => `${r.blocks_covered} / ${r.blocks_total}`,
+  },
+  {
+    title: '文件', key: 'files_covered', width: 110,
+    render: (r) => `${r.files_covered} / ${r.files_total}`,
+  },
+  {
+    title: '部分覆盖', key: 'files_partial', width: 100,
+    // 有向量块 < 该文件总块数:限流中断或按块补算的痕迹,最容易被忽略
+    render: (r) => r.files_partial
+      ? h(NTag, { size: 'small', type: 'warning', round: true }, () => `${r.files_partial} 份`)
+      : '-',
+  },
+]
+
+/** 某分区是否参与检索(由后端按优先级/排除算出) */
+function isSelected(slug: string) {
+  return !!stats.value?.vectors?.selected.includes(slug)
+}
 
 const histCols: DataTableColumns<HistoryEntry> = [
   { title: '时间', key: 'time' },
@@ -53,6 +97,23 @@ const histCols: DataTableColumns<HistoryEntry> = [
             <n-empty v-else description="暂无历史记录" />
           </n-card>
         </div>
+
+        <n-card v-if="stats.vectors?.partitions.length" title="向量分区" class="gap">
+          <template #header-extra>
+            <span class="hint">
+              检索使用:{{ stats.vectors.selected.length
+                ? stats.vectors.selected.join(' → ')
+                : '无(检查优先级/排除配置)' }}
+            </span>
+          </template>
+          <n-data-table :columns="partCols" :data="stats.vectors.partitions"
+            size="small" :bordered="false" :row-props="(r: VectorPartition) => ({
+              class: isSelected(r.slug) ? 'row-on' : '' })" />
+          <div class="hint sub">
+            覆盖率按块统计——向量化的输入单位是块,同一文件可能只有部分块有向量。
+            「部分覆盖」列显示这类文件数,补跑一次索引可恢复。
+          </div>
+        </n-card>
 
         <n-card v-if="stats.skipped.length" title="无文本文件(扫描件,无法索引)" class="gap">
           <div v-for="s in stats.skipped" :key="s" class="skip">{{ s }}</div>
@@ -101,6 +162,17 @@ const histCols: DataTableColumns<HistoryEntry> = [
   font-size: 12px;
   color: #f9a8a8;
   margin: 4px 0;
+}
+.hint {
+  font-size: 12px;
+  color: #6c7086;
+}
+.hint.sub {
+  margin-top: 10px;
+  line-height: 1.7;
+}
+:deep(.row-on td) {
+  background: rgba(137, 180, 250, 0.06);
 }
 .empty {
   padding: 60px 0;

@@ -149,8 +149,31 @@ def _manifest() -> dict:
         "embedding": {"base_url": provider["embed_base_url"],
                       "model": provider["embed_model"],
                       "dim": _embedding_dim()},
+        # 包内可能带多个模型的分区(用户换着用过)。列出契约,导入方才能知道
+        # 自己能用哪些、缺哪些;单分区时这就是现役模型那一条。
+        "vector_partitions": _partition_block(),
         "documents": docs,
     }
+
+
+def _partition_block() -> list[dict]:
+    """包内各向量分区的契约与覆盖量(不含向量本身)。"""
+    from . import vecstore
+    import lancedb
+    db = lancedb.connect(config.DB_PATH)
+    metas = vecstore.list_partitions(db)
+    main = db.open_table("chunks") if "chunks" in vecstore.table_names(db) else None
+    out = []
+    for m in metas:
+        item = {k: m.get(k) for k in ("slug", "model", "dim", "input_type_doc",
+                                      "input_type_query", "blocks", "files",
+                                      "created_at", "updated_at")}
+        if main is not None:
+            cov = vecstore.coverage(db, main, m["slug"])
+            item["blocks_covered"] = cov["blocks_covered"]
+            item["ratio"] = round(cov["ratio"], 4)
+        out.append(item)
+    return out
 
 
 def _chunk_count() -> int:
@@ -252,14 +275,32 @@ def inspect_bundle(src: Path) -> dict:
     raise ValueError("包内缺少 manifest.json")
 
 
+def _local_usable_partitions(manifest: dict) -> list[str]:
+    """包内分区里,本地**无需切换配置就能直接用**的那些。
+
+    判据:模型名与本地 `embed_model` 相同(维度/input_type 保持包内契约,查询侧
+    会按分区记录成对生成向量,所以不必要求与本地配置完全一致)。
+    老包(v1)没有 vector_partitions,退回看 embedding 块。
+    """
+    from . import vecstore
+    parts = manifest.get("vector_partitions")
+    if not parts:
+        emb = manifest.get("embedding") or {}
+        model = emb.get("model")
+        return [vecstore.model_slug(model, emb.get("dim"))] if model == config.get("embed_model") else []
+    cur_model = str(config.get("embed_model"))
+    return [p["slug"] for p in parts if p.get("model") == cur_model]
+
+
 def _check_compatible(manifest: dict, apply_provider: bool = True) -> str:
     """返回空串表示可导入,否则返回拒绝原因。
 
     向量与嵌入模型强绑定,所以"是否应用包内的服务配置"决定了本次导入是否可行:
 
     * **apply_provider=True**:按包内配置切换嵌入服务,数据与模型重新配对,可用。
-    * **apply_provider=False**:保留本地配置。此时模型不一致就无法使用 ——
-      新旧向量不在同一空间,检索会静默劣化,宁可拒绝也不留一堆无用的向量。
+    * **apply_provider=False**:保留本地配置。此时**只要包内有本地模型能用的分区**
+      就允许导入——包里可能带多个模型的分区,本地与其一匹配即可;一个都匹配不上
+      才拒绝,否则导入的是一堆当前用不了的向量。
     """
     if manifest.get("format") != BUNDLE_FORMAT:
         return "不是本系统的数据包"
@@ -267,14 +308,13 @@ def _check_compatible(manifest: dict, apply_provider: bool = True) -> str:
         return f"包版本 {manifest.get('version')} 高于当前支持的 {BUNDLE_VERSION}"
     if apply_provider:
         return ""
-    bundled = manifest.get("provider") or manifest.get("embedding") or {}
-    if bundled.get("embed_model") and bundled["embed_model"] != config.get("embed_model"):
-        return (f"嵌入模型不一致:包内 {bundled['embed_model']},"
-                f"当前 {config.get('embed_model')}。可勾选「应用包内服务配置」后导入")
-    emb = manifest.get("embedding") or {}
-    if emb.get("dim") and _embedding_dim() and emb["dim"] != _embedding_dim():
-        return f"向量维度不一致:包内 {emb['dim']},当前 {_embedding_dim()}"
-    return ""
+    usable = _local_usable_partitions(manifest)
+    if usable:
+        return ""
+    parts = manifest.get("vector_partitions") or []
+    have = ", ".join(sorted({str(p.get("model")) for p in parts})) or "（包内无分区清单）"
+    return (f"包内没有本地模型({config.get('embed_model')})可用的向量分区:"
+            f"包内为 {have}。可勾选「应用包内服务配置」后导入,或先用本地模型重建向量")
 
 
 def apply_provider_config(manifest: dict) -> dict:
@@ -352,14 +392,35 @@ def import_bundle(src: Path, restore_docs: bool = True, replace_index: bool = Tr
             shutil.copy2(settings, config.SETTINGS_FILE)
             say("已恢复配置覆盖值")
 
+        picked = _apply_partition_priority(manifest) if replaced else []
+        if picked:
+            say(f"已把包内可用分区写入优先级: {', '.join(picked)}")
+
         return {
             "ok": True, "documents_written": written, "documents_skipped": skipped,
             "index_replaced": replaced, "index_backup": backup,
-            "provider_applied": applied,
+            "provider_applied": applied, "partition_priority": picked,
             "elapsed": round(time.time() - t0, 1), "manifest": manifest,
         }
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _apply_partition_priority(manifest: dict) -> list[str]:
+    """导入后把包内**本地可用**的分区写进优先级,否则多分区包等于白带。
+
+    只在用户没有显式设过优先级时才写——尊重既有选择,不覆盖用户配置。
+    返回写入的分区列表(未写时为空)。
+    """
+    from . import vecstore
+    usable = _local_usable_partitions(manifest)
+    if not usable or str(config.get("vector_models_priority") or "").strip():
+        return []
+    try:
+        config.set_many({"vector_models_priority": ", ".join(usable)})
+    except Exception:
+        return []
+    return usable
 
 
 def _restore_documents(docs_dir: Path, manifest: dict, say) -> tuple[int, int]:

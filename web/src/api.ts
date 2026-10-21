@@ -1,5 +1,28 @@
 const BASE = '/api'
 
+export interface VectorPartition {
+  slug: string
+  model: string | null
+  dim: number | null
+  input_type_doc: string
+  blocks_covered: number
+  blocks_total: number
+  files_covered: number
+  files_total: number
+  /** 部分覆盖的文件数:有向量块 < 该文件总块数。最需要人关注的信号 */
+  files_partial: number
+  ratio: number
+  updated_at?: string | null
+}
+
+export interface VectorStatus {
+  partitions: VectorPartition[]
+  /** 本次检索实际使用的分区(按优先级排序) */
+  selected: string[]
+  /** 当前配置对应的分区 slug */
+  current: string | null
+}
+
 export interface Stats {
   indexed: boolean
   files: number
@@ -8,6 +31,7 @@ export interface Stats {
   last_index: string | null
   history: HistoryEntry[]
   skipped: string[]
+  vectors?: VectorStatus
 }
 
 export interface HistoryEntry {
