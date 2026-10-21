@@ -470,8 +470,11 @@ def _run_rebuild_vectors(db, args):
     与增量索引的区别:增量只处理 md5 变化的文件;这里对主表已有的**所有块**重算,
     用于"这个模型的分区不完整/想用新参数重来"。
 
-    默认**保留**该模型原有分区数据 —— 同 uid 覆盖写入即等于替换,不必先删。
-    `--drop-old-vectors` 才清空,用于清理已删除文件留下的残留。
+    row 全部块重算,用于"这个模型的分区不完整/想用新参数重来"。
+
+    默认**保留**该模型原有分区数据:每批按 uid 删旧行后写入,中途失败时已处理的
+    批次是新数据、未处理的是旧数据,分区始终可用。`--drop-old-vectors` 才整体清空
+    (用于清理已删除文件的残留)。
     """
     want = args.rebuild_vectors
     cur = str(config.get("embed_model"))
@@ -491,32 +494,45 @@ def _run_rebuild_vectors(db, args):
         existed = vecstore.drop_partition(db, slug)
         print(f"已清空分区 {slug}" if existed else f"分区 {slug} 原本不存在")
 
-    rows = table.to_arrow().select(["uid", "file", "page", "category", "md5", "text"]).to_pylist()
+    # 只取需要的列:to_arrow() 会物化整表(text 共约 20MB),投影下推省掉无关列
+    rows = table.search().select(["uid", "file", "page", "category", "md5", "text"]) \
+        .limit(table.count_rows()).to_arrow().to_pylist()
     if not rows:
         print("主表为空,无需重建")
         return
     print(f"对模型 {cur} 重算 {len(rows)} 块的向量 → 分区 {slug}", flush=True)
 
     part = vecstore.ensure_partition(db, slug, dim)
-    # 每批先按 uid 删旧行再写入:不能"先全删再写"——中途失败会把分区清空,
-    # 而 --drop-old-vectors 默认关的语义正是"保留可用的旧数据"。
     batch = config.get("embed_batch")
-    client = _new_client()
     t0, done = time.time(), 0
-    for start in range(0, len(rows), batch):
-        chunk = rows[start:start + batch]
-        vecs = embed_batch(client, [r["text"] for r in chunk])
-        part_rows = [{"uid": r["uid"], "file": r["file"], "page": int(r["page"]),
-                      "category": r.get("category", ""), "md5": r.get("md5", ""),
-                      "vector": v}
-                     for r, v in zip(chunk, vecs)]
-        quoted = ",".join("'" + r["uid"] + "'" for r in chunk)
-        part.delete(f"uid IN ({quoted})")
-        part.add(part_rows)
-        done += len(chunk)
-        el = time.time() - t0
-        eta = (len(rows) - done) / (done / el) if done and el else 0
-        print(f"  {done}/{len(rows)}  {done/el:.1f} 块/s  ETA {eta:.0f}s", flush=True)
+
+    def work(item):
+        start, chunk = item
+        client = _new_client()
+        return start, embed_batch(client, [r["text"] for r in chunk])
+
+    # 并发嵌入 + 主线程按序写库(与常规索引_phase 同一模式):串行跑 12421 块太慢
+    batches = [(i, rows[i:i + batch]) for i in range(0, len(rows), batch)]
+    with ThreadPoolExecutor(config.get("embed_workers")) as ex:
+        for start, vecs in ex.map(work, batches):
+            chunk = rows[start:start + len(vecs)]
+            part_rows = [{"uid": r["uid"], "file": r["file"], "page": int(r["page"]),
+                          "category": r.get("category", ""), "md5": r.get("md5", ""),
+                          "vector": v}
+                         for r, v in zip(chunk, vecs)]
+            quoted = ",".join("'" + r["uid"] + "'" for r in chunk)
+            part.delete(f"uid IN ({quoted})")
+            part.add(part_rows)
+            # ex.map 在主线程按序产出,这里不需要锁。日志按 10% 一档打,
+            # 逐批打印会让 1 万块的日志变成几百行。
+            prev_pct = done * 100 // len(rows)
+            done += len(chunk)
+            pct = done * 100 // len(rows)
+            if pct > prev_pct or done == len(rows):
+                el = time.time() - t0
+                eta = (len(rows) - done) / (done / el) if done and el else 0
+                print(f"  {done}/{len(rows)} ({pct}%)  {done/el:.1f} 块/s  "
+                      f"ETA {eta:.0f}s", flush=True)
 
     meta = vecstore.upsert_partition_meta(
         db, slug, blocks=part.count_rows(),

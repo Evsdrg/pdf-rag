@@ -467,7 +467,7 @@ def _hydrate(main_table, uids: list[str]) -> dict[str, dict]:
     """
     if not uids:
         return {}
-    from . import library
+    # uid 是 sha256 前 20 位十六进制,不含引号;仍按 SQL 字面量转义,防将来改生成规则
     quoted = ",".join("'" + u.replace("'", "''") + "'" for u in uids)
     rows = main_table.search().where(f"uid IN ({quoted})").limit(len(uids) + 10).to_list()
     return {r["uid"]: r for r in rows}

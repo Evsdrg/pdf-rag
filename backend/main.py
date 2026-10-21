@@ -246,8 +246,13 @@ def _vector_status(table) -> dict:
             })
         return out
 
-    # 分区有增删时 metas 会变,把它进缓存键,避免沿用旧的分区清单
-    key = "vecstatus:" + ",".join(m["slug"] for m in metas)
+    # library.cached 只按主表 version 失效,而补建/重建分区时主表并不变 ——
+    # 必须把分区版本也进 key,否则覆盖率会一直显示旧值。
+    ver_parts = []
+    for m in metas:
+        p = vecstore.open_partition(db, m["slug"])
+        ver_parts.append(f"{m['slug']}@{p.version if p is not None else '-'}")
+    key = "vecstatus:" + ",".join(ver_parts)
     parts = library.cached(key, table, produce)
     selected = [m["slug"] for m in vecstore.select_partitions(db)]
     return {"partitions": parts, "selected": selected,
