@@ -2,10 +2,14 @@
 pdf/
 parsed/
 index.lance/
+index.lance.bak-*/
 logs/
 data/
 .paddlex_cache/
 run_backend.lock
+run_state.json
+ingest_history.json
+ingest.lock
 
 # 本机运行产物
 .venv/
