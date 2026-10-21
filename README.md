@@ -44,6 +44,7 @@ backend/
   doc_utils.py    PDF/Markdown 文本提取、表格 markdown 化
   ocr.py          OCR 后端抽象（local Paddle / remote VLM）+ 调用状态记录
   bundle.py       数据包（.tar.zst）导出/导入
+  vecstore.py     向量分区:uid、分区表、覆盖率(见 docs/VECTOR-PARTITION.md)
 server.py         MCP 服务（默认内嵌；MCP_INPROC=0 时独立进程）
 ocr_service.py    本机 OCR 服务（独立进程，依赖 ocr-env，可选）
 run_backend.py    后端守护：崩溃自愈 + 单例锁

@@ -137,20 +137,27 @@ def _base_url() -> str:
 _EMBED_CACHE: "collections.OrderedDict[tuple, list[float]]" = collections.OrderedDict()
 
 
-def embed_query(text: str) -> list[float]:
+def embed_query(text: str, input_type_override: str | None = None,
+                dim_override: int | None = None) -> list[float]:
     """取查询向量。命中本地缓存则不再访问上游。
 
     同一查询在结果缓存过期后会重新走到这里;没有这层缓存就要重付一次嵌入调用。
+
+    `input_type_override` / `dim_override` 用于"按分区的契约生成查询向量":
+    分区可能不是用当前全局配置建的(用户换过模型/维度/input_type),查询向量
+    必须与分区匹配,否则是跨契约检索。缓存键因此包含这两个值。
     """
-    dim = config.get("embed_dimensions")
-    key = (config.get("embed_model"), config.get("embed_input_type_query"), dim, text)
+    dim = dim_override if dim_override is not None else config.get("embed_dimensions")
+    input_type = (input_type_override if input_type_override is not None
+                  else config.get("embed_input_type_query"))
+    model = config.get("embed_model")
+    key = (model, input_type, dim, text)
     cached = _EMBED_CACHE.get(key)
     if cached is not None:
         _EMBED_CACHE.move_to_end(key)
         return cached
 
-    payload = {"model": config.get("embed_model"), "input": [text]}
-    input_type = config.get("embed_input_type_query")
+    payload = {"model": model, "input": [text]}
     if input_type:                 # Cohere 系需要;留空则不发送(OpenAI 兼容模型)
         payload["input_type"] = input_type
     if dim:                        # 显式声明维度,不依赖服务商默认值
@@ -442,32 +449,70 @@ def _channel_substring(table, query: str, limit: int, category, file, cands, deg
 
 
 def _index_dim(table) -> int | None:
-    """索引里向量列的维度。取不到时返回 None(不阻断检索)。"""
+    """索引里向量列的维度。取不到时返回 None(不阻断检索)。
+
+    主表已无 vector 列(向量在分区表),这里保留是为兼容旧索引与走偏的调用方。
+    """
     try:
         return table.schema.field("vector").type.list_size
     except Exception:
         return None
 
 
+def _hydrate(main_table, uids: list[str]) -> dict[str, dict]:
+    """按 uid 从主表取回元数据与文本。
+
+    分区表只有 uid + 过滤列 + 向量,答案文本在主表 —— 实测 300 个 uid 回表 6ms,
+    相对嵌入调用可忽略。主表已无的 uid(孤儿)自然查不到,由调用方丢弃。
+    """
+    if not uids:
+        return {}
+    from . import library
+    quoted = ",".join("'" + u.replace("'", "''") + "'" for u in uids)
+    rows = main_table.search().where(f"uid IN ({quoted})").limit(len(uids) + 10).to_list()
+    return {r["uid"]: r for r in rows}
+
+
 def _channel_vector(table, query: str, limit: int, category, file, cands, degraded):
+    """向量通道:在分区表上检索,命中 uid 回主表取元数据。
+
+    分区与查询向量必须成对:分区记录了建库时的 model/dim/input_type,查询侧用该
+    分区的 input_type_query 生成向量,而不是用当前全局配置 —— 否则是"用 A 契约的
+    查询向量检索 B 契约建的分区",相似度无意义。
+    """
+    from . import library, vecstore
+    db = library.get_db()
+    if db is None:
+        degraded.append("vector")
+        return
+    slug = vecstore.current_slug()
+    part = vecstore.open_partition(db, slug)
+    if part is None:
+        degraded.append("vector")
+        log.warning("向量分区不存在(%s);跑一次索引或迁移即可生成", slug)
+        return
+    meta = vecstore.get_partition_meta(db, slug) or {}
     try:
-        vec = embed_query(query)
-        # 高维查低维索引时 lance 会静默截断而不是报错,结果看似正常实则错误。
-        # 维度不符一律按降级处理并记日志,不用错误的结果污染排序。
-        want = _index_dim(table)
-        if want and len(vec) != want:
+        vec = embed_query(query, input_type_override=meta.get("input_type_query"),
+                          dim_override=meta.get("dim"))
+        want = part.schema.field("vector").type.list_size
+        if len(vec) != want:
             raise ValueError(
-                f"查询向量维度 {len(vec)} 与索引 {want} 不符;"
+                f"查询向量维度 {len(vec)} 与分区 {slug} 的 {want} 不符;"
                 f"检查「向量维度」配置(EmbedDimensions)是否与建库时一致")
-        found = _apply_filter(table.search(vec, query_type="vector"),
+        found = _apply_filter(part.search(vec, query_type="vector"),
                               category, file).limit(limit).to_list()
     except Exception as e:
         degraded.append("vector")
         log.warning("向量检索失败: %s", e)
         return
-    for rank, row in enumerate(found):
-        if _accepts(row, category, file):
-            cands.add(row, rank)
+    hits = [r for r in found if _accepts(r, category, file)]
+    rows = _hydrate(table, [r["uid"] for r in hits])
+    for rank, r in enumerate(hits):
+        row = rows.get(r["uid"])
+        if row is None:          # 主表已无(孤儿),丢弃
+            continue
+        cands.add(row, rank)
 
 
 # ==================== 跨版本去重 ====================

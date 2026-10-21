@@ -16,6 +16,7 @@ import pyarrow as pa
 
 from . import config
 from . import doc_utils
+from . import vecstore
 from .doc_utils import version_key
 
 # 分块与 OCR 阈值统一由 config 提供,便于前端调整(见 config.SPECS「文档提取」组)
@@ -353,7 +354,12 @@ def embed_file(rel: str, chunks: list[tuple[str, int]], n_batches: list[int]) ->
 
 # ---------- LanceDB ----------
 
-def schema(dim: int) -> pa.schema:
+def schema() -> pa.schema:
+    """主表 schema:元数据 + 文本,**不含向量**。
+
+    向量按模型分表存放(见 backend/vecstore.py),主表因此与模型无关 ——
+    换模型不必重建主表,FTS 索引也不必重建。
+    """
     return pa.schema([
         pa.field("text", pa.string()),
         pa.field("file", pa.string()),
@@ -364,7 +370,7 @@ def schema(dim: int) -> pa.schema:
         pa.field("version", pa.string()),
         pa.field("title", pa.string()),
         pa.field("md5", pa.string()),
-        pa.field("vector", pa.list_(pa.float32(), dim)),
+        pa.field("uid", pa.string()),
     ])
 
 
@@ -507,16 +513,44 @@ def _extract_phase(to_index: list, root: str, state: dict, t0: float) -> list:
     return extracted
 
 
-def _rows_from_embedding(emb: list, rel: str, md5: str, meta: dict) -> list[dict]:
-    return [{**e, "file": rel, "category": meta["category"], "model_no": meta["model_no"],
-             "c_id": meta["c_id"], "version": meta["version"],
-             "title": meta.get("title", ""), "md5": md5} for e in emb]
+def _rows_from_embedding(emb: list, rel: str, md5: str, meta: dict) -> tuple[list[dict], list[dict]]:
+    """把嵌入结果拆成 (主表行, 分区行)。
+
+    主表行含文本与元数据(无向量),分区行只含 uid + 过滤列 + 向量。两侧按 uid 对应。
+    块序按页内出现顺序编号 —— uid 依赖它保证唯一(同页可能有逐字相同的块)。
+    """
+    main_rows, vec_rows = [], []
+    seq_by_page: dict[int, int] = {}
+    for e in emb:
+        page = int(e["page"])
+        seq = seq_by_page.get(page, 0)
+        seq_by_page[page] = seq + 1
+        uid = vecstore.make_uid(rel, page, seq)
+        main_rows.append({
+            "text": e["text"], "file": rel, "page": page,
+            "category": meta["category"], "model_no": meta["model_no"],
+            "c_id": meta["c_id"], "version": meta["version"],
+            "title": meta.get("title", ""), "md5": md5, "uid": uid,
+        })
+        vec_rows.append({
+            "uid": uid, "file": rel, "page": page,
+            "category": meta["category"], "md5": md5, "vector": e["vector"],
+        })
+    return main_rows, vec_rows
 
 
 def _index_phase(db, table, extracted: list, state: dict, t0: float, n_batches: list):
-    """阶段二:并发 embedding,主线程按序写库。返回 (table, 写入块数)。"""
+    """阶段二:并发 embedding,主线程按序写库。返回 (table, 写入块数)。
+
+    主表写元数据+文本,向量写当前模型分区(见 docs/VECTOR-PARTITION.md)。
+    只写**当前模型**的分区:其他模型的分区保持原样,所以换模型后跑增量
+    等于"只补新模型缺失的块"。
+    """
     total = len(extracted)
     state.update({"phase": "indexing", "done": 0, "embed": {"done": 0, "total": total}})
+    slug = vecstore.current_slug()
+    dim = config.get("embed_dimensions")
+    part = vecstore.ensure_partition(db, slug, dim) if dim else None
     n_chunks = 0
     with ThreadPoolExecutor(config.get("embed_workers")) as ex:
         futures = {ex.submit(embed_file, rel, chunks, n_batches): (rel, full, md5, meta, chunks)
@@ -535,24 +569,29 @@ def _index_phase(db, table, extracted: list, state: dict, t0: float, n_batches: 
                 continue
             if not emb:
                 continue
-            rows = _rows_from_embedding(emb, rel, md5, meta)
+            main_rows, vec_rows = _rows_from_embedding(emb, rel, md5, meta)
             try:
                 if table is None:
-                    db.create_table("chunks", data=rows, schema=schema(len(emb[0]["vector"])))
+                    db.create_table("chunks", data=main_rows, schema=schema())
                     table = db.open_table("chunks")
                 else:
                     table.delete(f"file = '{esc_file(rel)}'")
-                    table.add(rows)
+                    table.add(main_rows)
+                if part is not None:
+                    vecstore.delete_file(part, rel)
+                    vecstore.add_rows(part, vec_rows)
             except Exception as e:
                 print(f"  [失败] {rel}: {e}")
                 state["errors"].append(f"{rel}: {e}")
                 write_state(state)
                 continue
-            n_chunks += len(rows)
-            print(f"  [{i}/{total}] {rel} ({len(rows)} 块)")
+            n_chunks += len(main_rows)
+            print(f"  [{i}/{total}] {rel} ({len(main_rows)} 块)")
             state.update({"embed": {"done": i, "total": total}, "chunks": n_chunks,
                           "elapsed": round(time.time() - t0, 1)})
             write_state(state)
+    if part is not None:
+        vecstore.upsert_partition_meta(db, slug, blocks=part.count_rows())
     return table, n_chunks
 
 
@@ -585,6 +624,8 @@ def _run(args):
 
     files = {rel: full for full, rel in iter_pdfs(root)}
     if args.rebuild:
+        # 只重建主表(元数据+文本)。向量分区不动 —— 文件没变则 uid 不变,
+        # 向量仍然有效,重建一遍纯属浪费嵌入调用。
         db.drop_table("chunks", ignore_missing=True)
     to_index, removed = _plan_work(files, known, args)
 
@@ -604,8 +645,12 @@ def _run(args):
     table, n_chunks = _index_phase(db, table, extracted, state, t0, n_batches)
 
     if removed and table is not None:
+        part = vecstore.open_partition(db, vecstore.current_slug())
         for rel in removed:
             table.delete(f"file = '{esc_file(rel)}'")
+            # 分区里的残留向量也要删:否则孤儿行占体积,且覆盖率统计要多算一遍
+            if part is not None:
+                vecstore.delete_file(part, rel)
         print(f"  [移除] {len(removed)} 个已删除的文件")
     if table is not None:
         table.create_fts_index("text", replace=True)

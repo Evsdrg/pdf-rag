@@ -29,14 +29,23 @@ import lancedb                                            # noqa: E402
 from backend import config, ingest                        # noqa: E402
 
 TEXT_COLS = ["text", "file", "page", "category", "model_no", "c_id", "version",
-             "title", "md5"]
+             "title", "md5", "uid"]
 TABLE = "chunks"
 
 
 def read_source(src: pathlib.Path) -> tuple[list[dict], int]:
-    t = lancedb.connect(str(src)).open_table(TABLE)
-    rows = t.to_arrow().select(TEXT_COLS).to_pylist()
-    old_dim = t.schema.field("vector").type.list_size
+    """读源索引的文本与 uid。维度取自源分区(新布局)或主表(旧布局)。"""
+    from backend import vecstore
+    db = lancedb.connect(str(src))
+    t = db.open_table(TABLE)
+    cols = [c for c in TEXT_COLS if c in [f.name for f in t.schema]]
+    rows = t.to_arrow().select(cols).to_pylist()
+    old_dim = None
+    part = vecstore.open_partition(db, vecstore.current_slug())
+    if part is not None:
+        old_dim = part.schema.field("vector").type.list_size
+    elif "vector" in [f.name for f in t.schema]:
+        old_dim = t.schema.field("vector").type.list_size
     print(f"  源索引: {src}  {len(rows)} 块  原维度 {old_dim}")
     return rows, old_dim
 
@@ -94,8 +103,17 @@ def main() -> None:
         import shutil
         shutil.rmtree(dst)
     db = lancedb.connect(str(dst))
-    payload = [{**r, "vector": v} for r, v in zip(rows, vecs)]
-    db.create_table(TABLE, data=payload, schema=ingest.schema(dim))
+    from backend import vecstore
+    # 主表:元数据 + 文本(无向量);向量进分区表,与生产布局一致
+    plain = [{k: r[k] for k in ingest.schema().names if k in r} for r in rows]
+    db.create_table(TABLE, data=plain, schema=ingest.schema())
+    slug = vecstore.current_slug()
+    part_rows = [{"uid": r["uid"], "file": r["file"], "page": int(r["page"]),
+                  "category": r.get("category", ""), "md5": r.get("md5", ""), "vector": v}
+                 for r, v in zip(rows, vecs)]
+    db.create_table(vecstore.partition_table_name(slug), data=part_rows)
+    vecstore.upsert_partition_meta(db, slug, blocks=len(part_rows),
+                                   files=len({r["file"] for r in part_rows}))
     tbl = db.open_table(TABLE)
     # 全文索引必须一并建:检索是三路(向量 + 全文 + 子串)融合,缺了全文通道
     # 对比就不是同一个系统了

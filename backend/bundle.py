@@ -89,16 +89,21 @@ def _indexed_files() -> list[dict]:
 
 
 def _embedding_dim() -> int | None:
+    """当前分区的向量维度。
+
+    主表已无 vector 列(向量在 vec_<slug> 分区),维度从分区表读;分区不存在时
+    退回配置值 —— 数据包仍要带上维度,导入方凭它校验。
+    """
+    from . import vecstore
     import lancedb
     db = lancedb.connect(config.DB_PATH)
-    if not db.list_tables():
-        return None
-    table = db.open_table("chunks")
-    field = table.schema.field("vector") if hasattr(table.schema, "field") else None
-    try:
-        return field.type.list_size
-    except Exception:
-        return None
+    part = vecstore.open_partition(db, vecstore.current_slug())
+    if part is not None:
+        try:
+            return part.schema.field("vector").type.list_size
+        except Exception:
+            pass
+    return config.get("embed_dimensions") or None
 
 
 # 随包导出、导入可一并应用的嵌入服务项。密钥不在其中 —— 包可能被传给他人,
