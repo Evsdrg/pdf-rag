@@ -290,6 +290,27 @@ def _load():
         _loaded = True
 
 
+def reload():
+    """丢弃内存里的覆盖值,从磁盘重新读取。
+
+    配置文件被**本进程之外**改过时(导入数据包会把包内 settings.json 直接复制
+    到位)必须调用:否则 `_loaded` 仍为真,进程继续用旧值;更糟的是之后任何一次
+    `set_many()` 都会把旧值 `_persist()` 回磁盘,把刚导入的配置整个覆盖掉。
+    表现是"界面说已恢复配置,但所有参数都没变",且重启前一直如此。
+
+    读-放-读全过程在锁内完成:`_lock` 是普通 Lock 且 _load 只在未加载时才取锁,
+    这里直接内联读取;若先清空标志再出锁,并发 get() 会短暂看到空覆盖值、
+    回落到默认配置。
+    """
+    global _overrides, _loaded
+    with _lock:
+        try:
+            _overrides = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _overrides = {}
+        _loaded = True
+
+
 def get(name: str):
     """读取可调参数:运行时覆盖 > .env > 默认值。"""
     _load()

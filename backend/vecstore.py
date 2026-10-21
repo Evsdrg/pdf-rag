@@ -33,14 +33,12 @@ def make_uid(file: str, page: int, seq: int) -> str:
 
     不能把 text 也算进哈希:实测现有 8561 块里有 9 个碰撞(同页存在逐字相同的块),
     会让不同块互相覆盖。块序是提取阶段的确定性输出,加上它即唯一。
+
+    唯一性由 (file, page, seq) 保证 —— 同一文件的同一页里,seq 从 0 递增,
+    因此同页逐字相同的块也能区分开。
     """
     raw = f"{file}\x00{page}\x00{seq}".encode()
     return hashlib.sha256(raw).hexdigest()[:UID_LEN]
-
-
-def chunk_uids(file: str, page: int, count: int) -> list[str]:
-    """某页 count 个块的 uid 序列(按页内顺序)。"""
-    return [make_uid(file, page, i) for i in range(count)]
 
 
 # ---------- slug ----------
@@ -131,10 +129,11 @@ def table_names(db) -> list[str]:
     """库里已有的表名列表。
 
     LanceDB 0.36 的 `list_tables()` 返回 ListTablesResponse(带 .tables 属性),
-    不是 list —— 直接 `in` 判断会永远为假(踩过:迁移脚本误判"主表不存在")。
+    不是 list —— 直接 `in` 判断会永远为假(踩过:迁移脚本误判"主表不存在",
+    数据包导出在空库上直接抛 ValueError)。实现收敛到 library,避免两处漂移。
     """
-    res = db.list_tables()
-    return list(getattr(res, "tables", res))
+    from . import library
+    return library.db_table_names(db)
 
 
 def _meta_table(db, create: bool = False):

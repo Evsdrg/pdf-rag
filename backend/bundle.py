@@ -75,9 +75,10 @@ def export_config(dest: Path) -> Path:
 
 def _indexed_files() -> list[dict]:
     """索引里引用到的文件清单(路径 + md5 + 页数)。"""
+    from . import vecstore
     import lancedb
     db = lancedb.connect(config.DB_PATH)
-    if not db.list_tables():
+    if "chunks" not in vecstore.table_names(db):
         return []
     rows = db.open_table("chunks").to_arrow().select(
         ["file", "page", "md5"]).to_pylist()
@@ -177,9 +178,10 @@ def _partition_block() -> list[dict]:
 
 
 def _chunk_count() -> int:
+    from . import vecstore
     import lancedb
     db = lancedb.connect(config.DB_PATH)
-    if not db.list_tables():
+    if "chunks" not in vecstore.table_names(db):
         return 0
     return db.open_table("chunks").to_arrow().num_rows
 
@@ -363,6 +365,16 @@ def import_bundle(src: Path, restore_docs: bool = True, replace_index: bool = Tr
                 with tarfile.open(fileobj=zr, mode="r|") as tar:
                     _safe_extract(tar, workdir)      # 流式:只能解到临时目录再搬
 
+        # 包内 settings.json 必须在**任何**配置写入之前恢复。set_many() 落盘的是
+        # 内存里的 _overrides,晚一步恢复就会被旧值整体覆盖回磁盘 —— 表现为
+        # "提示已恢复配置,但参数一个都没变"。
+        settings = workdir / SETTINGS_NAME
+        if settings.is_file():
+            config.SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(settings, config.SETTINGS_FILE)
+            config.reload()          # 让内存跟随文件,后续写入以导入值为基底
+            say("已恢复配置覆盖值")
+
         applied = {}
         if apply_provider:
             applied = apply_provider_config(manifest)
@@ -385,12 +397,6 @@ def import_bundle(src: Path, restore_docs: bool = True, replace_index: bool = Tr
             # 旧表句柄指向已被删除的 inode;不重置会继续读旧数据或报错
             library.reset_table()
             replaced = True
-
-        settings = workdir / SETTINGS_NAME
-        if settings.is_file():
-            config.SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(settings, config.SETTINGS_FILE)
-            say("已恢复配置覆盖值")
 
         picked = _apply_partition_priority(manifest) if replaced else []
         if picked:

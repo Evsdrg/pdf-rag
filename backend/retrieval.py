@@ -138,19 +138,25 @@ _EMBED_CACHE: "collections.OrderedDict[tuple, list[float]]" = collections.Ordere
 
 
 def embed_query(text: str, input_type_override: str | None = None,
-                dim_override: int | None = None) -> list[float]:
+                dim_override: int | None = None,
+                model_override: str | None = None) -> list[float]:
     """取查询向量。命中本地缓存则不再访问上游。
 
     同一查询在结果缓存过期后会重新走到这里;没有这层缓存就要重付一次嵌入调用。
 
-    `input_type_override` / `dim_override` 用于"按分区的契约生成查询向量":
-    分区可能不是用当前全局配置建的(用户换过模型/维度/input_type),查询向量
-    必须与分区匹配,否则是跨契约检索。缓存键因此包含这两个值。
+    `model_override` / `input_type_override` / `dim_override` 用于"按分区的契约
+    生成查询向量":分区可能不是用当前全局配置建的(用户换过模型/维度/input_type),
+    查询向量必须与分区**完全**匹配 —— 三者任缺一个都是跨契约检索。
+
+    **model 也必须覆盖**:不同模型的向量空间不可比。只覆盖 dim/input_type 时,
+    若两个模型维度恰好相同(如都截断到 768),维度检查通不出任何异常,就会拿
+    A 模型的查询向量去搜 B 模型建的向量,相似度毫无意义却毫无声响。
+    缓存键因此包含这三个值。
     """
     dim = dim_override if dim_override is not None else config.get("embed_dimensions")
     input_type = (input_type_override if input_type_override is not None
                   else config.get("embed_input_type_query"))
-    model = config.get("embed_model")
+    model = model_override if model_override is not None else config.get("embed_model")
     key = (model, input_type, dim, text)
     cached = _EMBED_CACHE.get(key)
     if cached is not None:
@@ -414,7 +420,13 @@ def _apply_filter(query, category: str | None, file: str | None):
 
 
 def _accepts(row: dict, category: str | None, file: str | None) -> bool:
-    """Python 侧兜底校验(下推条件在部分 LanceDB 版本上不保证生效)。"""
+    """Python 侧兜底校验(下推条件在部分 LanceDB 版本上不保证生效)。
+
+    三条通道传入的 row 来源不同:FTS/子串来自主表,向量通道来自**分区表**。
+    分区表的 category/file 是冗余列(为把过滤下推而存),理论上可能与主表不一致
+    (分区行滞后于主表)。这里只做粗筛以缩小回表范围,权威性由 _hydrate 保证:
+    主表查不到的 uid 会被丢弃,所以冗余列陈旧不会放出错误结果。
+    """
     if category and row.get("category") != category:
         return False
     if file and file.replace("\\", "/") not in row.get("file", ""):
@@ -446,17 +458,6 @@ def _channel_substring(table, query: str, limit: int, category, file, cands, deg
         for row in found:
             if _accepts(row, category, file):
                 cands.add(row, 0, bonus=True)
-
-
-def _index_dim(table) -> int | None:
-    """索引里向量列的维度。取不到时返回 None(不阻断检索)。
-
-    主表已无 vector 列(向量在分区表),这里保留是为兼容旧索引与走偏的调用方。
-    """
-    try:
-        return table.schema.field("vector").type.list_size
-    except Exception:
-        return None
 
 
 def _hydrate(main_table, uids: list[str]) -> dict[str, dict]:
@@ -498,17 +499,21 @@ def _partition_coverage_ratio(db, table, slug: str) -> float | None:
     return ratio
 
 
-def _channel_vector(table, query: str, limit: int, category, file, cands, degraded):
+def _channel_vector(table, query: str, limit: int, category, file, cands, degraded,
+                    diag: dict | None = None):
     """向量通道:在分区表上检索,命中 uid 回主表取元数据。
 
     分区与查询向量必须成对:分区记录了建库时的 model/dim/input_type,查询侧用该
-    分区的 input_type_query 生成向量,而不是用当前全局配置 —— 否则是"用 A 契约的
-    查询向量检索 B 契约建的分区",相似度无意义。
+    分区的 **model + dim + input_type_query** 生成向量,而不是用当前全局配置 ——
+    否则是"用 A 契约的查询向量检索 B 契约建的分区",相似度无意义。
 
     多分区按 `vector_models_priority` 的顺序依次检索。**一个块只用一个模型的向量**:
     某块若在靠前分区已命中,靠后分区的同名命中直接丢弃(按 uid 去重),否则它会被
     重复累加 RRF 分,让"被多个模型索引过的块"凭空获得权重优势。不同模型的向量
     也绝不混在一次距离计算里 —— 空间不可比。
+
+    diag 传入时写入本次**实际参与检索**的分区列表,让"某个模型悄悄失败"
+    能在响应的诊断信息里看见,而不是只躺在日志里。
     """
     from . import library, vecstore
     db = library.get_db()
@@ -523,6 +528,9 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
 
     covered: set[str] = set()
     seen_uid: set[str] = set()
+    # 实际检索成功的分区。逐个静默 continue 会让配置问题表现为"结果莫名变少",
+    # 而用户以为所有分区都在生效 —— 用过的模型必须能一眼看到。
+    used: list[str] = []
     for meta in parts:
         slug = meta["slug"]
         part = vecstore.open_partition(db, slug)
@@ -530,7 +538,8 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
             continue
         try:
             vec = embed_query(query, input_type_override=meta.get("input_type_query"),
-                              dim_override=meta.get("dim"))
+                              dim_override=meta.get("dim"),
+                              model_override=meta.get("model"))
             want = part.schema.field("vector").type.list_size
             if len(vec) != want:
                 raise ValueError(
@@ -539,8 +548,10 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
             found = _apply_filter(part.search(vec, query_type="vector"),
                                   category, file).limit(limit).to_list()
         except Exception as e:
+            degraded.append(f"vector:{meta.get('model') or slug}")
             log.warning("向量检索失败(%s): %s", slug, e)
             continue
+        used.append(slug)
         hits = [r for r in found if _accepts(r, category, file)]
         rows = _hydrate(table, [r["uid"] for r in hits])
         for rank, r in enumerate(hits):
@@ -555,6 +566,8 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
             cands.add(row, rank)
             covered.add(r["uid"])
 
+    if used and diag is not None:
+        diag["vector_partitions"] = used
     if not covered:
         degraded.append("vector")
         log.warning("所有向量分区均未召回;检查分区覆盖率与嵌入服务")
@@ -708,10 +721,18 @@ def _params_fingerprint() -> tuple:
 
 
 def reset_cache() -> None:
-    """清空结果缓存、查询向量缓存与覆盖率缓存(配置变更、索引替换后调用)。"""
+    """清空全部进程内缓存:结果、查询向量、覆盖率、投影表。
+
+    配置变更、索引替换后必须调用。投影表也在这里清 —— 它虽按 table.version
+    失效,但**导入数据包**时新索引的 version 可能恰好等于旧的(两个独立 lance
+    目录各自从 0 起算),那样会继续用旧包的文本做子串召回。`library.reset_table()`
+    解决的是表句柄,不涉及本模块的缓存,两者要成对。
+    """
+    global _PROJ_CACHE
     _RESULT_CACHE.clear()
     _EMBED_CACHE.clear()
     _COV_CACHE.clear()
+    _PROJ_CACHE = None
 
 
 def _cache_key(table, query, category, top_k, mode, rerank, file, max_per_doc):
@@ -772,7 +793,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
         _channel_fts(table, query, limit, category, file, cands, degraded)
         _channel_substring(table, query, limit, category, file, cands, degraded)
     if mode in ("mixed", "vector"):
-        _channel_vector(table, query, limit, category, file, cands, degraded)
+        _channel_vector(table, query, limit, category, file, cands, degraded, diag)
 
     if not cands:
         diag["counts"] = {"candidates": 0, "returned": 0}

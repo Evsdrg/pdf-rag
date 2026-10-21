@@ -45,6 +45,10 @@ def get_db():
 
     注意 lance 的 DBConnection 本身开销不大,但重复创建会让句柄与内部缓存
     反复重建;单例是两侧原本就该有的一致性。
+
+    判定"库非空"必须看表名列表而不是 `if db.list_tables():` —— 后者返回
+    `ListTablesResponse` 对象,空库时 `bool()` 依然为真(实测),那样这层
+    保护形同虚设,后面 open_table 直接抛异常。
     """
     global _DB_CACHE
     if not os.path.isdir(config.DB_PATH):
@@ -52,9 +56,19 @@ def get_db():
     if _DB_CACHE is None:
         import lancedb
         db = lancedb.connect(config.DB_PATH)
-        if db.list_tables():
+        if "chunks" in db_table_names(db):
             _DB_CACHE = db
     return _DB_CACHE
+
+
+def db_table_names(db) -> list[str]:
+    """库内表名列表(LanceDB 0.36 的 list_tables() 返回对象,不是 list)。
+
+    放在 library 而非 vecstore:vecstore 依赖 library(取 scan_columns 等),
+    反向导入会成环。
+    """
+    res = db.list_tables()
+    return list(getattr(res, "tables", res))
 
 
 def get_table():

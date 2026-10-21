@@ -551,7 +551,9 @@ def main():
                     help="对指定模型重算**全部块**的向量(需先把它设为当前 embed_model)。"
                          "默认保留该模型原有分区数据(按 uid 覆盖写入)")
     ap.add_argument("--drop-old-vectors", action="store_true",
-                    help="配合 --rebuild-vectors:重建前清空该模型分区(默认关闭)")
+                    help="配合 --rebuild-vectors:重建前先清空**目标模型自己的**分区"
+                         "(默认关闭)。名字里的 old 指该分区的旧数据,**不影响其他模型"
+                         "的分区** —— 要清理某个模型的分区,只能把它设为当前模型后再重建")
     args = ap.parse_args()
 
     acquire_lock()
@@ -707,15 +709,17 @@ def _run(args):
         return
 
     table, known = None, {}
-    if vecstore.table_names(db) and "chunks" in vecstore.table_names(db) and not args.rebuild:
+    if "chunks" in vecstore.table_names(db) and not args.rebuild:
         table = db.open_table("chunks")
         pairs = table.to_arrow().select(["file", "md5"]).to_pylist()
         known = {r["file"]: r["md5"] for r in pairs}
 
     files = {rel: full for full, rel in iter_pdfs(root)}
     if args.rebuild:
-        # 只重建主表(元数据+文本)。向量分区不动 —— 文件没变则 uid 不变,
-        # 向量仍然有效,重建一遍纯属浪费嵌入调用。
+        # 只重建主表(元数据+文本),向量分区不动。之所以重建后向量仍然有效:
+        # uid 是 (file, page, 页内块序) 的确定性哈希,同样内容重算得到同样的 uid,
+        # 分区行因此还能对上 —— 不是因为主表保留了旧 uid(下面就把表删了)。
+        # 更快的路径仍是默认的增量:md5 没变的文件连提取都跳过。
         db.drop_table("chunks", ignore_missing=True)
     to_index, removed = _plan_work(files, known, args)
 
