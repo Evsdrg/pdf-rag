@@ -537,6 +537,9 @@ def _run_rebuild_vectors(db, args):
     meta = vecstore.upsert_partition_meta(
         db, slug, blocks=part.count_rows(),
         files=len({r["file"] for r in rows}))
+    # 全量重算后索引覆盖的是旧数据,必须重建,否则查不到刚写入的向量
+    if vecstore.ensure_vector_index(part, replace=True):
+        print(f"  分区索引已重建: {slug}")
     print(f"完成: 分区 {slug} 现有 {part.count_rows()} 行 ({meta['files']} 个文件),"
           f"耗时 {time.time()-t0:.0f}s")
 
@@ -677,6 +680,11 @@ def _index_phase(db, table, extracted: list, state: dict, t0: float, n_batches: 
             write_state(state)
     if part is not None:
         vecstore.upsert_partition_meta(db, slug, blocks=part.count_rows())
+        # 增量写入会在分区里留下新片段,已有索引会覆盖不到它们(Lance 查询只搜
+        # 索引覆盖的部分,新数据可能被漏掉)。这里重建一次:8561 行约 0.3s,
+        # 相对整轮索引可忽略。
+        if vecstore.ensure_vector_index(part, replace=True):
+            print(f"  分区索引已重建: {slug}")
     return table, n_chunks
 
 

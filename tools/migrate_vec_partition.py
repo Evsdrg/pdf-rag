@@ -132,6 +132,10 @@ def migrate(db, dry_run: bool) -> int:
         db, slug, blocks=part.count_rows(),
         files=len({r["file"] for r in vec_rows}))
     print(f"  分区元数据已写入 vec_meta")
+
+    # 5) 向量索引。纯加速:建不成也照常用(检索退化为暴力扫描)
+    if vecstore.ensure_vector_index(part, replace=True):
+        print(f"  向量索引已建立(IvfFlat nlist={vecstore.IVF_PARTITIONS})")
     return 0
 
 

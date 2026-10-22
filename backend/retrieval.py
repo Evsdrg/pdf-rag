@@ -545,8 +545,12 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
                 raise ValueError(
                     f"查询向量维度 {len(vec)} 与分区 {slug} 的 {want} 不符;"
                     f"检查「向量维度」配置(EmbedDimensions)是否与建库时一致")
-            found = _apply_filter(part.search(vec, query_type="vector"),
-                                  category, file).limit(limit).to_list()
+            q = part.search(vec, query_type="vector")
+            # 有索引时补一道精确重算:IVF 只搜部分簇,不加 refine 会静默漏召回。
+            # 没索引的分区(旧库/建索引失败)退化为暴力扫描,本身是精确的,不加。
+            if vecstore.has_vector_index(part):
+                q = q.refine_factor(vecstore.REFINE_FACTOR)
+            found = _apply_filter(q, category, file).limit(limit).to_list()
         except Exception as e:
             degraded.append(f"vector:{meta.get('model') or slug}")
             log.warning("向量检索失败(%s): %s", slug, e)

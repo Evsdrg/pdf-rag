@@ -1,7 +1,8 @@
-"""向量分区:uid 唯一性、slug 契约区分、分区读写与覆盖率口径。"""
+"""向量分区:uid 唯一性、slug 契约区分、分区读写、覆盖率口径与向量索引。"""
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 import lancedb
 import pyarrow as pa
@@ -128,6 +129,64 @@ class PartitionStoreTest(unittest.TestCase):
         t = self._part("s", rows)
         vecstore.delete_file(t, "a.pdf")
         self.assertEqual(t.count_rows(), 0)
+
+
+class VectorIndexTest(unittest.TestCase):
+    """向量索引是可选加速:没有它必须照样能查,且结果不能变。"""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.db = lancedb.connect(self.dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def _part(self, slug, rows):
+        t = vecstore.ensure_partition(self.db, slug, 4)
+        t.add(rows)
+        return t
+
+    def _rows(self, n):
+        # 方向各异的向量,避免重复导致 KMeans 退化
+        return [{"uid": f"u{i}", "file": f"f{i}.pdf", "page": 0, "category": "",
+                 "md5": "", "vector": [float(i + 1), float((i * 7) % 11 + 1),
+                                       float((i * 3) % 5 + 1), 1.0]}
+                for i in range(n)]
+
+    def test_no_index_by_default(self):
+        p = self._part("s", self._rows(20))
+        self.assertFalse(vecstore.has_vector_index(p))
+
+    def test_small_dataset_skips_index(self):
+        # Lance 在 40 行上 KMeans 会产出大量空簇,索引结果与暴力扫描完全不同
+        # (实测 top10 无一相同)。小库必须拒绝建索引,退回暴力扫描。
+        p = self._part("s", self._rows(40))
+        self.assertLess(40, vecstore.MIN_ROWS_FOR_INDEX)
+        self.assertFalse(vecstore.ensure_vector_index(p))
+        self.assertFalse(vecstore.has_vector_index(p))
+
+    def test_ensure_is_idempotent_on_big_dataset(self):
+        p = self._part("s", self._rows(vecstore.MIN_ROWS_FOR_INDEX + 100))
+        self.assertTrue(vecstore.ensure_vector_index(p))
+        self.assertTrue(vecstore.has_vector_index(p))
+        self.assertFalse(vecstore.ensure_vector_index(p))          # 已有则跳过
+        self.assertTrue(vecstore.ensure_vector_index(p, replace=True))
+
+    def test_search_works_without_index(self):
+        p = self._part("s", self._rows(20))
+        got = [r["uid"] for r in p.search([1.0, 1.0, 1.0, 1.0],
+                                          query_type="vector").limit(5).to_list()]
+        self.assertEqual(len(got), 5)
+
+    def test_refine_factor_at_least_two(self):
+        # 小于 2 会静默漏召回(实测 rf=1 时 400 条查询漏 17 条)
+        self.assertGreaterEqual(vecstore.REFINE_FACTOR, 2)
+
+    def test_failure_does_not_raise(self):
+        # 索引纯属加速:建不了也不能让写入/检索失败
+        p = self._part("s", self._rows(vecstore.MIN_ROWS_FOR_INDEX + 10))
+        with mock.patch.object(p, "create_index", side_effect=RuntimeError("boom")):
+            self.assertFalse(vecstore.ensure_vector_index(p))
 
 
 if __name__ == "__main__":

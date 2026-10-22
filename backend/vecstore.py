@@ -14,6 +14,7 @@
 """
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -21,6 +22,8 @@ import time
 import pyarrow as pa
 
 from . import config
+
+log = logging.getLogger("pdfrag.vecstore")
 
 META_TABLE = "vec_meta"
 UID_LEN = 20
@@ -236,6 +239,60 @@ def ensure_partition(db, slug: str, dim: int):
 
 def add_rows(table, rows: list[dict]) -> None:
     table.add(rows) if rows else None
+
+
+# ---------- 向量索引 ----------
+# 建 IVF_FLAT 索引后,分区检索从"全表暴力扫描"变成"先定位若干簇再精算"。
+# 实测(8561 块 / 768 维 / limit=80):25.1ms → 12.1ms;固定开销 15.1ms → 2.3ms。
+#
+# 为什么配 refine_factor:IVF 只搜最近的一小部分簇,真实近邻可能落在没搜的簇里,
+# 表现为**静默漏召回**。refine_factor 让索引先取 rf×k 个候选,再对这批候选做
+# 精确距离重算,把漏掉的捞回来。实测 nlist=16 时:
+#   rf=1(默认): 400 条查询 x top80 漏 17 条(召回 0.99947)
+#   rf=2       : 漏 0 条(召回 1.0),代价 +2ms
+# 参数必须按数据规模实测,不能按索引类型名假设"无损" —— nlist=128/256 时
+# 即使 rf=2 也开始漏(78/80、73/80)。
+
+# 索引参数。nlist=16 对应本库 ~500 行/簇;数据量显著增长时应重测。
+IVF_PARTITIONS = 16
+# 查询侧精算倍数。小于 2 会漏召回,大于 2 只增加代价不再提升召回(实测)。
+REFINE_FACTOR = 2
+# 低于该行数不建索引。Lance 的 KMeans 在 40 行上会警告 "40 < 4096" 并产出
+# 大量空簇,此时索引结果与暴力扫描**完全不一致**(实测 top10 无一相同),
+# 而暴力扫描在几千行内本来就只要 20ms 上下 —— 小库建索引是纯亏。
+MIN_ROWS_FOR_INDEX = 4096
+
+
+def has_vector_index(table) -> bool:
+    """分区是否已有向量索引。没有时检索仍正确,只是退化为暴力扫描。"""
+    try:
+        return any(i.index_type != "FTS" for i in table.list_indices())
+    except Exception:
+        return False
+
+
+def ensure_vector_index(table, replace: bool = False) -> bool:
+    """给分区建向量索引。返回是否真的建了(已存在且不 replace 时返回 False)。
+
+    索引纯属加速:建不成、或数据太小不值得建,都应返回 False 而不影响主流程。
+    调用方据此决定查询侧是否加 refine_factor —— **没有索引绝对不能加**,
+    否则 refine 会作用在暴力扫描结果上,行为未定义。
+    """
+    if not replace and has_vector_index(table):
+        return False
+    try:
+        rows = table.count_rows()
+        if rows < MIN_ROWS_FOR_INDEX:
+            return False
+        import lancedb.index as LI
+        table.create_index("vector",
+                           config=LI.IvfFlat(distance_type="cosine",
+                                             num_partitions=IVF_PARTITIONS),
+                           replace=replace)
+        return True
+    except Exception as e:                      # 索引是可选加速,不能让主流程失败
+        log.warning("建向量索引失败(将退化为暴力扫描): %s", e)
+        return False
 
 
 def delete_file(table, file: str) -> None:
