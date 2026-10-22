@@ -27,6 +27,7 @@ uv run run_backend.py       # http://127.0.0.1:8100（含 Web UI 与 MCP）
 
 | 文档 | 内容 |
 |---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **架构设计**：分层与依赖方向、检索流水线、索引构建、配置边界、关键不变量——改代码前先读 |
 | [DEPLOY.md](DEPLOY.md) | 部署指南、REST API 全表、索引与数据包运维（另附内网形态文档 `DEPLOY-NAS.md`，不入库） |
 | [BENCHMARKS.md](BENCHMARKS.md) | 检索质量基线、历次参数实验（含否定性结果）、测试方法学——**调参/换模型前先读** |
 | [THIRD-PARTY.md](THIRD-PARTY.md) | 依赖许可清单与第三方声明 |
@@ -57,6 +58,9 @@ web/              前端源码（Vue 3 + Vite + naive-ui）
 index.lance/      LanceDB 索引（运行时生成）
 data/             运行时配置覆盖值与导出包（运行时生成）
 ```
+
+各模块**为什么这样分层、彼此依赖方向、哪些约束不能破**，见
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 环境要求
 
@@ -89,12 +93,13 @@ ADMIN_TOKEN=                                  # 留空则 /api/admin/* 一律 40
 降级并记日志。
 
 > 设计约束：系统**不以任何方式定时或主动探测**嵌入/重排/OCR 服务的可用性；OCR 状态展示
-> 最近一次真实调用的结果。要确认上游可用，跑一次真实检索即可。
+> 最近一次真实调用的结果。要确认上游可用，跑一次真实检索即可。这类"刻意不做"的决定
+> 见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §7。
 
 ## 使用
 
 **Web**（6 个页面）：索引状态（触发索引/实时进度）、资料库（统计与历史）、文件库（筛选与
-提取质量体检）、检索测试（三模式/重排开关/命中页预览）、检索配置（51 项）、数据管理
+提取质量体检）、检索测试（三模式/重排开关/命中页预览）、检索配置（54 项）、数据管理
 （配置与数据包导入导出）。
 
 **MCP**：8 个工具，统一 `pdf_rag_` 前缀（与客户端自带的 `grep`/`read` 区分——后者搜工作区
@@ -147,14 +152,15 @@ cd web && pnpm install && pnpm dev    # 前端开发（Vite 代理 /api 到 8100
 cd web && pnpm build                  # 构建 → web/dist，Dockerfile 会 COPY 它
 ```
 
-**测试**：关键路径单测在 `tests/`（纯逻辑，不访问网络与索引，57 个用例）：
+**测试**：关键路径单测在 `tests/`（纯逻辑，不访问网络与索引，113 个用例）：
 
 ```bash
 uv run python -m unittest discover -s tests
 ```
 
 覆盖：路径边界防护、分块、版本合并去重、融合排序与平局裁决、缓存失效、file 过滤字面
-语义、片段窗口。改动检索/索引逻辑后跑一遍；端到端质量另用 `eval_retrieval.py` 对比
+语义、片段窗口、向量分区（uid 唯一性 / slug 契约区分 / 覆盖率口径 / 索引保真）、
+数据包导入判断。改动检索/索引逻辑后跑一遍；端到端质量另用 `eval_retrieval.py` 对比
 `snippet@1`；改动前端用 `pnpm build` 的类型检查兜底。
 
 ## 鸣谢
