@@ -24,8 +24,6 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import lancedb                                          # noqa: E402
-
 from backend import config, library, retrieval, vecstore  # noqa: E402
 
 EVAL = ROOT / "eval_queries.json"

@@ -13,9 +13,7 @@
 避免"先检索再回表再过滤"。
 """
 import hashlib
-import json
 import logging
-import os
 import re
 import time
 

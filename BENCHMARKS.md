@@ -304,4 +304,5 @@ Lance 的 KMeans 在小数据上会产出大量空簇。实测 **40 行**建索�
 | `tools/audit_extract.py` / `audit_ocr.py` | 提取与 OCR 质量体检 |
 | `tools/profile_rag.py` | 检索热路径打点 |
 | `tools/bench_logic.py` | **纯逻辑性能测试**:模型调用换成本地替身,零网络测各阶段成本(见 §4.2) |
+| `tools/build_vec_index.py` | 给已有分区补建/重建向量索引(见 §4.3) |
 | `tools/verify_roundtrip.py` | 数据包导出→导入往返校验 |

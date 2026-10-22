@@ -34,7 +34,7 @@ pdf-rag-<日期>/
 ├── ocr_service.py             OCR 服务(可选)
 ├── run_backend.py             后端守护启动脚本
 ├── eval_retrieval.py / eval_queries.json   检索质量评测
-├── tools/                     诊断与维护脚本(含 compact_index.py、build_release.py)
+├── tools/                     诊断与维护脚本(含 compact_index.py、build_vec_index.py、build_release.py)
 ├── web/                       前端源码 + **已构建好的 dist/**
 ├── pdf/                       205 份原始手册(未改动;类别目录结构与索引内路径一致)
 ├── parsed/                    解析后数据(见下)
@@ -204,6 +204,20 @@ uv run python tools/compact_index.py --dry-run  # 只看现状
 
 不改任何一行数据。作者最近一次实测：**128 MB / 521 版本 / 228 文件 → 43 MB / 8 文件**，
 行数与全文索引不变，检索结果一致。清理后重启后端，让它在最新版本上重新持有句柄。
+
+**向量索引**：每个向量分区带一个 `IvfFlat` 索引(查询侧配 `refine_factor=2`)。
+正常流程会自动维护 —— 增量索引、`--rebuild-vectors`、迁移脚本建完分区后都会重建。
+只有老版本建成的索引库需要手动补一次：
+
+```bash
+uv run python tools/build_vec_index.py            # 缺索引的分区补建,已有的跳过
+uv run python tools/build_vec_index.py --rebuild  # 全部重建
+```
+
+- 不补也能用,只是退化为暴力扫描(结果同样精确,只是慢)
+- 分区少于 4096 行时**拒绝**建索引:Lance 的 KMeans 在小数据上产出空簇,
+  索引结果与暴力扫描不一致 —— 此时暴力扫描既更快也更准
+- 实测收益:生产 12421 块,向量检索 59.9ms → 32.8ms;建索引耗时 0.5s
 
 ## 七、数据包（迁移到另一套实例）
 

@@ -17,7 +17,6 @@ import pyarrow as pa
 from . import config
 from . import doc_utils
 from . import vecstore
-from .doc_utils import version_key
 
 # 分块与 OCR 阈值统一由 config 提供,便于前端调整(见 config.SPECS「文档提取」组)
 C_ID_RE = re.compile(r"^C\d+")
