@@ -169,7 +169,7 @@ cd web && pnpm install && pnpm dev    # 前端开发（Vite 代理 /api 到 8100
 cd web && pnpm build                  # 构建 → web/dist，Dockerfile 会 COPY 它
 ```
 
-**测试**：关键路径单测在 `tests/`（纯逻辑，不访问网络与索引，157 个用例）：
+**测试**：关键路径单测在 `tests/`（纯逻辑，不访问网络与索引，158 个用例）：
 
 ```bash
 uv run python -m unittest discover -s tests

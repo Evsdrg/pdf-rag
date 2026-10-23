@@ -60,7 +60,7 @@ def stage_frontend(dest: Path) -> None:
     if not (FRONTEND_DIST / "index.html").is_file():
         raise SystemExit(f"缺少前端构建产物: {FRONTEND_DIST}\\index.html\n"
                          "先在 web/ 下执行 npm run build")
-    shutil.copytree(FRONTEND_DIST, dest / "web" / "dist")
+    shutil.copytree(FRONTEND_DIST, dest / "web" / "dist", dirs_exist_ok=True)
 
 
 def stage_index(dest: Path) -> None:
