@@ -18,13 +18,14 @@ import httpx
 from . import config
 
 
-def _local_ocr(img_path: str, timeout: float) -> str:
-    r = httpx.post(f"{config.get("ocr_url").rstrip("/")}/ocr", json={"image": img_path}, timeout=timeout)
+def _local_ocr(img_path: str, timeout: float, client=None) -> str:
+    post = client.post if client is not None else httpx.post
+    r = post(f"{config.get('ocr_url').rstrip('/')}/ocr", json={"image": img_path}, timeout=timeout)
     r.raise_for_status()
     return r.json().get("text", "")
 
 
-def _remote_ocr(img_path: str, timeout: float) -> str:
+def _remote_ocr(img_path: str, timeout: float, client=None) -> str:
     """视觉模型 OCR:整页图 base64 内联到 chat 消息。
 
     提示词由 config.get("ocr_prompt") 给出(默认 "OCR")。实测要点:
@@ -51,14 +52,15 @@ def _remote_ocr(img_path: str, timeout: float) -> str:
             ],
         }],
     }
-    r = httpx.post(f"{config.get("ocr_api_base").rstrip("/")}/chat/completions",
-                   headers={"Authorization": f"Bearer {config.OCR_API_KEY}"},
-                   json=payload, timeout=timeout)
+    post = client.post if client is not None else httpx.post
+    r = post(f"{config.get('ocr_api_base').rstrip('/')}/chat/completions",
+             headers={"Authorization": f"Bearer {config.OCR_API_KEY}"},
+             json=payload, timeout=timeout)
     r.raise_for_status()
     return (r.json()["choices"][0]["message"].get("content") or "").strip()
 
 
-def ocr_image(img_path: str, timeout: float | None = None) -> tuple[str, str]:
+def ocr_image(img_path: str, timeout: float | None = None, *, client=None) -> tuple[str, str]:
     """识别一张图片,返回 (文本, 错误信息);成功时错误为空。
 
     顺带把本次真实调用的结果记进进程内状态(见 status),供前端展示——
@@ -69,9 +71,9 @@ def ocr_image(img_path: str, timeout: float | None = None) -> tuple[str, str]:
     t0 = time.time()
     try:
         if backend == "remote":
-            text = _remote_ocr(img_path, timeout)
+            text = _remote_ocr(img_path, timeout, client)
         else:
-            text = _local_ocr(img_path, timeout)
+            text = _local_ocr(img_path, timeout, client)
         _record(backend, ok=True, elapsed=time.time() - t0)
         return text, ""
     except Exception as e:

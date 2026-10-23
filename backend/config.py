@@ -7,8 +7,8 @@
   索引吞吐、OCR 后端。 .env 提供初始值,前端可在运行时覆盖;覆盖持久化到
   data/settings.json。
 
-调用方统一用 get("name") 读取可调参数,前端改动即时生效,
-不需要重启进程,也不必把参数一路透传。
+调用方统一用 get("name") 读取可调参数。常驻服务里的检索参数即时生效;
+索引子进程与并发池在任务启动时读取快照,修改后由下一轮索引使用。
 """
 import json
 import os
@@ -230,7 +230,10 @@ _SPECS = [
     Spec("chunk_overlap_chars", "分块重叠字数", "int", 150, "文档提取",
          "相邻块的重叠字符数,缓解边界信息断裂", "CHUNK_OVERLAP_CHARS", 0, 2000),
     Spec("ocr_min_chars", "OCR 触发字数", "int", 200, "文档提取",
-         "单页提取文本低于该值时触发 OCR 兜底", "OCR_MIN_CHARS", 0, 5000),
+         "单页原生文本低于该值时成为 OCR 候选;内容筛选可免除完整的稀疏页", "OCR_MIN_CHARS", 0, 5000),
+    Spec("ocr_smart_filter", "OCR 内容筛选", "bool", True, "文档提取",
+         "结合文档低文本分布、图片与矢量判断。关闭则恢复仅按字数触发 OCR",
+         "OCR_SMART_FILTER"),
     Spec("min_chars_per_page", "每页字数告警线", "int", 100, "文档提取",
          "整份文档平均每页字符低于该值时告警(说明提取与 OCR 都没成功)",
          "MIN_CHARS_PER_PAGE", 0, 5000),
@@ -248,8 +251,12 @@ _SPECS = [
          "每批送嵌入接口的文本块数。服务商限流时调小", "EMBED_BATCH", 1, 512),
     Spec("embed_workers", "嵌入并发数", "int", 8, "索引吞吐",
          "嵌入并发线程数。限流(403/429)严重时调小", "EMBED_WORKERS", 1, 32),
-    Spec("extract_workers", "提取进程数", "int", 4, "索引吞吐",
-         "PDF 提取进程数。受 CPU 与内存约束(每子进程约 150MB)", "EXTRACT_WORKERS", 1, 16),
+    Spec("extract_workers", "本地解析进程数", "int", 4, "索引吞吐",
+         "同时解析不同文档的进程数,含文本/表格/渲染;不控制 OCR 请求数。按 CPU 与内存调整,下一轮索引生效",
+         "EXTRACT_WORKERS", 1, 32),
+    Spec("ocr_workers", "索引 OCR 并发数", "int", 4, "索引吞吐",
+         "整轮索引共用的 OCR 请求通路数,同一 PDF 的多页也可并发,不是每个解析进程各开一组。受服务商限流或本地 OCR 算力约束,下一轮索引生效",
+         "OCR_WORKERS", 1, 32),
 
     # ---- OCR 后端 ----
     # 密钥(OCR_API_KEY)与 EMBED_API_KEY 同理:只从环境读,绝不进本注册表。

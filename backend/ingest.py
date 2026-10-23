@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import multiprocessing
 import os
 import re
 import sys
@@ -16,6 +17,8 @@ import pyarrow as pa
 
 from . import config
 from . import doc_utils
+from . import ocr_policy
+from . import ocr_queue
 from . import vecstore
 
 # 分块与 OCR 阈值统一由 config 提供,便于前端调整(见 config.SPECS「文档提取」组)
@@ -167,6 +170,19 @@ def split_into_chunks(text: str, max_chars: int = 0, overlap: int = -1) -> list[
     return chunks
 
 
+def render_ocr_page(page, workdir: str) -> str:
+    path = os.path.join(workdir, f"ocr_p{page.number}.png")
+    try:
+        page.get_pixmap(dpi=config.get("ocr_dpi")).save(path)
+    except BaseException:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+        raise
+    return path
+
+
 def ocr_page(page: "fitz.Page", workdir: str) -> tuple[str, str]:
     """渲染无文本页为图片,调 OCR 服务识别。返回 (文本, 错误信息)。
 
@@ -175,9 +191,7 @@ def ocr_page(page: "fitz.Page", workdir: str) -> tuple[str, str]:
     不存在(实例:XBL1117-3.3 手册,14 页共 156 字符)。
     """
     try:
-        pix = page.get_pixmap(dpi=config.get("ocr_dpi"))
-        img = os.path.join(workdir, f"ocr_p{page.number}.png")
-        pix.save(img)
+        img = render_ocr_page(page, workdir)
         from . import ocr as ocr_mod
         text, err = ocr_mod.ocr_image(img)
         if err:
@@ -198,11 +212,26 @@ class _PageText:
         self.warnings: list[str] = []
         self.ocr_calls = 0
         self.ocr_failed = 0
+        self.decisions: dict[str, int] = {}
 
-    def harvest(self, page, number: int, ocr_dir: str) -> str:
+    def harvest(self, page, number: int, ocr_dir: str, policy=None, pending=None) -> str:
         """返回该页最终文本(含表格 markdown)。"""
-        text = page.get_text("text")
-        if len(text.strip()) < config.get("ocr_min_chars"):
+        if policy is None:
+            policy = ocr_policy.DocumentPolicy(page.parent)
+        text = policy.texts[number - 1]
+        decision = policy.decide(number - 1)
+        self.decisions[decision.reason] = self.decisions.get(decision.reason, 0) + 1
+        if decision.needs_ocr:
+            producer = ocr_queue.producer()
+            if producer is not None and pending is not None:
+                self.ocr_calls += 1
+                try:
+                    task = producer.submit(lambda: render_ocr_page(page, ocr_dir))
+                except Exception as exc:
+                    self._use_ocr(number, text, "", f"{type(exc).__name__}: {exc}")
+                    return self._append_tables(page, number, text)
+                pending.append((number - 1, task, text))
+                return self._append_tables(page, number, "")
             text = self._rescue_by_ocr(page, number, text, ocr_dir)
         return self._append_tables(page, number, text)
 
@@ -210,15 +239,25 @@ class _PageText:
         """文本层缺失或极稀少(正文被转成矢量曲线等)时用 OCR 兜底。"""
         self.ocr_calls += 1
         ocr, err = ocr_page(page, ocr_dir)
+        return self._use_ocr(number, text, ocr, err)
+
+    def _use_ocr(self, number: int, text: str, ocr: str, err: str) -> str:
         if err:
             self.ocr_failed += 1
             self.warnings.append(f"p{number} OCR 调用失败: {err}")
         elif len(ocr) > len(text):
-            return ocr
+            return clean_text(ocr)
         else:
             self.warnings.append(
                 f"p{number} 低文本({len(text)} 字符)且 OCR 无增益({len(ocr)} 字符)")
         return text
+
+    def finish_page(self, pages, pending, producer):
+        number, task, native = pending
+        ocr, error = producer.receive(task)
+        text = self._use_ocr(number + 1, native, ocr, error)
+        pages[number] = re.sub(r"\n{3,}", "\n\n",
+                               clean_text(text) + "\n\n" + pages[number]).strip()
 
     def _append_tables(self, page, number: int, text: str) -> str:
         from .doc_utils import table_to_md
@@ -274,15 +313,31 @@ def extract_chunks(path: str, rel: str, category_dir: str, ocr_dir: str):
         # 文档标题:优先 PDF 元数据标题,否则型号,否则留空(由调用方兜底)
         meta["title"] = (doc.metadata or {}).get("title", "").strip() or meta.get("model_no", "")
         n_pages = len(doc)                     # 必须在此取值:doc.close() 后不可再访问
+        policy = ocr_policy.DocumentPolicy(doc)
+        pending = []
+        pages = []
+        producer = ocr_queue.producer()
         for number, page in enumerate(doc):
-            text = tracker.harvest(page, number + 1, ocr_dir)
+            pages.append(tracker.harvest(page, number + 1, ocr_dir, policy, pending))
+            if producer is not None:
+                completed = producer.completed()
+                remaining = []
+                for item in pending:
+                    if item[1] in completed:
+                        tracker.finish_page(pages, item, producer)
+                    else:
+                        remaining.append(item)
+                pending = remaining
+        for item in pending:
+            tracker.finish_page(pages, item, producer)
+        for number, text in enumerate(pages):
             chunks.extend((seg, number) for seg in split_into_chunks(text))
     finally:
         doc.close()
 
     tracker.check_document(chunks, n_pages)
-    if tracker.ocr_calls:
-        meta["ocr"] = {"calls": tracker.ocr_calls, "failed": tracker.ocr_failed}
+    meta["ocr"] = {"calls": tracker.ocr_calls, "failed": tracker.ocr_failed,
+                   "decisions": tracker.decisions, "document": policy.summary()}
     meta["warnings"] = tracker.warnings
     return meta, chunks
 
@@ -457,10 +512,12 @@ def extract_one(args):
         return rel, full, md5, meta, chunks
     finally:
         try:
+            producer = ocr_queue.producer()
+            if producer is not None:
+                producer.finish()
+        finally:
             import shutil
             shutil.rmtree(ocr_dir, ignore_errors=True)
-        except Exception:
-            pass
 
 
 def _run_rebuild_vectors(db, args):
@@ -579,24 +636,48 @@ def _plan_work(files: dict, known: dict, args) -> tuple[list, set]:
 
 
 def _extract_phase(to_index: list, root: str, state: dict, t0: float) -> list:
-    """阶段一:多进程提取。find_tables 不释放 GIL,必须用进程绕开。"""
+    """本地多文档进程池与整轮共用的 OCR 线程通路。"""
     total = len(to_index)
-    state.update({"phase": "extracting", "extract": {"done": 0, "total": total}})
+    parse_workers = min(config.get("extract_workers"), max(1, total))
+    workers = config.get("ocr_workers")
+    state.update({"phase": "extracting", "extract": {"done": 0, "total": total},
+                  "concurrency": {"extract_workers": parse_workers, "ocr_workers": workers}})
     write_state(state)
     extracted = []
-    with ProcessPoolExecutor(config.get("extract_workers")) as ex:
-        futures = {ex.submit(extract_one, (rel, full, md5, root)): (rel, full, md5)
-                   for rel, full, md5 in to_index}
-        for done, fut in enumerate(as_completed(futures), 1):
-            rel, full, md5, meta, chunks = fut.result()
-            state.update({"extract": {"done": done, "total": total},
-                          "current": rel, "elapsed": round(time.time() - t0, 1)})
-            write_state(state)
-            if not chunks:
-                print(f"  [跳过-无文本] {rel}")
-                state["skipped"].append(rel)
-                continue
-            extracted.append((rel, full, md5, meta, chunks))
+    values = {name: item["value"] for name, item in config.snapshot().items()}
+    context = multiprocessing.get_context("spawn")
+    with ocr_queue.OCRPool(context, parse_workers, workers) as pool:
+        with ProcessPoolExecutor(parse_workers, mp_context=context,
+                                 initializer=ocr_queue.initialize_worker,
+                                 initargs=(values, pool.channels)) as ex:
+            futures = {ex.submit(extract_one, (rel, full, md5, root)): (rel, full, md5)
+                       for rel, full, md5 in to_index}
+            for done, fut in enumerate(as_completed(futures), 1):
+                try:
+                    rel, full, md5, meta, chunks = fut.result()
+                except Exception as exc:
+                    rel = futures[fut][0]
+                    state.setdefault("errors", []).append(f"{rel}: {type(exc).__name__}: {exc}")
+                    state.update({"extract": {"done": done, "total": total},
+                                  "current": rel, "elapsed": round(time.time() - t0, 1)})
+                    write_state(state)
+                    continue
+                audit = state.setdefault("ocr", {"calls": 0, "failed": 0, "decisions": {}})
+                detail = meta.get("ocr", {})
+                for key in ("calls", "failed"):
+                    audit[key] += detail.get(key, 0)
+                for reason, count in detail.get("decisions", {}).items():
+                    audit["decisions"][reason] = audit["decisions"].get(reason, 0) + count
+                for warning in meta.get("warnings", []):
+                    state.setdefault("warnings", []).append(f"{rel}: {warning}")
+                state.update({"extract": {"done": done, "total": total},
+                              "current": rel, "elapsed": round(time.time() - t0, 1)})
+                if not chunks:
+                    print(f"  [跳过-无文本] {rel}")
+                    state["skipped"].append(rel)
+                else:
+                    extracted.append((rel, full, md5, meta, chunks))
+                write_state(state)
     return extracted
 
 

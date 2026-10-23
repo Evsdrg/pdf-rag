@@ -369,12 +369,21 @@ def read_pages(pdf_root: str, file: str, spec: str) -> dict:
         return {"file": file, "total_pages": len(pages), "pages": out}
     doc = fitz.open(full)
     try:
+        from .ocr_policy import DocumentPolicy
+        policy = None
         out = []
         for p in nums:
             if p < 1 or p > len(doc):
                 out.append({"page": p, "error": f"越界(共 {len(doc)} 页)"})
                 continue
-            text, _err = doc_utils.read_page_text(doc, p)
+            if policy is None and config.get("ocr_smart_filter"):
+                try:
+                    thin = len(doc[p - 1].get_text("text").strip()) < config.get("ocr_min_chars")
+                except Exception:
+                    thin = True
+                if thin:
+                    policy = DocumentPolicy(doc)
+            text, _err = doc_utils.read_page_text(doc, p, policy)
             out.append({"page": p, "text": text})
         return {"file": file, "total_pages": len(doc), "pages": out}
     finally:

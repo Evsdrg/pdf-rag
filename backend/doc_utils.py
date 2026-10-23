@@ -222,9 +222,9 @@ def table_to_md(rows) -> str:
     return "\n".join(out)
 
 
-def page_text_with_tables(page, max_chars: int = 0) -> str:
+def page_text_with_tables(page, max_chars: int = 0, text: str | None = None) -> str:
     """页面文本 + 检测到的表格(markdown 格式)。无表格时只返回文本。"""
-    text = page.get_text("text").strip()
+    text = page.get_text("text").strip() if text is None else text.strip()
     try:
         tables = page.find_tables().tables
         if tables:
@@ -238,33 +238,40 @@ def page_text_with_tables(page, max_chars: int = 0) -> str:
         text = text[:max_chars]
     return text
 
-# 低文本页判定阈值:低于此值认为文本层不可用,尝试 OCR 兜底
-THIN_PAGE_CHARS = 200
 
+def read_page_text(doc, page_number: int, policy=None) -> tuple[str, str]:
+    """读取一页的完整文本(含表格 markdown),与入库共用 OCR 判定。
 
-def read_page_text(doc, page_number: int) -> tuple[str, str]:
-    """读取一页的完整文本(含表格 markdown),低文本页自动回退 OCR。
-
-    返回 (文本, 错误信息);正常时错误为空。main.py 与 server.py 共用,
-    避免两处阈值/DPI/超时参数各写一份导致行为漂移。
+    返回 (文本, 错误信息);正常时错误为空。调用方可在同一个 Document 内复用 policy。
     """
-    import os
     import tempfile
+    from . import ocr_policy
 
     page = doc[page_number - 1]
-    text = page.get_text("text").strip()
-    if len(text) >= THIN_PAGE_CHARS:
-        return page_text_with_tables(page, max_chars=config.get("page_max_chars")), ""
+    if policy is None:
+        try:
+            text = page.get_text("text").strip()
+        except Exception:
+            policy = ocr_policy.DocumentPolicy(doc)
+            text = policy.texts[page_number - 1].strip()
+    else:
+        text = policy.texts[page_number - 1].strip()
+    if len(text) >= config.get("ocr_min_chars"):
+        return page_text_with_tables(page, max_chars=config.get("page_max_chars"), text=text), ""
+    if policy is None and config.get("ocr_smart_filter"):
+        policy = ocr_policy.DocumentPolicy(doc)
+    if policy is not None and not policy.decide(page_number - 1).needs_ocr:
+        return page_text_with_tables(page, max_chars=config.get("page_max_chars"), text=text), ""
     try:
         from . import ocr as ocr_mod
-        workdir = tempfile.mkdtemp(prefix="pdfrag_page_")
-        img = os.path.join(workdir, "page.png")
-        page.get_pixmap(dpi=config.get("ocr_dpi")).save(img)
-        ocr, err = ocr_mod.ocr_image(img)
+        with tempfile.TemporaryDirectory(prefix="pdfrag_page_") as workdir:
+            img = os.path.join(workdir, "page.png")
+            page.get_pixmap(dpi=config.get("ocr_dpi")).save(img)
+            ocr, err = ocr_mod.ocr_image(img)
         if err:
             raise RuntimeError(err)
         if len(ocr) < len(text):
-            return page_text_with_tables(page, max_chars=config.get("page_max_chars")), ""
+            return page_text_with_tables(page, max_chars=config.get("page_max_chars"), text=text), ""
         return ocr or "OCR 无结果", ""
     except Exception as e:
         return "该页为低文本页且 OCR 服务不可用", f"{type(e).__name__}: {e}"
