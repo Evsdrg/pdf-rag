@@ -1,260 +1,195 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import {
-  NAlert, NButton, NCollapse, NCollapseItem, NInput, NInputNumber, NSpace,
-  NSpin, NSwitch, NTag, NTooltip, useMessage,
-} from 'naive-ui'
-import {
-  getConfig, resetConfig, saveConfig,
-  type ConfigPayload, type ConfigSpec,
-} from '../api'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
+import { NAlert, NButton, NCollapse, NCollapseItem, NEmpty, NInput, NPopconfirm, NSpin, NSwitch, NTag, useMessage } from 'naive-ui'
+import SettingField from '../components/settings/SettingField.vue'
+import { commonNames, matchesSetting, sectionOf, sections } from '../components/settings/catalog'
+import { useSettings } from '../composables/useSettings'
 
+const { payload, specs, draft, loading, saving, error, dirtyNames, update, revert, load, save, reset } = useSettings()
 const message = useMessage()
-const loading = ref(true)
-const saving = ref(false)
-const payload = ref<ConfigPayload | null>(null)
-/** 编辑中的值:与已生效值分离,便于"未保存"提示与撤销 */
-const draft = ref<Record<string, number | boolean | string>>({})
-const groups = computed(() => payload.value?.groups ?? [])
+const page = ref<HTMLElement | null>(null)
+const active = shallowRef('common')
+const query = shallowRef('')
+const changedOnly = shallowRef(false)
+const expanded = ref<string[]>([])
+const showVariables = shallowRef(localStorage.getItem('settings_show_var') === '1')
+const searching = computed(() => query.value.trim().length > 0)
+const current = computed(() => sections.find((section) => section.id === active.value))
+const allNames = computed(() => {
+  const ordered = sections.flatMap((section) => [...section.primary, ...section.advanced])
+  return [...ordered.filter((name) => specs.value[name]), ...Object.keys(specs.value).filter((name) => !ordered.includes(name))]
+})
+const filteredNames = computed(() => allNames.value.filter((name) =>
+  (!changedOnly.value || dirtyNames.value.includes(name)) && matchesSetting(name, specs.value[name]!, query.value)))
+const directList = computed(() => searching.value || changedOnly.value || active.value === 'common' || active.value === 'other')
+const primaryNames = computed(() => {
+  if (searching.value || changedOnly.value) return filteredNames.value
+  if (active.value === 'common') return commonNames.filter((name) => specs.value[name])
+  if (active.value === 'other') return allNames.value.filter((name) => !sectionOf(name))
+  return current.value?.primary.filter((name) => specs.value[name]) ?? []
+})
+const advancedNames = computed(() => current.value?.advanced.filter((name) => specs.value[name]) ?? [])
+const unknownNames = computed(() => allNames.value.filter((name) => !sectionOf(name)))
+const navigation = computed(() => [
+  { id: 'common', title: '常用设置', description: '并发、模型和返回结果', names: commonNames.filter((name) => specs.value[name]) },
+  ...sections.map((section) => ({ ...section, names: [...section.primary, ...section.advanced].filter((name) => specs.value[name]) })),
+  ...(unknownNames.value.length ? [{ id: 'other', title: '其他设置', description: '尚未分类的参数', names: unknownNames.value }] : []),
+])
+const title = computed(() => searching.value ? `搜索结果（${primaryNames.value.length}）`
+  : changedOnly.value ? '未保存的改动' : active.value === 'common' ? '常用设置' : active.value === 'other' ? '其他设置' : current.value?.title)
+const subtitle = computed(() => searching.value ? '已跨所有分类搜索，包含高级设置。支持中文名称、说明和变量名。'
+  : changedOnly.value ? '集中检查即将保存的值。切换分类不会丢失草稿。'
+  : active.value === 'common' ? '先从最常调整的项目开始，其余参数按任务分类。' : current.value?.description)
 
-function specsOf(group: string): [string, ConfigSpec][] {
-  const specs = payload.value?.specs ?? {}
-  return Object.entries(specs).filter(([, s]) => s.group === group)
+function selectCategory(id: string) {
+  active.value = id
+  query.value = ''
+  changedOnly.value = false
+  expanded.value = []
+  page.value?.scrollIntoView({ block: 'start' })
 }
-
-const dirtyNames = computed(() =>
-  Object.keys(draft.value).filter((n) => draft.value[n] !== payload.value?.specs[n]?.value),
-)
-
-async function load() {
-  loading.value = true
-  try {
-    payload.value = await getConfig()
-    draft.value = Object.fromEntries(
-      Object.entries(payload.value.specs).map(([n, s]) => [n, s.value]),
-    )
-  } catch (e) {
-    message.error(`读取配置失败:${(e as Error).message}`)
-  } finally {
-    loading.value = false
+async function saveDraft() {
+  const guarded = ['embed_model', 'embed_dimensions', 'embed_input_type_doc', 'embed_input_type_query']
+  if (dirtyNames.value.some((name) => guarded.includes(name))
+      && !window.confirm('将修改嵌入模型、维度或输入类型，必须与已有向量分区匹配；不会自动重建索引。确认保存吗？')) return
+  await save()
+}
+function resetField(name: string) {
+  if (dirtyNames.value.includes(name)) {
+    draft.value[name] = specs.value[name]!.value
+    message.info('已撤销该项未保存的改动。')
+    return
   }
+  return reset([name])
 }
-
-async function save() {
-  const changed = Object.fromEntries(dirtyNames.value.map((n) => [n, draft.value[n]]))
-  if (!Object.keys(changed).length) return
-  saving.value = true
-  try {
-    const r = await saveConfig(changed)
-    if (payload.value) payload.value.specs = r.specs
-    message.success(`已保存 ${Object.keys(changed).length} 项,即时生效`)
-  } catch (e) {
-    message.error(`保存失败:${(e as Error).message}`)
-  } finally {
-    saving.value = false
-  }
+function toggleChanged() {
+  changedOnly.value = !changedOnly.value
+  if (changedOnly.value) query.value = ''
 }
-
-async function reset(names?: string[]) {
-  try {
-    const r = await resetConfig(names)
-    if (payload.value) payload.value.specs = r.specs
-    if (names) {
-      names.forEach((n) => { draft.value[n] = r.specs[n].value })
-    } else {
-      draft.value = Object.fromEntries(
-        Object.entries(r.specs).map(([n, s]) => [n, s.value]),
-      )
-    }
-    message.success(names ? '该项已恢复默认' : '全部已恢复默认')
-  } catch (e) {
-    message.error(`重置失败:${(e as Error).message}`)
-  }
+function modifiedCount(names: string[]) { return names.filter((name) => dirtyNames.value.includes(name)).length }
+function disabledReason(name: string): string {
+  const backend = String(draft.value.ocr_backend ?? '').toLowerCase()
+  if (name === 'ocr_url' && backend !== 'local') return '当前选择远程后端，本机 OCR 地址不参与请求。'
+  if (['ocr_api_base', 'ocr_model', 'ocr_prompt'].includes(name) && backend !== 'remote') return '当前选择本地后端，切换为远程后可编辑。'
+  return ''
 }
-
-function revert() {
-  if (!payload.value) return
-  draft.value = Object.fromEntries(
-    Object.entries(payload.value.specs).map(([n, s]) => [n, s.value]),
-  )
+function toggleVariables(value: boolean) {
+  showVariables.value = value
+  localStorage.setItem('settings_show_var', value ? '1' : '0')
 }
-
-/** 范围提示文案,避免用户靠试错发现边界 */
-function rangeHint(s: ConfigSpec): string {
-  if (s.kind === 'bool') return ''
-  const lo = s.lo ?? ''
-  const hi = s.hi ?? ''
-  return lo !== '' || hi !== '' ? `${lo} ~ ${hi}` : ''
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (!dirtyNames.value.length) return
+  event.preventDefault()
+  event.returnValue = ''
 }
-
-function isDirty(name: string): boolean {
-  return draft.value[name] !== payload.value?.specs[name]?.value
-}
-
-/** OCR 项按 backend 联动:local 只认 ocr_url;remote 只认 api_base/model/prompt。
- *  两组混着用会误导(改了不生效的那组还显示"已覆盖")。 */
-function ocrDisabled(name: string): boolean {
-  const be = String(draft.value['ocr_backend'] ?? '').toLowerCase()
-  if (name === 'ocr_url') return be !== 'local'
-  if (name === 'ocr_api_base' || name === 'ocr_model' || name === 'ocr_prompt') return be !== 'remote'
-  return false
-}
-
-/** 是否显示原始变量名(name)与 env 键。默认关(只显中文名),记住用户选择 */
-const showVarNames = ref(localStorage.getItem('settings_show_var') === '1')
-function toggleVarNames(v: boolean) {
-  showVarNames.value = v
-  localStorage.setItem('settings_show_var', v ? '1' : '0')
-}
-
-onMounted(load)
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+onBeforeRouteLeave(() => !dirtyNames.value.length || window.confirm('有未保存的配置改动，确定离开并丢弃草稿吗？'))
 </script>
 
 <template>
-  <div class="page">
-    <n-space align="center" justify="space-between" style="margin-bottom: 16px">
-      <div>
-        <h2 class="title">检索配置</h2>
-        <div class="hint">
-          改动即时生效并持久化到 <code>data/settings.json</code>;密钥、目录等部署项不在此列。
-        </div>
-      </div>
-      <n-space align="center">
-        <n-tooltip trigger="hover">
-          <template #trigger>
-            <n-space align="center" :size="6" style="margin-right: 8px">
-              <n-switch :value="showVarNames" size="small" @update:value="toggleVarNames" />
-              <span class="var-lbl">变量名</span>
-            </n-space>
-          </template>
-          显示原始变量名与 env 键(便于对照配置文件 / 与文档沟通)
-        </n-tooltip>
-        <n-tag v-if="dirtyNames.length" type="warning" round>
-          {{ dirtyNames.length }} 项未保存
-        </n-tag>
-        <n-button :disabled="!dirtyNames.length" @click="revert">撤销改动</n-button>
-        <n-button :disabled="!dirtyNames.length" @click="reset()">全部恢复默认</n-button>
-        <n-button type="primary" :loading="saving" :disabled="!dirtyNames.length" @click="save">
-          保存
-        </n-button>
-      </n-space>
-    </n-space>
+  <div ref="page" class="settings-page">
+    <header class="page-header">
+      <div><h2>配置中心</h2><p>按任务查找设置，不必逐项翻阅参数。</p></div>
+      <div class="header-tools"><span>显示变量名</span><NSwitch :value="showVariables" size="small" aria-label="显示变量名" @update:value="toggleVariables" /></div>
+    </header>
 
-    <n-alert v-if="dirtyNames.length" type="warning" style="margin-bottom: 16px">
-      有未保存的改动。检索参数(权重/候选深度/片段宽度)会直接影响结果质量,
-      调整后建议到「检索测试」页复核。
-    </n-alert>
+    <div class="search-bar">
+      <NInput v-model:value="query" clearable placeholder="搜索设置，例如：并发、OCR、模型、超时…" :input-props="{ 'aria-label': '搜索配置' }" />
+      <NButton :type="changedOnly ? 'primary' : 'default'" :secondary="changedOnly" @click="toggleChanged">未保存 {{ dirtyNames.length }}</NButton>
+    </div>
+    <NAlert v-if="error" type="error" class="notice">读取配置失败：{{ error }} <NButton text @click="load">重试</NButton></NAlert>
 
-    <n-spin :show="loading">
-      <!-- 数据就绪后才渲染:default-expanded-names 是非受控绑定,只在首次挂载生效,
-           若在 loading 期(groups 还是空)挂载,所有分组会永远折叠 -->
-      <n-collapse v-if="payload" :default-expanded-names="groups">
-        <n-collapse-item v-for="g in groups" :key="g" :name="g">
-          <template #header>
-            <span class="group">{{ g }}</span>
-            <n-tag size="small" style="margin-left: 8px">{{ specsOf(g).length }} 项</n-tag>
-          </template>
+    <NSpin :show="loading">
+      <div v-if="payload" class="settings-layout">
+        <nav class="category-nav" aria-label="配置分类">
+          <button v-for="item in navigation" :key="item.id" type="button" class="category-button"
+            :class="{ selected: active === item.id && !searching && !changedOnly }"
+            :aria-current="active === item.id && !searching && !changedOnly ? 'page' : undefined"
+            @click="selectCategory(item.id)">
+            <span class="category-heading">{{ item.title }}<span v-if="modifiedCount(item.names)" class="modified-dot">{{ modifiedCount(item.names) }}</span></span>
+            <span class="category-description">{{ item.description }}</span>
+          </button>
+          <div class="nav-note">检索参数保存后即时生效。<br>索引设置由下一轮任务使用。</div>
+        </nav>
 
-          <div class="grid">
-            <div
-              v-for="[name, spec] in specsOf(g)" :key="name"
-              class="item" :class="{ dim: ocrDisabled(name) }"
-            >
-              <div class="head">
-                <div class="name">
-                  {{ spec.label }}
-                  <code v-if="showVarNames" class="var">{{ name }}</code>
-                  <n-tag v-if="spec.overridden" size="tiny" type="success" round>已覆盖</n-tag>
-                  <n-tag v-if="isDirty(name)" size="tiny" type="warning" round>未保存</n-tag>
-                </div>
-                <div class="ctrl">
-                  <n-switch
-                    v-if="spec.kind === 'bool'"
-                    :value="Boolean(draft[name])"
-                    :disabled="ocrDisabled(name)"
-                    @update:value="(v: boolean) => (draft[name] = v)"
-                  />
-                  <n-input-number
-                    v-else-if="spec.kind === 'int' || spec.kind === 'float'"
-                    :value="Number(draft[name])"
-                    :min="spec.lo ?? undefined"
-                    :max="spec.hi ?? undefined"
-                    :step="spec.kind === 'int' ? 1 : 0.1"
-                    :precision="spec.kind === 'float' ? 2 : 0"
-                    :disabled="ocrDisabled(name)"
-                    style="width: 150px"
-                    @update:value="(v: number | null) => v !== null && (draft[name] = v)"
-                  />
-                  <n-input
-                    v-else
-                    :value="String(draft[name] ?? '')"
-                    :disabled="ocrDisabled(name)"
-                    style="width: 100%"
-                    @update:value="(v: string) => (draft[name] = v)"
-                  />
-                  <n-tooltip v-if="spec.overridden" trigger="hover">
-                    <template #trigger>
-                      <n-button size="tiny" quaternary @click="reset([name])">恢复默认</n-button>
-                    </template>
-                    清除覆盖值,回到 env / 内置默认
-                  </n-tooltip>
-                </div>
-              </div>
-              <div class="desc">{{ spec.desc }}</div>
-              <div class="src">
-                默认 <b>{{ spec.default }}</b>
-                <template v-if="showVarNames && spec.env_key"> · env <code>{{ spec.env_key }}</code></template>
-                <template v-if="rangeHint(spec)"> · 范围 {{ rangeHint(spec) }}</template>
-              </div>
-            </div>
+        <main class="settings-content">
+          <div class="section-header"><div><h3>{{ title }}</h3><p>{{ subtitle }}</p></div><NTag :bordered="false">{{ primaryNames.length + (!directList ? advancedNames.length : 0) }} 项</NTag></div>
+          <NAlert v-if="!directList && current?.hint" type="info" :show-icon="false" class="section-hint">{{ current.hint }}</NAlert>
+          <NAlert v-if="active === 'common' && !searching && !changedOnly" type="info" :show-icon="false" class="section-hint">本地解析与 OCR 请求并发可独立设置。更换嵌入模型前，请确认已有向量分区与模型、维度匹配。</NAlert>
+          <div class="field-list">
+            <SettingField v-for="name in primaryNames" :key="name" :name="name" :spec="specs[name]!" :value="draft[name]!"
+              :dirty="dirtyNames.includes(name)" :disabled="Boolean(disabledReason(name))" :disabled-reason="disabledReason(name)"
+              :busy="saving" :show-variables="showVariables" :category="directList ? sectionOf(name)?.title : undefined"
+              @change="update(name, $event)" @reset="resetField(name)" />
           </div>
-        </n-collapse-item>
-      </n-collapse>
-    </n-spin>
+          <NEmpty v-if="!primaryNames.length && directList" description="没有匹配的设置。试试“并发”“OCR”或参数变量名。" class="empty-state" />
+          <NCollapse v-if="!directList && advancedNames.length" v-model:expanded-names="expanded" class="advanced">
+            <NCollapseItem name="advanced" :title="`高级设置 · ${advancedNames.length} 项`">
+              <p class="advanced-note">通常无需修改；展开后仍保留原有说明、取值范围和默认值。</p>
+              <SettingField v-for="name in advancedNames" :key="name" :name="name" :spec="specs[name]!" :value="draft[name]!"
+                :dirty="dirtyNames.includes(name)" :disabled="Boolean(disabledReason(name))" :disabled-reason="disabledReason(name)"
+                :busy="saving" :show-variables="showVariables" @change="update(name, $event)" @reset="resetField(name)" />
+            </NCollapseItem>
+          </NCollapse>
+        </main>
+      </div>
+    </NSpin>
+
+    <footer v-if="payload" class="save-bar">
+      <div><strong>{{ dirtyNames.length ? `${dirtyNames.length} 项未保存` : '所有改动已保存' }}</strong><span class="save-hint">切换分类保留草稿；保存作用于全部分类。</span></div>
+      <div class="save-actions">
+        <NPopconfirm @positive-click="reset()"><template #trigger><NButton quaternary :disabled="saving">全部恢复默认</NButton></template>恢复全部设置为环境变量或内置默认值，并立即保存？</NPopconfirm>
+        <NButton :disabled="!dirtyNames.length || saving" @click="revert">撤销改动</NButton>
+        <NButton type="primary" :loading="saving" :disabled="!dirtyNames.length" @click="saveDraft">保存全部改动</NButton>
+      </div>
+    </footer>
   </div>
 </template>
 
 <style scoped>
-/* 完全流式:不设页宽上限,列数由实际视口决定。
-   auto-fit(而非 auto-fill):末行不满时空轨道塌掉、现有卡片拉伸填满,不留死白。
-   340px 是卡片最小可读宽度,视口每多出一个 340+gap 就多一列。 */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 10px 14px;
+.settings-page { max-width: 1280px; margin: 0 auto; padding-bottom: 12px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
+.page-header h2 { margin: 0; font-size: 23px; }
+.page-header p, .section-header p { margin: 6px 0 0; color: #9399b2; font-size: 13px; line-height: 1.6; }
+.header-tools { display: flex; align-items: center; gap: 10px; color: #9399b2; font-size: 12px; white-space: nowrap; }
+.search-bar { display: flex; gap: 12px; margin-bottom: 22px; }
+.search-bar :deep(.n-input) { flex: 1; }
+.settings-layout { display: grid; grid-template-columns: 195px minmax(0, 1fr); gap: 24px; }
+.category-nav { align-self: start; position: sticky; top: 0; display: flex; flex-direction: column; gap: 6px; }
+.category-button { border: 1px solid transparent; border-radius: 8px; color: #cdd6f4; background: transparent; text-align: left; padding: 12px; cursor: pointer; }
+.category-button:hover { background: #252537; }
+.category-button.selected { background: #253246; border-color: #405875; }
+.category-heading { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
+.category-description { display: block; margin-top: 4px; color: #7f849c; font-size: 11px; line-height: 1.5; }
+.selected .category-heading { color: #89b4fa; }
+.modified-dot { min-width: 17px; text-align: center; font-size: 10px; color: #f9e2af; }
+.nav-note { margin: 18px 12px; color: #6c7086; font-size: 11px; line-height: 1.8; }
+.settings-content { min-width: 0; border: 1px solid #313244; border-radius: 12px; background: #1e1e2e; padding: 24px; }
+.section-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.section-header h3 { font-size: 18px; margin: 0; }
+.section-hint { margin-bottom: 6px; font-size: 12px; }
+.advanced { margin-top: 24px; padding-top: 18px; border-top: 1px solid #45475a; }
+.advanced-note { color: #7f849c; font-size: 12px; }
+.empty-state { padding: 48px 0; }
+.notice { margin-bottom: 18px; }
+.save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; padding: 15px 18px; border: 1px solid #45475a; border-radius: 10px; background: #181825; box-shadow: 0 -8px 24px #11111b44; }
+.save-bar strong { font-size: 13px; color: #cdd6f4; }
+.save-hint { display: block; font-size: 11px; color: #7f849c; margin-top: 4px; }
+.save-actions { display: flex; gap: 10px; align-items: center; }
+@media (max-width: 1050px) {
+  .settings-layout { grid-template-columns: 1fr; gap: 14px; }
+  .category-nav { position: static; display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .category-button { padding: 8px 12px; }
+  .category-description, .nav-note { display: none; }
+  .category-heading { font-size: 12px; gap: 8px; }
+  .settings-content { padding: 18px; }
+  .save-bar { flex-wrap: wrap; }
+  .save-actions { margin-left: auto; flex-wrap: wrap; }
 }
-.title { margin: 0 0 4px; font-size: 20px; }
-.hint { font-size: 12px; color: #6c7086; }
-.hint code { color: #89b4fa; }
-.group { font-weight: 600; }
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 10px 14px;
+@media (max-width: 600px) {
+  .page-header { align-items: flex-start; flex-direction: column; }
+  .save-actions { margin-left: 0; }
 }
-.item {
-  border: 1px solid #313244;
-  border-radius: 8px;
-  background: #1e1e2e;
-  padding: 10px 12px;
-  min-width: 0;
-}
-/* 与当前 ocr_backend 无关的项:淡化提示,控件本身已禁用 */
-.item.dim { opacity: 0.38; }
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap; /* str 长输入放不下时整体换到下一行 */
-}
-.name { font-size: 13px; font-weight: 600; color: #cdd6f4; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-/* 开关打开后跟在中文名后的原始变量名 */
-.name .var { font-size: 11px; font-weight: 400; color: #89b4fa; background: #181825; padding: 1px 5px; border-radius: 4px; }
-.var-lbl { font-size: 12px; color: #a6adc8; }
-.desc { font-size: 12px; color: #a6adc8; margin-top: 4px; line-height: 1.5; }
-.src { font-size: 11px; color: #6c7086; margin-top: 4px; }
-.src code { color: #89b4fa; }
-.ctrl { display: flex; align-items: center; gap: 8px; flex-shrink: 0; max-width: 100%; }
-.ctrl:has(.n-input) { width: 100%; flex-shrink: 1; } /* 文本框独占一行时拉满 */
 </style>

@@ -21,7 +21,7 @@ const menuOptions: MenuOption[] = [
   { label: '资料库', key: 'library' },
   { label: '文件库', key: 'files' },
   { label: '检索测试', key: 'search' },
-  { label: '检索配置', key: 'settings' },
+  { label: '配置中心', key: 'settings' },
   { label: '数据管理', key: 'data' },
 ]
 
