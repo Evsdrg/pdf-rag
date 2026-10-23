@@ -36,9 +36,9 @@ pdf-rag-<日期>/
 ├── eval_retrieval.py / eval_queries.json   检索质量评测
 ├── tools/                     诊断与维护脚本(含 compact_index.py、build_vec_index.py、build_release.py)
 ├── web/                       前端源码 + **已构建好的 dist/**
-├── pdf/                       205 份原始手册(未改动;类别目录结构与索引内路径一致)
+├── pdf/                       原始手册(份数以 MANIFEST.txt 为准;目录结构与索引一致)
 ├── parsed/                    解析后数据(见下)
-└── index.lance/               向量索引,含全文索引(8561 块,可直接检索)
+└── index.lance/               向量索引,含全文索引(块数以 MANIFEST.txt 为准)
 ```
 
 三份数据的关系:
@@ -56,7 +56,7 @@ pdf-rag-<日期>/
 | 项 | 要求 | 说明 |
 |---|---|---|
 | Python | **3.13** | 用 [uv](https://docs.astral.sh/uv/) 管理；`uv.lock` 已随包提供 |
-| 磁盘 | 约 1.5 GB | 源码+PDF+索引约 620 MB，另需依赖与运行余量 |
+| 磁盘 | 按实际交付包预留 | 手册与索引体积见包内 MANIFEST.txt，另需依赖与运行余量 |
 | 嵌入/重排 API | 需可访问 | OpenAI 兼容的 `/v1/embeddings` 与 `/v1/rerank`；**用自己的 API Key** |
 | Node.js | **不需要** | 包内已含构建好的 `web/dist`；只有改前端源码时才需要 |
 | OCR 环境 | 可选 | 仅扫描版 PDF 需要；4.9 GB，见第五节 |
@@ -116,7 +116,8 @@ uv run run_backend.py                    # http://127.0.0.1:8100
 ocr-env\Scripts\python.exe ocr_service.py
 ```
 
-打开 `http://127.0.0.1:8100` 即为 Web 界面；「索引状态」页应显示 205 份文档、8561 个块。
+打开 `http://127.0.0.1:8100` 即为 Web 界面；「索引状态」页应显示导入的文档与块数，
+以包内 `MANIFEST.txt` 和页面实际数据为准。
 
 ### 5. 验证
 
@@ -129,7 +130,7 @@ uv run python eval_retrieval.py
 ```
 
 `eval_retrieval.py` 末尾会打印 `degraded` 计数——**若不为 0 说明嵌入接口被限流**，该次分数不代表系统水平，请稍后重跑。
-当前基线与历次实验记录见 [BENCHMARKS.md](BENCHMARKS.md)。
+当前基线与历次实验记录见 [BENCHMARKS.md](docs/BENCHMARKS.md)。
 
 ## 四、MCP 接入（给 LLM 用）
 
@@ -259,7 +260,7 @@ curl -X POST -H "Content-Type: application/json" \
 
 **Q：`uv sync` 很慢或失败？** 需要能访问 PyPI。若目标机有内网源，先在 `~/.config/uv/uv.toml` 或环境变量里配镜像。
 
-**Q：首屏「索引状态」页显示 0 分块 / 0 MB，是不是索引不认？** 不是。那个页面读的是**索引进度**（`run_state.json`，运行期产物，不随包提供），不是索引内容。实际文档数与分块数看「文件库」页，或 `GET /api/stats`（应为 205 份 / 8561 块）。跑一次索引后该页就会显示进度信息。
+**Q：首屏「索引状态」页显示 0 分块 / 0 MB，是不是索引不认？** 不是。那个页面读的是**索引进度**（`run_state.json`，运行期产物，不随包提供），不是索引内容。实际文档数与分块数看「文件库」页，或 `GET /api/stats`（应与包内 `MANIFEST.txt` 一致）。跑一次索引后该页就会显示进度信息。
 
 **Q：`data/settings.json` 不存在，要紧吗？** 不要紧。它是运行时覆盖值，默认值都在 `backend/config.py` 里，没有这个文件就是全默认值。
 

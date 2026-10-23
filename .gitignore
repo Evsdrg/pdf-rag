@@ -10,8 +10,10 @@ wheels/
 .venv
 ocr-env/
 
-# Secrets
+# Secrets:实际环境文件不入库;仅保留无密钥的 .env.example 模板
 .env
+.env.*
+!.env.example
 
 # Runtime artifacts
 index.lance/

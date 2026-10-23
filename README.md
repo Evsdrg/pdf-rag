@@ -27,11 +27,9 @@ uv run run_backend.py       # http://127.0.0.1:8100（含 Web UI 与 MCP）
 
 | 文档 | 内容 |
 |---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | **架构设计**：分层与依赖方向、检索流水线、索引构建、配置边界、关键不变量——改代码前先读 |
-| [DEPLOY.md](DEPLOY.md) | 部署指南、REST API 全表、索引与数据包运维（另附内网形态文档 `DEPLOY-NAS.md`，不入库） |
-| [BENCHMARKS.md](BENCHMARKS.md) | 检索质量基线、历次参数实验（含否定性结果）、测试方法学——**调参/换模型前先读** |
+| [docs/README.md](docs/README.md) | **文档索引**：架构设计、向量分区、实验记录与维护约定 |
+| [DEPLOY.md](DEPLOY.md) | 部署指南、REST API 全表、索引与数据包运维（内网部署记录 `DEPLOY-NAS.md` 仅留本机） |
 | [THIRD-PARTY.md](THIRD-PARTY.md) | 依赖许可清单与第三方声明 |
-| [docs/VECTOR-PARTITION.md](docs/VECTOR-PARTITION.md) | 设计稿：按模型分区的向量存储（多模型混用、换模型只做增量） |
 
 ## 目录结构
 
@@ -44,6 +42,8 @@ backend/
   ingest.py       索引构建（多进程提取 + 批量嵌入）
   doc_utils.py    PDF/Markdown 文本提取、表格 markdown 化
   ocr.py          OCR 后端抽象（local Paddle / remote VLM）+ 调用状态记录
+  ocr_policy.py   低文本页的本地内容判定（不调用模型）
+  ocr_queue.py    索引期共享的有界 OCR 请求通路
   bundle.py       数据包（.tar.zst）导出/导入
   vecstore.py     向量分区:uid、分区表、覆盖率(见 docs/VECTOR-PARTITION.md)
 server.py         MCP 服务（默认内嵌；MCP_INPROC=0 时独立进程）
@@ -51,7 +51,7 @@ ocr_service.py    本机 OCR 服务（独立进程，依赖 ocr-env，可选）
 run_backend.py    后端守护：崩溃自愈 + 单例锁
 eval_retrieval.py 检索质量评测
 eval_queries.json 评测集（55 条）
-BENCHMARKS.md     评测结果与历次实验记录
+docs/BENCHMARKS.md 评测结果与历次实验记录
 DEPLOY.md         部署指南（裸机 / 交付包 / API 参考）
 tools/            开发期诊断与维护脚本
 web/              前端源码（Vue 3 + Vite + naive-ui）
@@ -134,7 +134,7 @@ uv run python -m backend.ingest --rebuild  # 全量重建（换嵌入模型后�
 `python tools/audit_ocr_policy.py <手册目录>` 不调用任何模型；规则与边界见
 [架构设计 §5.1](docs/ARCHITECTURE.md#51-低文本页的-ocr-判定)。改策略不会自动重提取已有索引。
 
-Web「配置中心 → 索引吞吐」可独立调整 **本地解析进程数**（`extract_workers`，默认 4）
+Web「配置中心 → 索引与并发」可独立调整 **本地解析进程数**（`extract_workers`，默认 4）
 与 **索引 OCR 并发数**（`ocr_workers`，默认 4），范围均为 1–32。
 前者同时处理不同文档的文本、表格与页面渲染；后者为整轮索引共用的页面请求通路，
 同一份 PDF 也可多页并发，**不会按解析进程数相乘**。本地进程按 CPU/内存配置，
@@ -160,7 +160,7 @@ uv run python eval_retrieval.py              # 55 条评测集（hand 10 / topic
 两级指标：`recall@k`（期望文档进没进 top-k）与 `snippet@1/@k`（片段是否含答案字面值——
 判别指标）。当前基线：**recall@5 100% / snippet@1 62% / snippet@5 91%**。重排器有固有
 随机性（±2pp），改动前后各跑两遍；评测方法、匹配规则与历次实验见
-[BENCHMARKS.md](BENCHMARKS.md)。
+[docs/BENCHMARKS.md](docs/BENCHMARKS.md)。
 
 ## 开发
 

@@ -1,8 +1,8 @@
 # 架构设计
 
 本文说明系统**为什么这样分层、每个边界守什么约束**。具体参数取值、实测数据、操作步骤
-不在本文展开——那些属于 [BENCHMARKS.md](../BENCHMARKS.md)、[DEPLOY.md](../DEPLOY.md) 与
-[docs/VECTOR-PARTITION.md](VECTOR-PARTITION.md)。
+不在本文展开——那些属于 [BENCHMARKS.md](BENCHMARKS.md)、[DEPLOY.md](../DEPLOY.md) 与
+[VECTOR-PARTITION.md](VECTOR-PARTITION.md)。
 
 目标读者：要改代码、加功能、或评估这套系统能否满足新需求的人。
 
@@ -43,7 +43,7 @@
 2. **MCP 与 HTTP 共用 `library.py`，不各自实现**。`MCP_INPROC=1`（默认）时两者同进程，
    连连接与表句柄都共享同一份单例。
 3. **`vecstore` 依赖 `library`，不反向**。表名列表这类薄工具放在 `library`，
-   因为 `vecstore` 已经用它的 `scan_columns`，反向导入会成环。
+   因为 `vecstore` 已经用它的 `scan_arrow`，反向导入会成环。
 
 ## 3. 检索流水线
 
@@ -67,7 +67,7 @@ query
 
 ### 3.1 为什么是三路，而不是只留一路
 
-各有不可替代的盲区，实测证据见 [BENCHMARKS.md](../BENCHMARKS.md) §1：
+各有不可替代的盲区，实测证据见 [BENCHMARKS.md](BENCHMARKS.md) §1：
 
 | 通道 | 不可替代之处 |
 |---|---|
@@ -111,7 +111,7 @@ query
 ## 4. 向量存储：按模型分区
 
 主表 `chunks` **不含 vector 列**，向量放在 `vec_<slug>` 分区表。原因与完整设计见
-[docs/VECTOR-PARTITION.md](VECTOR-PARTITION.md)，这里只给三条结论：
+[VECTOR-PARTITION.md](VECTOR-PARTITION.md)，这里只给三条结论：
 
 - **一个块一个模型**是数据粒度，**一个模型一个分区**是存储粒度。分区可以只覆盖部分块。
 - **查询向量必须与该分区的契约成对**：用分区记录的 `model + dim + input_type_query`
@@ -249,7 +249,7 @@ query
 | 文档 | 什么时候看 |
 |---|---|
 | [README.md](../README.md) | 上手、配置项含义、MCP 工具表 |
-| [BENCHMARKS.md](../BENCHMARKS.md) | **改检索/排序/模型之前**——含否定性结果，避免重复试错 |
+| [BENCHMARKS.md](BENCHMARKS.md) | **改检索/排序/模型之前**——含否定性结果，避免重复试错 |
 | [DEPLOY.md](../DEPLOY.md) | 部署、REST API 全表、索引与数据包运维 |
-| [docs/VECTOR-PARTITION.md](VECTOR-PARTITION.md) | 要动向量存储、多模型、打包逻辑时 |
+| [VECTOR-PARTITION.md](VECTOR-PARTITION.md) | 要动向量存储、多模型、打包逻辑时 |
 | [THIRD-PARTY.md](../THIRD-PARTY.md) | 许可证与依赖 |

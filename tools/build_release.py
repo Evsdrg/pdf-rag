@@ -56,7 +56,7 @@ def stage_source(dest: Path) -> int:
 
 
 def stage_frontend(dest: Path) -> None:
-    """前端构建产物不在版本库里(gitignore),需从工作区单独拷入。"""
+    """前端产物已随仓库提供;以当前工作区构建结果覆盖,确保交付使用最新版本。"""
     if not (FRONTEND_DIST / "index.html").is_file():
         raise SystemExit(f"缺少前端构建产物: {FRONTEND_DIST}\\index.html\n"
                          "先在 web/ 下执行 npm run build")
