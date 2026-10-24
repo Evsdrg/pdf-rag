@@ -83,6 +83,36 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(result["warnings"][0]["code"], "OCR_FAILED")
         self.assertNotIn("secret request detail", json.dumps(result))
 
+    def test_render_returns_native_image_and_safe_reference(self):
+        with fitz.open() as doc:
+            page = doc.new_page(width=600, height=800)
+            page.draw_rect(fitz.Rect(100, 100, 300, 400), color=(0, 0, 0))
+            doc.save(self.root / "chart.pdf")
+        result = self.client.get("/api/v2/render", params={"file": "chart.pdf", "page": 1,
+                                                          "clip": "[0,0,0.5,0.5]", "max_size": 800})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.headers["content-type"], "image/jpeg")
+        metadata = json.loads(result.headers["x-pdf-rag-metadata"])
+        self.assertLessEqual(max(metadata["width"], metadata["height"]), 801)
+        self.assertLessEqual(len(result.content), 2_000_000)
+        async def run():
+            async with Client(server.mcp) as client:
+                return await client.call_tool("pdf_rag_render_page", {"file": "chart.pdf", "page": 1})
+        result = asyncio.run(run())
+        self.assertEqual([item.type for item in result.content], ["text", "image"])
+        self.assertNotIn("base64", result.content[0].text)
+        self.assertIsNone(result.structured_content)
+
+    def test_render_rejects_bad_coordinates_and_formats(self):
+        result = self.client.get("/api/v2/render", params={"file": "guide.md", "page": 1})
+        self.assertEqual(result.json()["error"]["code"], "UNSUPPORTED_FORMAT")
+        with fitz.open() as doc:
+            doc.new_page()
+            doc.save(self.root / "chart.pdf")
+        for clip in ("[0,0,2,1]", "[0,0,0,1]", "[0,0,NaN,1]", "bad"):
+            result = self.client.get("/api/v2/render", params={"file": "chart.pdf", "page": 1, "clip": clip})
+            self.assertEqual(result.status_code, 400)
+
     def test_mcp_returns_one_json_text_block_and_error_flag(self):
         async def run():
             async with Client(server.mcp) as client:

@@ -281,6 +281,10 @@ curl -X POST -H "Content-Type: application/json" \
 
 ## 十、API 参考（完整端点表）
 
+面向 Agent 的新接口使用 `/api/v2/*`，包含有界分页、续读、章节读取、结构化错误和本地页图；
+完整参数和返回契约见 [MCP/Agent 协议](docs/MCP-PROTOCOL.md)。下表为继续兼容 Web 的旧 `/api/*`，
+搜索/文件列表仍为裸数组，读页仍为 `{text,ocr,error}`，不要把两版返回混用。
+
 | 端点 | 说明 |
 |---|---|
 | `GET /api/search?q=&category=&top_k=&mode=&rerank=&file=&max_per_doc=` | 混合检索 |

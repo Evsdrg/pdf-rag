@@ -10,8 +10,8 @@
                      ┌──────────────┐
    浏览器   ──────▶  │  Web UI      │ Vue 3 + naive-ui（打进镜像，由后端托管）
                      ├──────────────┤
-  MCP 客户端 ─────▶  │  /mcp        │ 8 个 pdf_rag_* 工具（默认内嵌进后端进程）
-  pi 等 REST ─────▶  │  /api/*      │ 与 MCP 共用 backend/library.py 的实体逻辑
+  MCP 客户端 ─────▶  │  /mcp        │ 10 个 pdf_rag_* 工具（默认内嵌进后端进程）
+  pi 等 REST ─────▶  │  /api/v2/*   │ 与 MCP 共用 backend/agent_api.py，旧 /api/* 兼容 Web
                      ├──────────────┤
                      │ LanceDB      │ 向量 + FTS 全文索引
                      └──────────────┘
@@ -105,21 +105,24 @@ OCR 地址/模型/提示词在此层（按 `ocr_backend` 联动），但 `OCR_AP
 提取质量体检）、检索测试（三模式/重排开关/命中页预览）、配置中心（56 项）、数据管理
 （配置与数据包导入导出）。
 
-**MCP**：8 个工具，统一 `pdf_rag_` 前缀（与客户端自带的 `grep`/`read` 区分——后者搜工作区
-文件，这里搜手册语料）。
+**MCP**：10 个工具，统一 `pdf_rag_` 前缀（与客户端自带的 `grep`/`read` 区分——后者搜工作区
+文件，这里搜手册语料）。文本返回为 `schema_version=2` 的单份 JSON；长内容有输出预算和续读游标。
 
 | 工具 | 用途 |
 |---|---|
-| `pdf_rag_search(query, category, top_k, file, max_per_doc)` | 混合检索，返回已定位到答案的片段窗口 |
-| `pdf_rag_grep(pattern, category, file, context, flex_separator)` | 字面/正则精确检索，不走向量，不受嵌入服务影响 |
-| `pdf_rag_read_page(file, page)` / `pdf_rag_read_pages(file, pages)` | 读整页原文（扫描页自动 OCR）/ 一次读多页 |
-| `pdf_rag_get_outline(file)` | 书签/标题目录，用于大手册导航 |
-| `pdf_rag_list_categories()` / `pdf_rag_list_files(category)` | 类别 / 已索引文件与元数据 |
-| `pdf_rag_status()` | 索引与依赖状态（含 OCR 最近一次真实调用）。**不探测上游** |
+| `pdf_rag_search` | 混合检索，返回片段、块引用、降级和型号身份提示 |
+| `pdf_rag_grep` | 不走向量的精确检索，按页聚合不同上下文，支持分页 |
+| `pdf_rag_read_page` / `pdf_rag_read_pages` | 读页，统一文本预算和续读；低文本页按策略 OCR |
+| `pdf_rag_get_outline` / `pdf_rag_read_section` | 有界目录与按章节标识读取，避免整个 AT 章节铺满上下文 |
+| `pdf_rag_list_categories` / `pdf_rag_list_files` | 类别与可筛选、分页的已索引文件元数据 |
+| `pdf_rag_render_page` | 本地按需渲染曲线、封装图、原理图，不调用模型 |
+| `pdf_rag_status` | 索引与 OCR 最近真实调用状态，**不探测上游** |
 
-**REST**：与 MCP 能力等价，完整端点表见 [DEPLOY.md](DEPLOY.md)。`clients/pi/pdf-rag-pi/`
-附带一个 **pi 编码 agent 的原生扩展示例**（同名 `pdf_rag_*` 工具 + 用法 SKILL），底层走这套
-REST 接口，可作为其它非 MCP 客户端的接入参考。
+返回结构、游标、页号口径和兼容边界见 [MCP/Agent 协议](docs/MCP-PROTOCOL.md)。
+
+**REST**：新 Agent 能力走 `/api/v2/*`，与 MCP 共用 `backend/agent_api.py`；原 `/api/*`
+保留 Web 使用的裸数组和读页响应。端点表见 [DEPLOY.md](DEPLOY.md)。`clients/pi/pdf-rag-pi/`
+附带使用 v2 的 pi 编码 agent 扩展示例。
 
 ## 索引
 
@@ -171,7 +174,7 @@ cd web && pnpm install && pnpm dev    # 前端开发（Vite 代理 /api 到 8100
 cd web && pnpm build                  # 构建 → web/dist，Dockerfile 会 COPY 它
 ```
 
-**测试**：关键路径单测在 `tests/`（纯逻辑，不访问网络与索引，158 个用例）：
+**测试**：关键路径单测在 `tests/`（纯逻辑，不访问上游模型；文档/索引夹具仅在临时目录）：
 
 ```bash
 uv run python -m unittest discover -s tests

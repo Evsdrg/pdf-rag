@@ -6,10 +6,11 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 from fastmcp.tools.base import ToolResult
+from fastmcp.utilities.types import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from backend import agent_api
+from backend import agent_api, agent_images, library
 
 mcp = FastMCP("pdf-rag")
 
@@ -90,6 +91,21 @@ def pdf_rag_get_outline(file: str, max_level: int = 2, limit: int = 60,
     section_id可传read_section;没有目录时用grep,不猜测章节。
     """
     return _call(agent_api.get_outline, file=file, max_level=max_level, limit=limit, cursor=cursor)
+
+
+@mcp.tool(name="pdf_rag_render_page", output_schema=None)
+def pdf_rag_render_page(file: str, page: int, clip: list[float] | None = None,
+                        max_size: int = 1600) -> ToolResult:
+    """按需本地渲染PDF曲线/封装图/原理图,返回引用元数据和原生图片内容。
+
+    clip可选,为页面归一化坐标[x0,y0,x1,y1](0–1);max_size为最长边像素(256–2400)。
+    一次一页,最多2MB。不调用OCR/视觉服务,不会把base64写进JSON文本。
+    """
+    try:
+        metadata, data = agent_images.render(file, page, clip, max_size)
+        return ToolResult(content=[json.dumps(metadata, ensure_ascii=False), Image(data=data, format="jpeg")])
+    except library.LibraryError as error:
+        return ToolResult(content=json.dumps(agent_api.error_payload(error), ensure_ascii=False), is_error=True)
 
 
 @mcp.tool(name="pdf_rag_list_categories", output_schema=None)

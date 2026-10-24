@@ -5,8 +5,7 @@ description: 检索本地元器件手册库(已索引的 PDF/Markdown 数据手�
 
 # 元器件手册库检索
 
-`pdf_rag_*` 工具检索的是一份**已索引的手册语料库**(205+ 份 PDF/Markdown,按
-17 个类别分目录),**不是工作区文件系统**。查工作区里的代码/文档用内置 `grep`/`read`;
+`pdf_rag_*` 工具检索的是一份**已索引的 PDF/Markdown 手册语料库**，**不是工作区文件系统**。查工作区里的代码/文档用内置 `grep`/`read`;
 查元器件手册用这里的工具。两者搜的是完全不同的东西,不要混用。
 
 ## 先判断用哪条路
@@ -28,7 +27,12 @@ description: 检索本地元器件手册库(已索引的 PDF/Markdown 数据手�
    `snippet` 已经是"含答案的窗口",很多时候直接就能回答,不必读整页。
 2. **导航**(大手册):`pdf_rag_get_outline(file)` 看书签目录,找到目标章节页码。
 3. **读全**:`pdf_rag_read_page(file, page)`,或跨页规格表用
-   `pdf_rag_read_pages(file, "58-60")`。绝对最大值表、PDN 表常跨两页。
+   `pdf_rag_read_pages(file, "58-60")`。Markdown 长章优先用目录返回的 `section_id`
+   调用 `pdf_rag_read_section`，不凭标题文字猜标识。
+4. **续读**：文本返回是 `schema_version=2` JSON。`truncated=true` 时保持参数不变，
+   传入 `next_cursor`，直到返回完整；不要把首批当全文。游标失效需从首批重新读取。
+5. **看图**：曲线、封装尺寸、原理图用 `pdf_rag_render_page`，可传归一化裁剪坐标。
+   此工具只本地渲染，不调用 OCR；图片消费取决于客户端/模型能力。
 
 `search` 返回的 `file` 字段是**库内相对路径**(如 `02_存储/C2456252_...PDF`),
 直接原样传给读页工具即可,不要拼接、不要加前缀。
@@ -45,8 +49,11 @@ description: 检索本地元器件手册库(已索引的 PDF/Markdown 数据手�
 - **`degraded` 字段**:`search` 的返回里若 `degraded` 非空,说明嵌入或重排服务不可用、
   走了降级路径,结果可能不完整。这时应说明不确定性,或改用 `pdf_rag_grep`(它不依赖
   嵌入服务)。
-- **别猜型号**:不确定库里有没有某份手册,先用 `pdf_rag_list_files`(可按 category
-  过滤)确认,而不是假设它存在。
+- **别猜型号**：`identity=unconfirmed` 只表示返回文档未确认型号，不代表全库不存在。
+  重排分不是正确率概率。可用 `pdf_rag_list_files(model_no=...)` 筛选确认并按游标翻页。
+- **计数与页号**：grep 的 `indexed_matches` 包含索引重复，不是印刷页次数；PDF `page`
+  是物理页，Markdown 是一级标题伪页；文件列表的 `pages` 是索引最大页号。
+- **提取告警**：检查 `warnings`，OCR 失败保留原生文本；乱码单位、公式和曲线不能靠猜测修复。
 
 ## 类别目录(17 个)
 

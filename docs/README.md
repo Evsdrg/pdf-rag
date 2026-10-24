@@ -15,6 +15,7 @@
 | 文档 | 用途 |
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 分层、检索与索引流水线、配置边界、关键不变量；改代码前先读 |
+| [MCP-PROTOCOL.md](MCP-PROTOCOL.md) | 面向 Agent 的响应、错误、分页、章节、来源引用和页图协议 |
 | [VECTOR-PARTITION.md](VECTOR-PARTITION.md) | 向量按模型分区的设计、迁移与兼容性 |
 
 ## 实验与验证

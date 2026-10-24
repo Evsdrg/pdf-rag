@@ -21,10 +21,12 @@
                  │                    │                      │
                  └────────┬───────────┴──────────────────────┘
                           ▼
- 传输层      backend/main.py (FastAPI, 28 端点)   ← 只做 参数→调用→序列化
+ 传输层      backend/main.py / agent_routes.py (FastAPI) ← 参数→调用→序列化
                           │
                           ▼
- 领域层      backend/library.py   ← 读页/精确检索/元数据聚合,与传输无关
+ 领域层      backend/agent_api.py ← MCP/REST v2 返回、分页与诊断
+             backend/agent_documents.py / agent_grep.py / agent_images.py ← 按需读取能力
+             backend/library.py   ← 旧读页/精确检索/元数据聚合,与传输无关
              backend/retrieval.py ← 检索核心
              backend/vecstore.py  ← 向量分区
              backend/bundle.py    ← 数据包
@@ -37,11 +39,11 @@
 **依赖只能向下**。三条硬规则：
 
 1. **领域层返回 Python 原生结构，不返回 JSON 字符串**。序列化交给传输层；可预期错误
-   抛 `LibraryError` 子类（带 `status`），由 MCP 转成 `{"error":...}`、HTTP 映射成 4xx。
-   这条规则来自一个实际教训：`read_page` 曾在两侧各写一份，错误文案靠人工对齐，
-   后来出现行为漂移。
-2. **MCP 与 HTTP 共用 `library.py`，不各自实现**。`MCP_INPROC=1`（默认）时两者同进程，
-   连连接与表句柄都共享同一份单例。
+   抛 `LibraryError` 子类（带 `status/code/details`）。MCP 返回单份 JSON 文本并设置
+   `isError`，REST v2 映射为 4xx；旧 `/api/page` 保留 body 内错误的兼容形状。
+2. **MCP 与 HTTP v2 共用 `agent_api.py`，不各自实现**。底层复用 `library`、文档读取器
+   和检索核心。旧 REST 返回形状保留；新协议及输出预算见 [MCP-PROTOCOL.md](MCP-PROTOCOL.md)。
+   `MCP_INPROC=1`（默认）时连接与表句柄仍共享同一份单例。
 3. **`vecstore` 依赖 `library`，不反向**。表名列表这类薄工具放在 `library`，
    因为 `vecstore` 已经用它的 `scan_arrow`，反向导入会成环。
 

@@ -1,8 +1,10 @@
 """Agent 协议的 HTTP 适配;旧 /api/* 响应形状保持不变。"""
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+import json
 
-from . import agent_api
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse, Response
+
+from . import agent_api, agent_images
 
 router = APIRouter(prefix="/api/v2")
 
@@ -52,6 +54,19 @@ def files(category: str = "", file: str = "", model_no: str = "", kind: str = ""
           limit: int = 30, cursor: str = ""):
     return _call(agent_api.list_files, category=category, file=file, model_no=model_no,
                  kind=kind, limit=limit, cursor=cursor)
+
+
+@router.get("/render")
+def render(file: str, page: int, clip: str = "", max_size: int = 1600):
+    def build():
+        return agent_images.render(file, page, agent_images.parse_clip(clip), max_size)
+    result, status = agent_api.invoke(build)
+    if status != 200:
+        return JSONResponse(result, status_code=status)
+    metadata, data = result
+    return Response(data, media_type=metadata["mime_type"],
+                    headers={"X-PDF-RAG-Metadata": json.dumps(metadata, ensure_ascii=True),
+                             "Cache-Control": "no-store"})
 
 
 @router.get("/categories")

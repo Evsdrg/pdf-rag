@@ -49,6 +49,8 @@ jobs:
       - name: 安装依赖
         working-directory: web
         run: pnpm install --frozen-lockfile
+      - name: pi 扩展适配测试
+        run: node --experimental-strip-types --test clients/pi/pdf-rag-pi/tests/adapter.test.mjs
       - name: 运行测试
         working-directory: web
         run: pnpm test
