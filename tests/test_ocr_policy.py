@@ -256,7 +256,7 @@ class PolicyIntegrationTest(unittest.TestCase):
             with document([SPARSE, DENSE, DENSE, DENSE]) as doc:
                 with patch("backend.ocr.ocr_image", side_effect=fail):
                     _, err = doc_utils.read_page_text(doc, 1)
-            self.assertIn("OCR failed", err)
+            self.assertIn("OCR 调用失败", err)
             self.assertFalse(paths[0].parent.exists())
 
     def test_extraction_state_keeps_ocr_counts_and_warnings(self):

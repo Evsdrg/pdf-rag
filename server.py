@@ -1,210 +1,105 @@
-"""PDF-RAG 的 MCP 服务(FastMCP)。
-
-工具命名统一用 `pdf_rag_` 前缀,与 agent 框架自带命令(read/grep/ls/find)明确区分 ——
-框架内置的 `grep` 搜的是**工作区文件系统**,本库的 `pdf_rag_grep` 搜的是**已索引的
-元器件手册语料**,两者同名会让模型选错工具。
-
-约定:
-* 所有工具都声明 output_schema=None 并返回 JSON 字符串。若返回结构化类型,
-  FastMCP 会同时发出 content 与 structuredContent 两份等价载荷,白白翻倍 token。
-* 检索类工具一律把 degraded 透出到结果里。历史上三处 except Exception: pass
-  把"嵌入/重排不可用"完全藏住了 —— 调用方看不出结果已被降级。
-* 读取/检索的实体逻辑在 backend/library.py(与 HTTP API 共用),本文件只做
-  「参数 → 调用 → 序列化」。
-"""
+"""MCP 传输适配:单份 JSON 文本,领域逻辑与 REST v2 共用。"""
 import json
 import os
 import sys
 from pathlib import Path
 
 from fastmcp import FastMCP
+from fastmcp.tools.base import ToolResult
 
-# 确保 backend 包可导入:无论以何种 cwd 启动(如 MCP 全局配置),都以本文件所在目录为项目根
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from backend import config, library, retrieval
+from backend import agent_api
 
 mcp = FastMCP("pdf-rag")
 
 
-def _json(obj) -> str:
-    return json.dumps(obj, ensure_ascii=False)
+def _call(function, **kwargs) -> ToolResult:
+    payload, status = agent_api.invoke(function, **kwargs)
+    return ToolResult(content=json.dumps(payload, ensure_ascii=False), is_error=status >= 400)
 
-
-def _get_table():
-    """表句柄(实现见 library.get_table,与 HTTP 侧共用同一单例)。
-
-    此前本文件有一份几乎逐字的副本,且**每次工具调用都重新 lancedb.connect()**;
-    收进 library 后连接也只建一次。
-    """
-    table = library.get_table()
-    if table is None:
-        raise RuntimeError("索引不存在,请先运行 ingest.py")
-    return table
-
-
-# ---------- 检索 ----------
 
 @mcp.tool(name="pdf_rag_search", output_schema=None)
 def pdf_rag_search(query: str, category: str = "", top_k: int = 5,
-                  file: str = "", max_per_doc: int = 0) -> str:
-    """在元器件手册库(已索引的手册语料)中做混合检索——与工作区的 grep/find 无关。
+                   file: str = "", max_per_doc: int = 0) -> ToolResult:
+    """在手册库做 BM25 + 型号子串 + 向量混合检索,不是工作区文件搜索。
 
-    这是首选入口:BM25 + 型号子串 + 向量三路召回,RRF 融合后重排,返回已定位到
-    答案的片段窗口。
-
-    query: 查询内容,如 "W25Q32 供电电压"(中文/英文均可)
-    category: 可选,按类别过滤,如 "02_存储"
-    top_k: 返回条数
-    file: 可选,只在文件名含该子串的文档内检索,如 "QMC6309"
-    max_per_doc: 同一文件最多返回几条(0=不限)
-
-    返回 JSON:results[] 每项含 file/page/snippet/score/rerank_score;
-    若 degraded 非空,说明走了降级路径,结果可能不完整。
+    query 支持中文/英文;category 按类别,file 按文件路径字面子串筛选。
+    返回 schema_version=2 的 JSON:results 含 file/page/snippet/score/rerank_score。
+    degraded/notice 标明降级;重排分是相关性信号,不是答案正确率。
+    file/page 可直接传给读页工具;max_per_doc 限制同一文件条数(0 使用服务配置)。
     """
-    table = _get_table()
-    diag: dict = {}
-    hits = retrieval.search(table, query, category=category or None, top_k=top_k,
-                            file=file or None,
-                            max_per_doc=max_per_doc, diagnostics=diag)
-    return _json({
-        "query": query, "count": len(hits),
-        "degraded": diag.get("degraded", []),
-        "notice": diag.get("notice", ""),
-        "counts": diag.get("counts", {}),
-        "cached": diag.get("cached", False),
-        "results": hits,
-    })
+    return _call(agent_api.search, query=query, category=category, top_k=top_k,
+                 file=file, max_per_doc=max_per_doc)
 
 
 @mcp.tool(name="pdf_rag_grep", output_schema=None)
 def pdf_rag_grep(pattern: str, category: str = "", file: str = "",
-                max_hits: int = 20, context: int = 60,
-                flex_separator: bool = True) -> str:
-    """在**手册库文本**里按字面/正则精确检索(不等于工作区的 grep,后者搜文件系统)。
+                 max_hits: int = 20, context: int = 60,
+                 flex_separator: bool = True) -> ToolResult:
+    """在已索引的手册文本中精确查符号/正则,不经过向量或上游模型。
 
-    适合查精确符号:如 "VDD_APC"、"IddHP"、"SMPA1"、"2\\.4MHz"。
-    这条路不经过向量检索,天然不受嵌入服务可用性影响,定位具体字面值最可靠。
-
-    flex_separator=True(默认):把模式里的下划线/空白视为等价(PDF 下标丢失,
-    同一符号常见 "VDD_APC"/"VDD APC" 两种形态)。
-    pattern 为正则;纯字面查找直接写字符串即可(特殊字符需转义)。
+    flex_separator 默认把下划线和空白视为等价;正则特殊字符需要转义。
+    返回 JSON results 与上下文,文件和页码可直接用于回读。
     """
-    table = _get_table()
-    return _json(library.grep_rows(table, pattern, category=category, file=file,
-                                   max_hits=max_hits, context=context,
-                                   flex_separator=flex_separator))
+    return _call(agent_api.grep, pattern=pattern, category=category, file=file,
+                 max_hits=max_hits, context=context, flex_separator=flex_separator)
 
-
-# ---------- 读取 ----------
 
 @mcp.tool(name="pdf_rag_read_page", output_schema=None)
-def pdf_rag_read_page(file: str, page: int) -> str:
-    """读取手册某页的完整原文(与工作区的 read 不同,这里读的是库内手册,非工作区文件)。
+def pdf_rag_read_page(file: str, page: int) -> ToolResult:
+    """读取库内文档页,返回 JSON file/page/text/ocr/warnings,错误含稳定 code。
 
-    file: pdf_rag_search 返回的 file 字段(库内相对路径);page: 页码,从 1 开始。
-    支持 PDF 与 Markdown(.md 按一级标题分页);扫描页自动回退 OCR。
+    PDF 为从 1 开始的物理页;Markdown 按一级标题分页(page_basis=h1_section)。
+    低文本页按内容策略调用 OCR;OCR 失败保留原生文本并给出警告。
     """
-    try:
-        text, _err = library.read_page_raw(config.PDF_ROOT, file, page)
-        return text
-    except library.LibraryError as e:
-        return str(e)
+    return _call(agent_api.read_page, file=file, page=page)
 
 
 @mcp.tool(name="pdf_rag_read_pages", output_schema=None)
-def pdf_rag_read_pages(file: str, pages: str) -> str:
-    """一次读取手册多页(file: 库内相对路径; pages: 如 "62,63,64" 或 "62-65")。
+def pdf_rag_read_pages(file: str, pages: str) -> ToolResult:
+    """一次读多页,如 pages="62,63" 或 "62-65";返回 JSON pages 数组。
 
-    规格表常跨页(绝对最大值表、PDN 表跨两页),逐页读要多跑数次。
+    单页越界在对应项给出 error,其余页继续。PDF 页号不等于页内印刷页码。
     """
-    try:
-        return _json(library.read_pages(config.PDF_ROOT, file, pages))
-    except library.LibraryError as e:
-        return _json({"error": str(e)})
+    return _call(agent_api.read_pages, file=file, pages=pages)
 
 
 @mcp.tool(name="pdf_rag_get_outline", output_schema=None)
-def pdf_rag_get_outline(file: str) -> str:
-    """取手册的书签/标题目录(章节 + 页码),用于在大手册里导航后再精确读页。
+def pdf_rag_get_outline(file: str) -> ToolResult:
+    """取 PDF 书签/Markdown 标题目录,返回 JSON outline 与页码。
 
-    支持 PDF 与 Markdown。无目录时 note 会提示改用 pdf_rag_grep 定位关键节标题。
+    没有目录时 note 提示使用 pdf_rag_grep,不猜测章节。
     """
-    try:
-        return _json(library.doc_outline(config.PDF_ROOT, file))
-    except library.LibraryError as e:
-        return _json({"error": str(e)})
+    return _call(agent_api.get_outline, file=file)
 
-
-# ---------- 索引信息 ----------
 
 @mcp.tool(name="pdf_rag_list_categories", output_schema=None)
-def pdf_rag_list_categories() -> str:
-    """列出手册库中的所有类别目录。"""
-    return _json(library.categories(_get_table()))
+def pdf_rag_list_categories() -> ToolResult:
+    """列出已索引手册类别,返回 JSON categories 与 count,不访问上游模型。"""
+    return _call(agent_api.list_categories)
 
 
 @mcp.tool(name="pdf_rag_list_files", output_schema=None)
-def pdf_rag_list_files(category: str = "") -> str:
-    """列出手册库中已索引的文件及其元数据(category: 可选,按类别过滤)。
+def pdf_rag_list_files(category: str = "") -> ToolResult:
+    """列出已索引文件和元数据,返回 JSON files 与 count。
 
-    返回 file/category/model_no/product/pages/chunks —— 只给路径无法判断
-    某份文档是否已入库、有多少页,会导致不必要地去本地翻手册。
+    pages_basis=indexed_max_page 表示 pages 是索引内最大页号,不是文件物理总页数。
     """
-    files = library.files_index(_get_table())
-    if category:
-        files = [f for f in files if f["category"] == category]
-    return _json(files)
+    return _call(agent_api.list_files, category=category)
 
 
 @mcp.tool(name="pdf_rag_status", output_schema=None)
-def pdf_rag_status() -> str:
-    """手册库索引与依赖的健康状态。
-
-    只读本地状态:索引规模、最后入库时间、OCR 配置与其**最近一次真实调用**的结果。
-    **不主动探测任何上游服务**(嵌入/重排/OCR)——那会给服务商带来无意义负载,
-    且可用性不会在几秒内变化。需要验证上游是否可用,跑一次真实查询/读页即可。
-    结果是"结果质量突然变差"时的排查第一站:看 ocr.last_call.ok 与检索降级信息。
-    """
-    from datetime import datetime
-    out: dict = {"pdf_root": config.PDF_ROOT, "db_path": config.DB_PATH}
-    try:
-        table = _get_table()
-        rows = library.scan_columns(table, ["file", "category"])
-        files = {r["file"] for r in rows}
-        out.update({
-            "indexed": True,
-            "chunks": len(rows),
-            "files": len(files),
-            "categories": len({r["category"] for r in rows if r["category"]}),
-        })
-    except Exception as e:
-        out.update({"indexed": False, "error": str(e)})
-        return _json(out)
-
-    hist_file = Path(config.DB_PATH).parent / "ingest_history.json"
-    try:
-        hist = json.loads(hist_file.read_text(encoding="utf-8"))
-        out["last_ingest"] = hist[-1].get("time") if hist else None
-    except Exception:
-        out["last_ingest"] = None
-
-    from backend import ocr as ocr_mod
-    out["ocr"] = ocr_mod.status()   # 配置 + 最近一次真实调用;零网络请求
-    out["checked_at"] = datetime.now().isoformat(timespec="seconds")
-    return _json(out)
+def pdf_rag_status() -> ToolResult:
+    """只读索引规模与 OCR 最近一次真实调用记录,不主动探测任何上游服务。"""
+    return _call(agent_api.status)
 
 
 if __name__ == "__main__":
-    # 传输方式可配:默认 stdio(本地 MCP 客户直接拉起);容器/远程场景用
-    # MCP_TRANSPORT=http + MCP_HOST/MCP_PORT 走 streamable HTTP(.env 即可配置,
-    # import backend.config 时 load_dotenv 已把它们载入环境)。
     transport = os.getenv("MCP_TRANSPORT", "stdio")
-    kwargs: dict = {}
+    kwargs = {}
     if transport != "stdio":
-        kwargs = dict(
-            host=os.getenv("MCP_HOST", "0.0.0.0"),
-            port=int(os.getenv("MCP_PORT", "8101")),
-            path=os.getenv("MCP_PATH", "/mcp"),
-        )
+        kwargs = dict(host=os.getenv("MCP_HOST", "0.0.0.0"),
+                      port=int(os.getenv("MCP_PORT", "8101")),
+                      path=os.getenv("MCP_PATH", "/mcp"))
     mcp.run(transport=transport, **kwargs)

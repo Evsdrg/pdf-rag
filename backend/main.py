@@ -16,7 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import bundle, config, doc_utils, library, retrieval, vecstore
+from . import agent_routes, bundle, config, doc_utils, library, retrieval, vecstore
 
 ROOT = Path(__file__).resolve().parent
 
@@ -47,6 +47,7 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PDF-RAG API", lifespan=_lifespan)
+app.include_router(agent_routes.router)
 
 
 class SelectiveGZip:

@@ -22,15 +22,22 @@ from . import config, doc_utils
 
 
 class LibraryError(Exception):
-    """可预期的调用错误(参数非法 / 页码越界)。HTTP 侧映射成 4xx。"""
+    """可预期的调用错误;旧接口保留文案,v2 接口同时返回稳定错误码。"""
 
     status = 400
+    code = "INVALID_ARGUMENT"
+
+    def __init__(self, message: str, *, code: str | None = None, details: dict | None = None):
+        super().__init__(message)
+        self.code = code or self.code
+        self.details = details or {}
 
 
 class NotFound(LibraryError):
     """目标文件不存在 —— HTTP 侧映射成 404。"""
 
     status = 404
+    code = "FILE_NOT_FOUND"
 
 
 # ---------- 连接与表句柄(两侧共用) ----------
