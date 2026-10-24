@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""构建交付包:项目源码 + 原始手册 PDF + 解析后数据 + 预处理索引,打成可分发的包。
+"""构建交付包:项目源码 + 原始手册 PDF/Markdown + 解析后数据 + 预处理索引。
 
 产出(默认落在 dist/ 下,该目录已被 .gitignore 忽略):
 
@@ -71,7 +71,7 @@ def stage_index(dest: Path) -> None:
 
 
 def stage_docs(dest: Path) -> tuple[int, list[str]]:
-    """按索引里记录的相对路径拷 PDF —— 保证包内每个被索引引用的文件都在。
+    """按索引里记录的相对路径拷 PDF/Markdown —— 保证包内每个被索引引用的文件都在。
 
     返回 (拷贝份数, 索引引用但磁盘缺失的文件)。
     """
@@ -118,18 +118,22 @@ def write_manifest(dest: Path, docs: int) -> None:
         f"解析数据块  : {n_chunks} 条({PARSED_DIRNAME}/chunks.jsonl)",
         "",
         "包内三份数据:",
-        f"  {DOCS_DIRNAME}/        原始 PDF(未改动)",
+        f"  {DOCS_DIRNAME}/        原始手册 PDF/Markdown(未改动)",
         f"  {PARSED_DIRNAME}/      解析后数据:块级 jsonl + 按页重建的可读文本",
         f"  {INDEX_DIRNAME}/       向量索引(含全文索引),可直接检索,无需重建",
         "",
-        "-- 索引所用嵌入服务(向量与模型强绑定) --",
+        "-- 当前嵌入/重排服务(新写入向量分区使用) --",
         f"EMBED_BASE_URL = {provider['embed_base_url']}",
         f"EMBED_MODEL    = {provider['embed_model']}",
         f"RERANKER_MODEL = {provider['reranker_model']}",
         "",
-        "⚠️ 部署时 .env 的 EMBED_MODEL 必须与上表一致,否则向量不可比、检索会静默变差;",
-        "   确需换模型则必须全量重建索引:uv run python -m backend.ingest --rebuild",
-        "⚠️ API 密钥不随包提供,需自行在 .env 填写 EMBED_API_KEY。",
+        "查询按索引内 vec_meta 的各分区契约生成向量,不要求当前 EMBED_MODEL 匹配所有旧分区。",
+        "但 vector_models_priority 留空时只使用当前模型分区,默认部署应与目标分区保持一致。",
+        "换模型后普通增量只覆盖变化文件;完整迁移先设当前模型,再执行:",
+        "  uv run python -m backend.ingest --rebuild-vectors <同名模型>",
+        "随后配置 vector_models_priority 并检查覆盖率。",
+        "--rebuild 只重建主表文本,不是模型迁移命令。",
+        "API 密钥不随包提供,需自行在 .env 填写 EMBED_API_KEY。",
         "",
         "部署步骤见 DEPLOY.md。",
     ]

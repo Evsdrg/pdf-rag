@@ -2,211 +2,115 @@
 
 [![CI](https://github.com/Evsdrg/pdf-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Evsdrg/pdf-rag/actions/workflows/ci.yml)
 
-本地元器件手册检索：对 PDF/Markdown 手册库做**语义向量 + 全文(FTS) + 子串**三路混合检索
-（RRF 融合 → 同文档去重 → 可选重排），支持表格识别与扫描页 OCR 兜底，通过 **Web 界面**、
-**MCP 工具**、**REST API** 三种方式对外提供服务。
+本地元器件手册检索：对 PDF/Markdown 手册库做**语义向量 + 全文（FTS）+ 型号子串**三路混合检索，支持表格提取、低文本页 OCR、页图读取，并通过 Web、MCP 和 REST 对外提供服务。
 
-```
-                     ┌──────────────┐
-   浏览器   ──────▶  │  Web UI      │ Vue 3 + naive-ui（打进镜像，由后端托管）
-                     ├──────────────┤
-  MCP 客户端 ─────▶  │  /mcp        │ 10 个 pdf_rag_* 工具（默认内嵌进后端进程）
-  Web / pi REST ─▶  │  /api/v2/*   │ 与 MCP 共用 backend/agent_api.py
-                     ├──────────────┤
-                     │ LanceDB      │ 向量 + FTS 全文索引
-                     └──────────────┘
+目标不是泛泛地“找到一份手册”，而是定位**某个参数在哪份文档、哪一页、哪一段**，并保留可继续核对的来源引用。
+
+```text
+浏览器       → Web UI（Vue 3，由后端托管）
+MCP 客户端   → /mcp（10 个 pdf_rag_* 工具）
+Web / pi     → /api/v2/*（统一查询与读取协议）
+管理接口     → /api/*（索引、配置、数据包和统计）
+                    │
+                    └→ LanceDB：主表文本/FTS + 按模型划分的向量分区
 ```
 
 ## 快速上手
 
+要求 Python 3.13 和 [uv](https://docs.astral.sh/uv/)。前端产物已随仓库提供，仅使用系统时不需要 Node.js。
+
 ```bash
-cp .env.example .env        # 至少填 EMBED_API_KEY
-uv sync                     # 装依赖（Python 3.13）
-uv run run_backend.py       # http://127.0.0.1:8100（含 Web UI 与 MCP）
+cp .env.example .env        # 填入自己的嵌入服务配置和 EMBED_API_KEY
+uv sync
+uv run run_backend.py       # http://127.0.0.1:8100
 ```
 
-手册放进 `pdf/`（或 `.env` 的 `PDF_ROOT`），然后在 Web「索引状态」页点**增量索引**。
+1. 将 PDF/Markdown 手册放入 `pdf/`，或在 `.env` 中设置 `PDF_ROOT`。
+2. 打开 Web「索引状态」，手动触发**增量索引**。
+3. 在「检索测试」查询，或使用 MCP / REST 读页与检索。
 
-| 文档 | 内容 |
+没有嵌入凭据时仍可使用全文和精确检索，但向量通道会明确降级。密钥只放在环境层，不进入索引、数据包、配置页面或公开文档。配置详见 [配置说明](docs/CONFIGURATION.md)。
+
+## 按任务查文档
+
+| 要做什么 | 入口 |
 |---|---|
-| [docs/README.md](docs/README.md) | **文档索引**：架构设计、向量分区、实验记录与维护约定 |
-| [DEPLOY.md](DEPLOY.md) | 部署指南、REST API 全表、索引与数据包运维（内网部署记录 `DEPLOY-NAS.md` 仅留本机） |
-| [THIRD-PARTY.md](THIRD-PARTY.md) | 依赖许可清单与第三方声明 |
+| 安装、启动、接入 MCP | [部署指南](DEPLOY.md) |
+| 配置模型、路径、OCR 与并发 | [配置说明](docs/CONFIGURATION.md) |
+| 增量索引、数据包迁移、故障排查 | [运维手册](docs/OPERATIONS.md) |
+| 调用 MCP / REST、理解游标和错误 | [MCP/Agent 协议](docs/MCP-PROTOCOL.md) · [HTTP API 参考](docs/HTTP-API.md) |
+| 修改检索、索引或存储 | [架构设计](docs/ARCHITECTURE.md) · [向量分区](docs/VECTOR-PARTITION.md) |
+| 对比检索质量、查阅历史实验 | [评测与实验记录](docs/BENCHMARKS.md) |
+| 接入 pi 编码 agent | [pi 扩展](clients/pi/pdf-rag-pi/README.md) |
+| 核对许可证 | [第三方声明](THIRD-PARTY.md) |
 
-## 目录结构
+完整文档地图和维护约定见 [docs/README.md](docs/README.md)。
 
-```
+## 主要能力
+
+- **三路召回与重排**：FTS、型号子串和向量候选经 RRF 融合、同文档去重和可选重排；降级原因显式返回。
+- **可追溯结果**：命中带文件、物理页/伪页、块标识和偏移；表格和曲线可继续回读原文或页图。
+- **有界 Agent 输出**：文件和目录分页，长页、跨页与章节支持游标续读，错误使用稳定错误码。
+- **保守 OCR**：根据整份文档画像、页面内容、图片和矢量特征决定是否请求 OCR；证据不足时保留 OCR。
+- **独立并发**：本地解析进程与整轮 OCR 通路分别配置，不层层相乘；运行中的任务不动态扩容。
+- **多模型向量分区**：主表文本与向量解耦，每个分区记录模型、维度和输入类型契约，旧分区可保留。
+
+设计理由与不能破坏的不变量见 [架构设计](docs/ARCHITECTURE.md)。
+
+## 代码导航
+
+```text
 backend/
-  main.py         FastAPI 应用与全部 HTTP 接口
-  config.py       配置中心：环境类常量 + 可调参数注册表（Spec，含中文 label）
-  library.py      读页、精确检索、元数据缓存的共享实现（MCP 与 HTTP 共用）
-  retrieval.py    检索核心：三路召回 + RRF 融合 + 去重 + 重排 + 片段定位
-  ingest.py       索引构建（多进程提取 + 批量嵌入）
-  doc_utils.py    PDF/Markdown 文本提取、表格 markdown 化
-  ocr.py          OCR 后端抽象（local Paddle / remote VLM）+ 调用状态记录
-  ocr_policy.py   低文本页的本地内容判定（不调用模型）
-  ocr_queue.py    索引期共享的有界 OCR 请求通路
-  bundle.py       数据包（.tar.zst）导出/导入
-  vecstore.py     向量分区:uid、分区表、覆盖率(见 docs/VECTOR-PARTITION.md)
-server.py         MCP 服务（默认内嵌；MCP_INPROC=0 时独立进程）
-ocr_service.py    本机 OCR 服务（独立进程，依赖 ocr-env，可选）
-run_backend.py    后端守护：崩溃自愈 + 单例锁
-eval_retrieval.py 检索质量评测
-eval_queries.json 评测集（55 条）
-docs/BENCHMARKS.md 评测结果与历次实验记录
-DEPLOY.md         部署指南（裸机 / 交付包 / API 参考）
-tools/            开发期诊断与维护脚本
-web/              前端源码（Vue 3 + Vite + naive-ui）
-index.lance/      LanceDB 索引（运行时生成）
-data/             运行时配置覆盖值与导出包（运行时生成）
+  main.py              管理、统计、原文件和应用装配
+  agent_routes.py      /api/v2 传输层
+  agent_api.py         统一响应、错误、诊断与参数边界
+  agent_documents.py   按需读页、目录、章节和续读缓存
+  agent_grep.py        精确匹配与上下文聚合
+  agent_images.py      本地 PDF 页图
+  agent_paging.py      输出预算和版本绑定游标
+  retrieval.py         三路召回、融合、去重、重排和片段
+  ingest.py            提取、嵌入与索引写入
+  library.py           表句柄、元数据、源文件覆盖和参数解析
+  vecstore.py          uid、向量分区、契约与覆盖率
+  doc_utils.py         PDF/Markdown 提取和表格处理
+  ocr*.py              OCR 策略、后端与索引期请求队列
+  bundle.py            数据包导出/导入
+server.py              MCP 工具适配
+web/                   Vue 3 + TypeScript + Vite 前端
+clients/pi/            pi 原生扩展示例
+tests/                 离线关键路径测试
+docs/                  设计、接口、配置、运维和实验文档
 ```
 
-各模块**为什么这样分层、彼此依赖方向、哪些约束不能破**，见
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
-
-## 环境要求
-
-- **Python 3.13** + [uv](https://docs.astral.sh/uv/)
-- **Node.js**（仅前端开发/构建；镜像里已有构建好的 `web/dist`）
-- **嵌入 / 重排服务**：OpenAI 兼容的 `/v1/embeddings` 与 `/v1/rerank`
-- **OCR（可选）**：本机 Paddle 需独立 `ocr-env`（约 4.9GB）；也可用远程视觉模型，无需本地环境
-
-## 配置
-
-配置分两层，边界是**密钥只在环境层**。
-
-**① 环境层**（`.env`，改完需重启）：
-
-```ini
-PDF_ROOT=/path/to/manuals                     # 留空则用 <项目>/pdf
-DB_PATH=/path/to/index.lance                  # 留空则用 <项目>/index.lance
-EMBED_BASE_URL=https://api.example.com/v1     # OpenAI 兼容 /v1
-EMBED_API_KEY=                                # 只从环境读，绝不入库/入包/进前端
-EMBED_MODEL=qwen3-embedding-8b                # 与索引强绑定，必须与建库时一致
-EMBED_DIMENSIONS=768                          # 与索引维度一致，建库/查询两侧都显式发送
-RERANKER_MODEL=rerank-v4.0-pro
-OCR_API_KEY=                                  # remote OCR 密钥（同上，只在环境层）
-ADMIN_TOKEN=                                  # 留空则 /api/admin/* 一律 403
-```
-
-**② 可调参数层**（56 项 / 10 组）：Web「配置中心」页修改并持久化到
-`data/settings.json`。检索参数即时生效；索引并发在下一轮任务生效，不改变正在运行的池。
-OCR 地址/模型/提示词在此层（按 `ocr_backend` 联动），但 `OCR_API_KEY`
-永远只在环境层；**向量维度必须与索引一致**（当前 768，随数据包导出），不符时向量通道明确
-降级并记日志。
-
-> 设计约束：系统**不以任何方式定时或主动探测**嵌入/重排/OCR 服务的可用性；OCR 状态展示
-> 最近一次真实调用的结果。要确认上游可用，跑一次真实检索即可。这类"刻意不做"的决定
-> 见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §7。
-
-## 使用
-
-**Web**（6 个页面）：索引状态（触发索引/实时进度）、资料库（统计与历史）、文件库（筛选与
-提取质量体检）、检索测试（三模式/重排开关/命中页预览）、配置中心（56 项）、数据管理
-（配置与数据包导入导出）。
-
-**MCP**：10 个工具，统一 `pdf_rag_` 前缀（与客户端自带的 `grep`/`read` 区分——后者搜工作区
-文件，这里搜手册语料）。文本返回为 `schema_version=2` 的单份 JSON；长内容有输出预算和续读游标。
-
-| 工具 | 用途 |
-|---|---|
-| `pdf_rag_search` | 混合检索，返回片段、块引用、降级和型号身份提示 |
-| `pdf_rag_grep` | 不走向量的精确检索，按页聚合不同上下文，支持分页 |
-| `pdf_rag_read_page` / `pdf_rag_read_pages` | 读页，统一文本预算和续读；低文本页按策略 OCR |
-| `pdf_rag_get_outline` / `pdf_rag_read_section` | 有界目录与按章节标识读取，避免整个 AT 章节铺满上下文 |
-| `pdf_rag_list_categories` / `pdf_rag_list_files` | 类别与可筛选、分页的已索引文件元数据 |
-| `pdf_rag_render_page` | 本地按需渲染曲线、封装图、原理图，不调用模型 |
-| `pdf_rag_status` | 索引与 OCR 最近真实调用状态，**不探测上游** |
-
-返回结构、游标、页号口径和兼容边界见 [MCP/Agent 协议](docs/MCP-PROTOCOL.md)。
-
-**REST**：Web 和 pi 的查询/读取统一走 `/api/v2/*`，与 MCP 共用 `backend/agent_api.py`。
-旧查询/读取接口已删除，不维护兼容响应。索引、配置、数据包管理接口仍在 `/api/*`；
-端点表见 [DEPLOY.md](DEPLOY.md)，pi 扩展示例在 `clients/pi/pdf-rag-pi/`。
-
-## 索引
+## 索引与数据包
 
 ```bash
-uv run python -m backend.ingest            # 增量（按 MD5 跳过未变化文件）
-uv run python -m backend.ingest --rebuild  # 全量重建（换嵌入模型后必须）
+uv run python -m backend.ingest            # 增量：处理新增/变化/删除的文件
+uv run python -m backend.ingest --rebuild  # 重建主表文本；不是换模型的专用命令
 ```
 
-也可在 Web「索引状态」触发，或在「文件库」勾选指定文件重跑（含 OCR）。长期增量会产生
-索引碎片，定期用 `tools/compact_index.py` 整理（见 [DEPLOY.md](DEPLOY.md)）。
+`--rebuild-vectors`、碎片整理、指定文件重跑及数据包迁移属于运维操作，见[运维手册](docs/OPERATIONS.md)。系统不会仅因文档或配置改变而自动重建索引。
 
-低文本页先经纯本地内容筛选，再决定是否 OCR；入库与读页共用判定。可用
-`ocr_smart_filter=false` 恢复仅按字数触发。离线对照工具
-`python tools/audit_ocr_policy.py <手册目录>` 不调用任何模型；规则与边界见
-[架构设计 §5.1](docs/ARCHITECTURE.md#51-低文本页的-ocr-判定)。改策略不会自动重提取已有索引。
-
-Web「配置中心 → 索引与并发」可独立调整 **本地解析进程数**（`extract_workers`，默认 4）
-与 **索引 OCR 并发数**（`ocr_workers`，默认 4），范围均为 1–32。
-前者同时处理不同文档的文本、表格与页面渲染；后者为整轮索引共用的页面请求通路，
-同一份 PDF 也可多页并发，**不会按解析进程数相乘**。本地进程按 CPU/内存配置，
-OCR 通路还受服务商限流或本地 OCR 算力约束；两项保存后均在下一轮索引生效。
-读页接口不属于索引请求池，因此此上限不是全服务所有 OCR 的总上限。
-
-配置中心默认展示常用项，按「服务与模型 / 索引与并发 / OCR 与提取 / 检索效果 /
-性能与连接」分类，高级项默认收起。可跨分类搜索中文名称、说明或变量名；
-未保存项集中查看，切换分类保留草稿，保存、单项恢复默认与全部撤销沿用同一套状态。
-
-## 数据包（导出 / 导入）
-
-把**索引 + PDF + 配置**打成一个 `.tar.zst`，可在另一台机器完整复原；导入预检会比对包内
-与本地的服务配置，模型不一致时明确拒绝，不让新旧向量静默混用。命令与细节见
-[DEPLOY.md](DEPLOY.md)；**密钥不入包**。
-
-## 评测
-
-```bash
-uv run python eval_retrieval.py              # 55 条评测集（hand 10 / topic 4 / mined 41）
-```
-
-两级指标：`recall@k`（期望文档进没进 top-k）与 `snippet@1/@k`（片段是否含答案字面值——
-判别指标）。当前基线：**recall@5 100% / snippet@1 62% / snippet@5 91%**。重排器有固有
-随机性（±2pp），改动前后各跑两遍；评测方法、匹配规则与历次实验见
-[docs/BENCHMARKS.md](docs/BENCHMARKS.md)。
-
-## 开发
-
-```bash
-cd web && pnpm install && pnpm dev    # 前端开发（Vite 代理 /api 到 8100）
-cd web && pnpm build                  # 构建 → web/dist，Dockerfile 会 COPY 它
-```
-
-**测试**：关键路径单测在 `tests/`（纯逻辑，不访问上游模型；文档/索引夹具仅在临时目录）：
+## 开发与验证
 
 ```bash
 uv run python -m unittest discover -s tests
+cd web && pnpm install && pnpm test && pnpm build
+node --experimental-strip-types --test clients/pi/pdf-rag-pi/tests/adapter.test.mjs
+python tools/check_docs.py
 ```
 
-覆盖：路径边界防护、分块、版本合并去重、融合排序与平局裁决、缓存失效、file 过滤字面
-语义、片段窗口、向量分区（uid 唯一性 / slug 契约区分 / 覆盖率口径 / 索引保真）、
-数据包导入判断、OCR 内容筛选与读页/入库判定一致性。改动检索/索引逻辑后跑一遍；端到端质量另用 `eval_retrieval.py` 对比
-`snippet@1`；前端配置页可用 `cd web && pnpm test` 校验分类、搜索和并发入口，
-用 `pnpm build` 执行类型检查与构建。
-
-**持续集成**：推送或 PR 时 GitHub Actions 并行运行三份检查（见
-`.github/workflows/ci.yml`）——后端单测（Python 3.13 + uv）、前端测试与构建（pnpm）、
-文档链接与敏感信息检查（`python tools/check_docs.py`，本地也可直接跑）。
-全部零网络依赖，不访问任何模型服务。
+- 后端和客户端测试使用临时夹具或确定性替身，不请求上游模型。
+- 真实检索质量使用 `uv run python eval_retrieval.py` 评估；方法、环境和历史基线见[评测记录](docs/BENCHMARKS.md)，不要把离线协议测试当成准确率证明。
+- GitHub Actions 分别运行后端测试、前端测试与构建、文档检查；依赖安装仍需要可访问的软件包源。
+- `web/dist` 是 Docker 镜像直接使用的受跟踪构建产物，前端改动后需重新构建。
 
 ## 鸣谢
 
-- 感谢 [futureppo](https://api.futureppo.top/) 提供了几乎无限的免费向量化/重排序模型，
-  帮助本项目完成测试与调优。
+感谢 [futureppo](https://api.futureppo.top/) 提供向量化/重排序模型测试资源。
 
 ## 许可证
 
-本项目以 **GNU AGPL v3.0 或更高版本**（`AGPL-3.0-or-later`）发布，见 [LICENSE](LICENSE)。
-这不是偏好而是**依赖约束**：直接依赖的 PyMuPDF（MuPDF）为 AGPL-3.0 / 商业双许可，传染性
-使整体必须按 AGPL 分发。
+本项目采用 **GNU AGPL v3.0 或更高版本**（`AGPL-3.0-or-later`），见 [LICENSE](LICENSE)。直接依赖的 PyMuPDF（MuPDF）采用 AGPL-3.0 / 商业双许可；修改后对外提供网络服务时需注意 AGPL §13 的对应源码义务。
 
-| 场景 | 是否可以 |
-|---|---|
-| 自用 / 内部部署 | ✅ 可以 |
-| 修改后对外提供网络服务 | ✅ 可以，但须按 AGPL §13 向网络用户提供对应源码 |
-| 分发修改版 | ✅ 可以，但须同样以 AGPL 开放源码 |
-| 闭源 SaaS / 闭源分发 | ❌ 需要 Artifex 商业许可，或替换掉 PyMuPDF |
-
-依赖许可核对与第三方声明见 [THIRD-PARTY.md](THIRD-PARTY.md)。
+第三方手册的版权属于各厂商，本仓库不附带其再分发授权。依赖核对与分发边界见[第三方声明](THIRD-PARTY.md)。

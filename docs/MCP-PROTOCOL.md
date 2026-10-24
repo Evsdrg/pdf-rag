@@ -67,22 +67,11 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 - `GET /api/v2/render` 返回 JPEG 二进制，引用 JSON 位于 `X-PDF-RAG-Metadata`，不落盘、不缓存响应。
 - Markdown 不支持页图；是否能消费图片取决于客户端及其模型能力。
 
-## 6. REST v2 对照
+## 6. HTTP 对照与客户端
 
-| MCP 工具 | HTTP v2 |
-|---|---|
-| `pdf_rag_search` | `GET /api/v2/search?query=...` |
-| `pdf_rag_grep` | `GET /api/v2/grep?pattern=...` |
-| `pdf_rag_read_page` | `GET /api/v2/page?file=...&page=...` |
-| `pdf_rag_read_pages` | `GET /api/v2/pages?file=...&pages=...` |
-| `pdf_rag_read_section` | `GET /api/v2/section?file=...&section_id=...` |
-| `pdf_rag_get_outline` | `GET /api/v2/outline?file=...` |
-| `pdf_rag_list_files` | `GET /api/v2/files` |
-| `pdf_rag_list_categories` | `GET /api/v2/categories` |
-| `pdf_rag_status` | `GET /api/v2/status` |
-| `pdf_rag_render_page` | `GET /api/v2/render?file=...&page=...` |
+MCP 与 `/api/v2/*` 共用领域入口，参数名基本相同；`render.clip` 在 HTTP 查询中用 JSON 字符串表示。完整端点清单和管理接口见[HTTP API 参考](HTTP-API.md)，本文不重复维护另一份端点表。
 
-除 `render.clip` 在 HTTP 查询中用 JSON 字符串表示外，参数名与 MCP 相同。Web 与 pi 使用同一结构，不在客户端猜测旧数组响应。
+Web 与 pi 使用同一结构，不猜测旧数组响应。pi 安装与工具说明见[客户端文档](../clients/pi/pdf-rag-pi/README.md)。
 
 ## 7. 离线验收
 

@@ -1,8 +1,8 @@
 # 架构设计
 
 本文说明系统**为什么这样分层、每个边界守什么约束**。具体参数取值、实测数据、操作步骤
-不在本文展开——那些属于 [BENCHMARKS.md](BENCHMARKS.md)、[DEPLOY.md](../DEPLOY.md) 与
-[VECTOR-PARTITION.md](VECTOR-PARTITION.md)。
+不在本文展开——那些属于 [BENCHMARKS.md](BENCHMARKS.md)、[配置说明](CONFIGURATION.md)、
+[运维手册](OPERATIONS.md) 与 [VECTOR-PARTITION.md](VECTOR-PARTITION.md)。
 
 目标读者：要改代码、加功能、或评估这套系统能否满足新需求的人。
 
@@ -26,6 +26,7 @@
                           ▼
  领域层      backend/agent_api.py ← MCP/REST 返回、分页与诊断
              backend/agent_documents.py / agent_grep.py / agent_images.py ← 按需读取能力
+             backend/agent_paging.py ← 输出预算与版本绑定游标
              backend/library.py   ← 共享索引句柄/元数据/参数解析
              backend/retrieval.py ← 检索核心
              backend/vecstore.py  ← 向量分区
@@ -116,7 +117,7 @@ query
 主表 `chunks` **不含 vector 列**，向量放在 `vec_<slug>` 分区表。原因与完整设计见
 [VECTOR-PARTITION.md](VECTOR-PARTITION.md)，这里只给三条结论：
 
-- **一个块一个模型**是数据粒度，**一个模型一个分区**是存储粒度。分区可以只覆盖部分块。
+- **一次向量写入 = 一个块 × 一个模型**；一个块可在多个分区各有一份向量。分区可以只覆盖部分块。
 - **查询向量必须与该分区的契约成对**：用分区记录的 `model + dim + input_type_query`
   生成，不能用当前全局配置。三者任一不匹配都是跨向量空间检索。
 - **分区间绝不混算距离**。一个块在多个分区都命中时只计一次（按 uid 去重），否则
@@ -143,7 +144,7 @@ query
 ```
 
 **uid 是贯穿两侧的锚**：`sha256(file \x00 page \x00 block_seq)[:20]`。
-**text 不参与哈希**——实测 8561 块里有 9 个同页逐字相同的块，把 text 算进去会互相覆盖。
+**text 不参与哈希**——历史 8561 块数据中有 9 个同页逐字相同的块，把 text 算进去会互相覆盖。
 
 增量语义：只处理 md5 变化的文件，且**只写当前模型的分区**。所以换模型后点增量索引，
 效果就是"只给新模型补缺失的块"，旧模型的分区原样保留。
@@ -215,7 +216,7 @@ query
 
 | 不做 | 原因 |
 |---|---|
-| **不主动探测上游服务可用性** | 定时探活会给服务商带来无意义负载。OCR/嵌入的状态只反映**最近一次真实调用**的结果 |
+| **不主动探测上游服务可用性** | 定时探活会产生无意义负载。OCR 状态只反映最近一次真实调用；检索降级来自本次真实查询 |
 | 不缓存降级结果 | 降级可能是接口暂时故障，缓存住会让问题持续整个 TTL |
 | 不为每个模型单独建 FTS | FTS 与模型无关，留在主表 |
 | 不在同一次距离计算里混合不同模型的向量 | 向量空间不可比，相似度无意义 |
@@ -241,7 +242,8 @@ query
 | 需求 | 做法 |
 |---|---|
 | 加一个检索参数 | `config.py` 加 `Spec`，注意同步加入 `retrieval._CACHE_PARAM_KEYS` |
-| 加一个 HTTP 端点 | `main.py` 加路由，逻辑放 `library.py`（MCP 也能复用） |
+| 加一个查询/读取 HTTP 端点 | `agent_routes.py` 加路由，领域逻辑放 `agent_api.py`，与 MCP 共用 |
+| 加一个管理 HTTP 端点 | `main.py` 加路由，避免把管理状态混入统一查询协议 |
 | 换嵌入/重排模型 | 改环境变量；旧向量仍可用（分区按模型隔离），新文件走新模型 |
 | 加一种文档格式 | `doc_utils.py` 加读取器 + `ingest.iter_pdfs` 的后缀列表 |
 | 加一个 OCR 后端 | `ocr.py` 加分支，参数走 `config` 的 OCR 组 |
@@ -251,8 +253,11 @@ query
 
 | 文档 | 什么时候看 |
 |---|---|
-| [README.md](../README.md) | 上手、配置项含义、MCP 工具表 |
+| [README.md](../README.md) | 项目定位、上手与代码导航 |
+| [CONFIGURATION.md](CONFIGURATION.md) | 配置来源、密钥边界、模型切换与生效时机 |
+| [OPERATIONS.md](OPERATIONS.md) | 索引、数据包与故障排查 |
+| [MCP-PROTOCOL.md](MCP-PROTOCOL.md) / [HTTP-API.md](HTTP-API.md) | 接口字段与端点契约 |
 | [BENCHMARKS.md](BENCHMARKS.md) | **改检索/排序/模型之前**——含否定性结果，避免重复试错 |
-| [DEPLOY.md](../DEPLOY.md) | 部署、REST API 全表、索引与数据包运维 |
+| [DEPLOY.md](../DEPLOY.md) | 安装启动与 MCP 接入 |
 | [VECTOR-PARTITION.md](VECTOR-PARTITION.md) | 要动向量存储、多模型、打包逻辑时 |
 | [THIRD-PARTY.md](../THIRD-PARTY.md) | 许可证与依赖 |

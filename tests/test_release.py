@@ -21,6 +21,22 @@ class StageFrontendTest(unittest.TestCase):
                 build_release.stage_frontend(root / "stage")
             self.assertEqual((existing / "index.html").read_text(encoding="utf-8"),
                              "current build")
+class ManifestTest(unittest.TestCase):
+    def test_manifest_uses_partition_migration_semantics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "index.lance").mkdir()
+            (root / "parsed").mkdir()
+            provider = {"embed_base_url": "https://example.invalid/v1",
+                        "embed_model": "example-model", "reranker_model": "example-rerank"}
+            with patch.object(build_release.bundle, "provider_block", return_value=provider), \
+                 patch.object(build_release.bundle, "_chunk_count", return_value=1), \
+                 patch.object(build_release, "_git_rev", return_value="test-commit"):
+                build_release.write_manifest(root, 1)
+            text = (root / "MANIFEST.txt").read_text(encoding="utf-8")
+            self.assertIn("vec_meta", text)
+            self.assertIn("--rebuild-vectors", text)
+            self.assertNotIn("必须与上表一致", text)
 
 
 if __name__ == "__main__":

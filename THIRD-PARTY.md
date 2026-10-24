@@ -1,11 +1,12 @@
 # 依赖许可清单与第三方声明
 
-主许可证见 [README](README.md#许可证) 与 [LICENSE](LICENSE)。本文件是对已安装依赖的
-许可核对记录与第三方版权声明。
+主许可证见 [README](README.md#许可证) 与 [LICENSE](LICENSE)。本文件是对当前锁定环境
+（2026-10-24 复核）的许可记录与第三方版权声明。依赖版本变化后应重新核对，
+不把包数量当成长期不变的承诺。
 
 ## 依赖许可清单
 
-对已安装的 82 个包逐一核对 `dist-info`，**只有 PyMuPDF 是 copyleft**：
+对已安装的 82 个包逐一核对 `dist-info`，强 copyleft 为 PyMuPDF；MPL 的文件级弱 copyleft 另列：
 
 | 组件 | 许可证 | 对项目的影响 |
 |---|---|---|
