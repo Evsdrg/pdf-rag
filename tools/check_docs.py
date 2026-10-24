@@ -55,7 +55,11 @@ def check_links() -> list[str]:
 
 def check_secrets() -> list[str]:
     problems = []
+    # 跳过扫描器自身:PATTERNS 里就是这些敏感字面量的规则定义,扫描必命中。
+    self_path = Path(__file__).relative_to(ROOT).as_posix()
     for rel in tracked():
+        if rel == self_path:
+            continue
         path = ROOT / rel
         if not path.is_file() or not is_text(path):
             continue

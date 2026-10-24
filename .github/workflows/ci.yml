@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v7
         with:
           # 与 Dockerfile 的 uv 版本保持一致,保证 uv.lock 的解析行为相同
           version: "0.12.17"

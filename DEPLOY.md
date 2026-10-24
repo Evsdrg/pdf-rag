@@ -159,7 +159,8 @@ uv run python eval_retrieval.py
 > **想让 MCP 与后端共用进程**（省一个约 650 MiB 的 Python 进程，并让两侧共享
 > 元数据缓存）：在 `.env` 设 `MCP_INPROC=1`，MCP 会挂在后端同端口的 `/mcp` 路径下，
 > 客户端改用 `"type": "http", "url": "http://<host>:8100/mcp"`。
-> 这是当前生产（NAS）采用的形态，详见 [DEPLOY-NAS.md](DEPLOY-NAS.md)。
+> 这是当前生产（NAS）采用的形态。内网部署记录 `DEPLOY-NAS.md` 含内网地址与账号，
+> 仅存于部署机、不随仓库分发。
 
 ## 五、OCR 服务（可选）
 
