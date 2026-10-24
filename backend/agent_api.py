@@ -1,10 +1,11 @@
 """面向 Agent 的共享响应协议;MCP 和 REST v2 使用同一领域入口。"""
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
-from . import agent_documents, config, doc_utils, library, retrieval
+from . import agent_documents, agent_grep, config, library, retrieval
 from .agent_paging import bounded_items, fingerprint
 
 log = logging.getLogger("pdfrag.agent_api")
@@ -75,6 +76,7 @@ def list_files(category: str = "", file: str = "", model_no: str = "", kind: str
         raise library.LibraryError("kind 需为 pdf 或 md")
     table = require_table()
     files = library.files_index(table)
+    check_category(table, category)
     files = [{**f, "pages_basis": "indexed_max_page"} for f in files
              if (not category or f["category"] == category)
              and (not file or file.replace("\\", "/").casefold() in f["file"].casefold())
@@ -90,14 +92,41 @@ def list_categories() -> dict:
     return response(categories=values, count=len(values))
 
 
+def check_category(table, category: str):
+    if category and category not in library.categories(table):
+        raise library.LibraryError("该分类未在索引中找到,请先读取类别列表", code="CATEGORY_NOT_FOUND",
+                                   details={"category": category})
+
+
 def grep(pattern: str, category: str = "", file: str = "", max_hits: int = 20,
-         context: int = 60, flex_separator: bool = True) -> dict:
-    check_int(max_hits, "max_hits", 1, 200)
+         context: int = 60, flex_separator: bool = True, cursor: str = "") -> dict:
+    check_int(max_hits, "max_hits", 1, 100)
     check_int(context, "context", 0, 500)
-    if not pattern:
-        raise library.LibraryError("pattern 不可为空")
-    return response(**library.grep_rows(require_table(), pattern, category, file,
-                                       max_hits, context, flex_separator))
+    if not pattern or len(pattern) > 300:
+        raise library.LibraryError("pattern 需包含1–300个字符")
+    table = require_table()
+    check_category(table, category)
+    return agent_grep.grep(table, pattern, category, file, max_hits, context, flex_separator, cursor)
+
+
+def _identity(query: str, hits: list[dict]) -> tuple[list, list]:
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*", query)
+    tokens = [token for token in tokens if re.search(r"\d", token) and len(token) >= 4
+              and token.casefold() not in {"i2c", "i3c", "qspi", "uart1", "uart2", "gpio1"}
+              and not re.fullmatch(r"v\d+(?:[._-]\d+)*", token, re.I)]
+    if not tokens:
+        return [], []
+    identities = []
+    for token in dict.fromkeys(tokens):
+        matched = [hit["file"] for hit in hits if token.casefold() in
+                   (Path(hit["file"]).name + " " + hit.get("model_no", "")).casefold()]
+        identities.append({"token": token, "status": "matched" if matched else "unconfirmed",
+                           "files": list(dict.fromkeys(matched))})
+    warnings = []
+    if any(item["status"] == "unconfirmed" for item in identities):
+        warnings.append({"code": "MODEL_IDENTITY_UNCONFIRMED",
+                         "message": "返回文档未确认查询中的型号身份;相近结果不代表该型号存在"})
+    return identities, warnings
 
 
 def search(query: str, category: str = "", top_k: int = 5, file: str = "",
@@ -109,10 +138,15 @@ def search(query: str, category: str = "", top_k: int = 5, file: str = "",
     if mode not in ("mixed", "fts", "vector"):
         raise library.LibraryError("mode 需为 mixed、fts 或 vector")
     diagnostics = {}
-    hits = retrieval.search(require_table(), query, category=category or None,
+    table = require_table()
+    check_category(table, category)
+    hits = retrieval.search(table, query, category=category or None,
                             top_k=top_k, file=file or None, max_per_doc=max_per_doc,
                             mode=mode, rerank=rerank, diagnostics=diagnostics)
+    identities, warnings = _identity(query, hits)
     return response(query=query, count=len(hits), results=hits,
+                    identity=identities, warnings=diagnostics.get("warnings", []) + warnings,
+                    vector_partitions=diagnostics.get("vector_partitions", []),
                     degraded=diagnostics.get("degraded", []),
                     notice=diagnostics.get("notice", ""),
                     counts=diagnostics.get("counts", {}),

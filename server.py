@@ -36,14 +36,14 @@ def pdf_rag_search(query: str, category: str = "", top_k: int = 5,
 @mcp.tool(name="pdf_rag_grep", output_schema=None)
 def pdf_rag_grep(pattern: str, category: str = "", file: str = "",
                  max_hits: int = 20, context: int = 60,
-                 flex_separator: bool = True) -> ToolResult:
+                 flex_separator: bool = True, cursor: str = "") -> ToolResult:
     """在已索引的手册文本中精确查符号/正则,不经过向量或上游模型。
 
     flex_separator 默认把下划线和空白视为等价;正则特殊字符需要转义。
-    返回 JSON results 与上下文,文件和页码可直接用于回读。
-    """
+    每页一个results项,contexts保留不同匹配窗口;indexed_matches含索引重复,不等于印刷页次数。
+    max_hits限制页数(最多100),truncated时传next_cursor继续。"""
     return _call(agent_api.grep, pattern=pattern, category=category, file=file,
-                 max_hits=max_hits, context=context, flex_separator=flex_separator)
+                 max_hits=max_hits, context=context, flex_separator=flex_separator, cursor=cursor)
 
 
 @mcp.tool(name="pdf_rag_read_page", output_schema=None)

@@ -21,9 +21,9 @@ def search(query: str, category: str = "", top_k: int = 5, file: str = "",
 
 @router.get("/grep")
 def grep(pattern: str, category: str = "", file: str = "", max_hits: int = 20,
-         context: int = 60, flex_separator: bool = True):
+         context: int = 60, flex_separator: bool = True, cursor: str = ""):
     return _call(agent_api.grep, pattern=pattern, category=category, file=file,
-                 max_hits=max_hits, context=context, flex_separator=flex_separator)
+                 max_hits=max_hits, context=context, flex_separator=flex_separator, cursor=cursor)
 
 
 @router.get("/page")

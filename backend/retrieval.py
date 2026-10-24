@@ -518,11 +518,11 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
     from . import library, vecstore
     db = library.get_db()
     if db is None:
-        degraded.append("vector")
+        degraded.append("vector:index_unavailable")
         return
     parts = vecstore.select_partitions(db)
     if not parts:
-        degraded.append("vector")
+        degraded.append("vector:no_partition")
         log.warning("没有可用的向量分区;检查向量模型优先级/排除配置,或跑一次索引")
         return
 
@@ -535,16 +535,20 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
         slug = meta["slug"]
         part = vecstore.open_partition(db, slug)
         if part is None:
+            degraded.append("vector:partition_unavailable")
             continue
+        stage = "embedding"
         try:
             vec = embed_query(query, input_type_override=meta.get("input_type_query"),
                               dim_override=meta.get("dim"),
                               model_override=meta.get("model"))
+            stage = "dimension"
             want = part.schema.field("vector").type.list_size
             if len(vec) != want:
                 raise ValueError(
                     f"查询向量维度 {len(vec)} 与分区 {slug} 的 {want} 不符;"
                     f"检查「向量维度」配置(EmbedDimensions)是否与建库时一致")
+            stage = "search"
             q = part.search(vec, query_type="vector")
             # 有索引时补一道精确重算:IVF 只搜部分簇,不加 refine 会静默漏召回。
             # 没索引的分区(旧库/建索引失败)退化为暴力扫描,本身是精确的,不加。
@@ -552,7 +556,7 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
                 q = q.refine_factor(vecstore.REFINE_FACTOR)
             found = _apply_filter(q, category, file).limit(limit).to_list()
         except Exception as e:
-            degraded.append(f"vector:{meta.get('model') or slug}")
+            degraded.append(f"vector:{stage}_failed")
             log.warning("向量检索失败(%s): %s", slug, e)
             continue
         used.append(slug)
@@ -572,9 +576,7 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
 
     if used and diag is not None:
         diag["vector_partitions"] = used
-    if not covered:
-        degraded.append("vector")
-        log.warning("所有向量分区均未召回;检查分区覆盖率与嵌入服务")
+    if not used:
         return
     # 覆盖率是"分区覆盖了主表多少块"的静态属性,不是本次召回数 —— 一次检索只取
     # 几十块,用召回数除以总量必然接近 0,会把正常检索误判成降级。
@@ -586,7 +588,7 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
             if ratio is not None and ratio < min_ratio:
                 low.append(f"{meta['slug']}={ratio:.0%}")
         if low:
-            degraded.append("vector")
+            degraded.append("vector:low_coverage")
             log.warning("向量分区覆盖率低于下限 %.0f%%: %s;"
                         "对这些模型补跑一次索引可恢复",
                         min_ratio * 100, ", ".join(low))
@@ -767,6 +769,28 @@ def _cache_put(key, out, diag):
 
 # ==================== 主流程 ====================
 
+def _finish_diagnostics(diag: dict, candidates: int, returned: int):
+    messages = {
+        "fts": "全文检索失败,请检查本地全文索引",
+        "substring": "型号子串检索失败,请检查本地文本索引",
+        "vector:index_unavailable": "向量库不可用,请检查本地索引",
+        "vector:no_partition": "没有选中的向量分区,请检查模型分区配置",
+        "vector:partition_unavailable": "选中的向量分区无法打开",
+        "vector:embedding_failed": "本次查询嵌入失败,请检查模型配置及真实调用日志",
+        "vector:dimension_failed": "查询向量维度与分区契约不匹配",
+        "vector:search_failed": "向量检索失败,请检查本地分区",
+        "vector:low_coverage": "向量分区覆盖率低于配置下限",
+        "rerank": "本次重排失败,已使用融合排序",
+    }
+    degraded = list(dict.fromkeys(diag.get("degraded", [])))
+    diag["degraded"] = degraded
+    diag["counts"] = {"candidates": candidates, "returned": returned}
+    diag["warnings"] = [{"code": code.upper().replace(":", "_"),
+                         "message": messages.get(code, "检索通道降级")}
+                        for code in degraded]
+    diag["notice"] = "; ".join(item["message"] for item in diag["warnings"])
+
+
 def search(table, query: str, category: str | None = None, top_k: int = 5,
            mode: str = "mixed", rerank: bool = True, file: str | None = None,
            max_per_doc: int = 0, diagnostics: dict | None = None) -> list[dict]:
@@ -800,7 +824,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
         _channel_vector(table, query, limit, category, file, cands, degraded, diag)
 
     if not cands:
-        diag["counts"] = {"candidates": 0, "returned": 0}
+        _finish_diagnostics(diag, 0, 0)
         return []
 
     pool = max(top_k * config.get("rerank_pool_mult"), config.get("rerank_pool_floor"))
@@ -815,14 +839,10 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
             log.warning("rerank 失败: %s", e)
 
     out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc)
-    diag["counts"] = {"candidates": len(picked), "returned": len(out)}
-    if degraded:
-        diag["notice"] = ("降级路径: " + "、".join(sorted(set(degraded)))
-                          + " —— 结果可能不完整,请检查嵌入服务连通性")
-    else:
-        # 只缓存完整结果:降级可能是接口的暂时故障,不该被缓存住
+    _finish_diagnostics(diag, len(picked), len(out))
+    if not diag["degraded"]:
         _cache_put(ckey, [dict(x) for x in out],
-                   {"degraded": [], "counts": diag["counts"], "notice": ""})
+                   {k: v for k, v in diag.items() if k != "cached"})
     return out
 
 
