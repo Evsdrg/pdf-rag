@@ -4,9 +4,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-import fitz
-
-from . import config, doc_utils, library, retrieval
+from . import agent_documents, config, doc_utils, library, retrieval
+from .agent_paging import bounded_items, fingerprint
 
 log = logging.getLogger("pdfrag.agent_api")
 SCHEMA_VERSION = 2
@@ -44,71 +43,46 @@ def check_int(value: int, name: str, low: int, high: int) -> int:
     return value
 
 
-def document_path(file: str) -> str:
-    try:
-        full = doc_utils.resolve_under(config.PDF_ROOT, file)
-    except FileNotFoundError:
-        raise library.NotFound("文件不存在或路径越界") from None
-    if not Path(full).is_file():
-        raise library.NotFound("文件不存在", details={"file": file})
-    if not doc_utils.is_markdown(full) and Path(full).suffix.lower() != ".pdf":
-        raise library.LibraryError("仅支持 PDF 或 Markdown 文档", code="UNSUPPORTED_FORMAT")
-    return full
+def read_page(file: str, page: int, max_chars: int = 8000, cursor: str = "") -> dict:
+    check_int(page, "page", 1, 1_000_000)
+    check_int(max_chars, "max_chars", 256, 12000)
+    return agent_documents.read(file, [page], max_chars, cursor, single=True)
 
 
-def page_error(page: int, total: int) -> library.LibraryError:
-    return library.LibraryError("请求页码超出文档范围", code="PAGE_OUT_OF_RANGE",
-                                details={"page": page, "total_pages": total})
+def read_pages(file: str, pages: str, max_chars: int = 8000, cursor: str = "") -> dict:
+    check_int(max_chars, "max_chars", 256, 12000)
+    numbers = library.parse_page_spec(pages, max_pages=50)
+    return agent_documents.read(file, numbers, max_chars, cursor)
 
 
-def read_page(file: str, page: int) -> dict:
-    full = document_path(file)
-    if doc_utils.is_markdown(full):
-        pages = doc_utils.md_pages(full)
-        total = len(pages)
-        if page < 1 or page > total:
-            raise page_error(page, total)
-        result = {"text": pages[page - 1], "ocr": False, "warnings": []}
-        kind, basis = "md", "h1_section"
-    else:
-        with fitz.open(full) as doc:
-            total = len(doc)
-            if page < 1 or page > total:
-                raise page_error(page, total)
-            result = doc_utils.read_page_content(doc, page)
-        kind, basis = "pdf", "physical"
-    return response(file=file, kind=kind, page=page, page_basis=basis,
-                    total_pages=total, **result)
+def read_section(file: str, section_id: str, max_chars: int = 8000, cursor: str = "") -> dict:
+    check_int(max_chars, "max_chars", 256, 12000)
+    if not section_id:
+        raise library.LibraryError("section_id 不可为空", code="INVALID_SECTION")
+    return agent_documents.read(file, [], max_chars, cursor, section_id=section_id)
 
 
-def read_pages(file: str, pages: str) -> dict:
-    numbers = library.parse_page_spec(pages)
-    out = []
-    total = 0
-    for page in numbers:
-        try:
-            item = read_page(file, page)
-            total = item["total_pages"]
-            out.append({k: v for k, v in item.items() if k not in ("schema_version", "file")})
-        except library.LibraryError as error:
-            if error.code != "PAGE_OUT_OF_RANGE":
-                raise
-            total = error.details["total_pages"]
-            out.append({"page": page, "error": error_payload(error)["error"]})
-    return response(file=file, total_pages=total, pages=out)
+def get_outline(file: str, max_level: int = 2, limit: int = 60, cursor: str = "") -> dict:
+    check_int(max_level, "max_level", 1, 6)
+    check_int(limit, "limit", 1, 100)
+    return agent_documents.outline(file, max_level, limit, cursor)
 
 
-def get_outline(file: str) -> dict:
-    document_path(file)
-    return response(**library.doc_outline(config.PDF_ROOT, file))
-
-
-def list_files(category: str = "") -> dict:
-    files = library.files_index(require_table())
-    if category:
-        files = [f for f in files if f["category"] == category]
-    files = [{**f, "pages_basis": "indexed_max_page"} for f in files]
-    return response(files=files, count=len(files))
+def list_files(category: str = "", file: str = "", model_no: str = "", kind: str = "",
+               limit: int = 30, cursor: str = "") -> dict:
+    check_int(limit, "limit", 1, 100)
+    if kind not in ("", "pdf", "md"):
+        raise library.LibraryError("kind 需为 pdf 或 md")
+    table = require_table()
+    files = library.files_index(table)
+    files = [{**f, "pages_basis": "indexed_max_page"} for f in files
+             if (not category or f["category"] == category)
+             and (not file or file.replace("\\", "/").casefold() in f["file"].casefold())
+             and (not model_no or model_no.casefold() in f["model_no"].casefold())
+             and (not kind or f["kind"] == kind)]
+    scope = ("files", category, file, model_no, kind)
+    revision = fingerprint((config.DB_PATH, table.version, files))
+    return bounded_items(files, "files", response(), scope, revision, limit, cursor)
 
 
 def list_categories() -> dict:

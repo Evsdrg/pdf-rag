@@ -47,31 +47,49 @@ def pdf_rag_grep(pattern: str, category: str = "", file: str = "",
 
 
 @mcp.tool(name="pdf_rag_read_page", output_schema=None)
-def pdf_rag_read_page(file: str, page: int) -> ToolResult:
+def pdf_rag_read_page(file: str, page: int, max_chars: int = 8000,
+                      cursor: str = "") -> ToolResult:
     """读取库内文档页,返回 JSON file/page/text/ocr/warnings,错误含稳定 code。
 
     PDF 为从 1 开始的物理页;Markdown 按一级标题分页(page_basis=h1_section)。
     低文本页按内容策略调用 OCR;OCR 失败保留原生文本并给出警告。
+    max_chars 为文本预算(256–12000),truncated=true 时原样传 next_cursor 继续读取。
     """
-    return _call(agent_api.read_page, file=file, page=page)
+    return _call(agent_api.read_page, file=file, page=page, max_chars=max_chars, cursor=cursor)
 
 
 @mcp.tool(name="pdf_rag_read_pages", output_schema=None)
-def pdf_rag_read_pages(file: str, pages: str) -> ToolResult:
+def pdf_rag_read_pages(file: str, pages: str, max_chars: int = 8000,
+                       cursor: str = "") -> ToolResult:
     """一次读多页,如 pages="62,63" 或 "62-65";返回 JSON pages 数组。
 
+    最多请求50页,max_chars是整次文本预算;truncated时传next_cursor续读。
     单页越界在对应项给出 error,其余页继续。PDF 页号不等于页内印刷页码。
     """
-    return _call(agent_api.read_pages, file=file, pages=pages)
+    return _call(agent_api.read_pages, file=file, pages=pages, max_chars=max_chars, cursor=cursor)
+
+
+@mcp.tool(name="pdf_rag_read_section", output_schema=None)
+def pdf_rag_read_section(file: str, section_id: str, max_chars: int = 8000,
+                         cursor: str = "") -> ToolResult:
+    """按 get_outline 返回的 section_id 读取章节,避免整章/整篇超长输出。
+
+    Markdown 精确到标题范围;PDF 按书签物理页范围,共享页可能包含相邻节。
+    truncated=true 时传 next_cursor 继续;文档变化/服务重启后需重新获取目录。
+    """
+    return _call(agent_api.read_section, file=file, section_id=section_id,
+                 max_chars=max_chars, cursor=cursor)
 
 
 @mcp.tool(name="pdf_rag_get_outline", output_schema=None)
-def pdf_rag_get_outline(file: str) -> ToolResult:
-    """取 PDF 书签/Markdown 标题目录,返回 JSON outline 与页码。
+def pdf_rag_get_outline(file: str, max_level: int = 2, limit: int = 60,
+                        cursor: str = "") -> ToolResult:
+    """分页取 PDF 书签/Markdown 标题目录,返回 JSON outline 和 section_id。
 
-    没有目录时 note 提示使用 pdf_rag_grep,不猜测章节。
+    默认前两级,可用max_level=6展开;limit最多100。truncated时传next_cursor。
+    section_id可传read_section;没有目录时用grep,不猜测章节。
     """
-    return _call(agent_api.get_outline, file=file)
+    return _call(agent_api.get_outline, file=file, max_level=max_level, limit=limit, cursor=cursor)
 
 
 @mcp.tool(name="pdf_rag_list_categories", output_schema=None)
@@ -81,12 +99,16 @@ def pdf_rag_list_categories() -> ToolResult:
 
 
 @mcp.tool(name="pdf_rag_list_files", output_schema=None)
-def pdf_rag_list_files(category: str = "") -> ToolResult:
-    """列出已索引文件和元数据,返回 JSON files 与 count。
+def pdf_rag_list_files(category: str = "", file: str = "", model_no: str = "",
+                       kind: str = "", limit: int = 30, cursor: str = "") -> ToolResult:
+    """分页列出已索引文件,返回files/count/total/next_cursor。
 
-    pages_basis=indexed_max_page 表示 pages 是索引内最大页号,不是文件物理总页数。
+    可筛选category、文件路径子串file、型号子串model_no、kind(pdf/md)。
+    默认30份,最多100份;truncated时保持筛选条件并传next_cursor继续。
+    pages_basis=indexed_max_page表示索引内最大页号,不是物理总页数。
     """
-    return _call(agent_api.list_files, category=category)
+    return _call(agent_api.list_files, category=category, file=file, model_no=model_no,
+                 kind=kind, limit=limit, cursor=cursor)
 
 
 @mcp.tool(name="pdf_rag_status", output_schema=None)

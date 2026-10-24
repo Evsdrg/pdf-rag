@@ -27,23 +27,31 @@ def grep(pattern: str, category: str = "", file: str = "", max_hits: int = 20,
 
 
 @router.get("/page")
-def read_page(file: str, page: int):
-    return _call(agent_api.read_page, file=file, page=page)
+def read_page(file: str, page: int, max_chars: int = 8000, cursor: str = ""):
+    return _call(agent_api.read_page, file=file, page=page, max_chars=max_chars, cursor=cursor)
 
 
 @router.get("/pages")
-def read_pages(file: str, pages: str):
-    return _call(agent_api.read_pages, file=file, pages=pages)
+def read_pages(file: str, pages: str, max_chars: int = 8000, cursor: str = ""):
+    return _call(agent_api.read_pages, file=file, pages=pages, max_chars=max_chars, cursor=cursor)
+
+
+@router.get("/section")
+def read_section(file: str, section_id: str, max_chars: int = 8000, cursor: str = ""):
+    return _call(agent_api.read_section, file=file, section_id=section_id,
+                 max_chars=max_chars, cursor=cursor)
 
 
 @router.get("/outline")
-def outline(file: str):
-    return _call(agent_api.get_outline, file=file)
+def outline(file: str, max_level: int = 2, limit: int = 60, cursor: str = ""):
+    return _call(agent_api.get_outline, file=file, max_level=max_level, limit=limit, cursor=cursor)
 
 
 @router.get("/files")
-def files(category: str = ""):
-    return _call(agent_api.list_files, category=category)
+def files(category: str = "", file: str = "", model_no: str = "", kind: str = "",
+          limit: int = 30, cursor: str = ""):
+    return _call(agent_api.list_files, category=category, file=file, model_no=model_no,
+                 kind=kind, limit=limit, cursor=cursor)
 
 
 @router.get("/categories")

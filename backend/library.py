@@ -328,25 +328,29 @@ def read_page_raw(pdf_root: str, file: str, page: int) -> tuple[str, str]:
         doc.close()
 
 
-def parse_page_spec(spec: str) -> list[int]:
-    """解析页码列表,如 "62,63,64" 或 "62-65"。"""
+def parse_page_spec(spec: str, max_pages: int = 1000) -> list[int]:
+    """解析有界页码列表,在展开范围前校验容量。"""
     spec = (spec or "").strip()
     nums: list[int] = []
     for part in spec.split(","):
         part = part.strip()
         if not part:
             continue
-        if "-" in part:
-            a, _, b = part.partition("-")
-            try:
-                nums.extend(range(int(a), int(b) + 1))
-            except ValueError:
-                raise LibraryError(f"页码格式无效: {part}") from None
-        else:
-            try:
-                nums.append(int(part))
-            except ValueError:
-                raise LibraryError(f"页码格式无效: {part}") from None
+        try:
+            if "-" in part:
+                a, _, b = part.partition("-")
+                start, stop = int(a), int(b)
+                count = stop - start + 1
+                if count < 1:
+                    raise ValueError
+            else:
+                start = stop = int(part)
+                count = 1
+        except ValueError:
+            raise LibraryError(f"页码格式无效: {part}") from None
+        if len(nums) + count > max_pages:
+            raise LibraryError(f"单次最多请求 {max_pages} 页", code="TOO_MANY_PAGES")
+        nums.extend(range(start, stop + 1))
     if not nums:
         raise LibraryError('未解析出页码,示例:pages="62,63" 或 "62-65"')
     return nums
