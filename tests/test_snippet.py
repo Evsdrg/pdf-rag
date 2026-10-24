@@ -51,5 +51,34 @@ class ScoreWindowTest(unittest.TestCase):
         self.assertEqual(sc, 0.0)
 
 
+class SnippetReferenceTest(unittest.TestCase):
+    def test_reference_recovers_exact_indexed_span(self):
+        text = "Header\n" + "background sentence\n" * 60 + "Supply voltage 3.3V\n" + "tail\n" * 60
+        chunks = [{"uid": "block1", "md5": "hash", "text": text}]
+        ref = retrieval.snippet_reference(chunks, "Supply voltage", 200)
+        self.assertEqual(ref["chunk_id"], "block1")
+        self.assertEqual(ref["index_md5"], "hash")
+        self.assertEqual(ref["text"], text[ref["start_offset"]:ref["end_offset"]])
+        self.assertIn("Supply voltage", ref["text"])
+
+    def test_display_cleanup_does_not_change_reranker_window(self):
+        text = "voltage 3.3V\x03\n" * 100
+        row = {"uid": "u", "text": text, "file": "a.pdf", "page": 1}
+        key = ("a.pdf", 1)
+        with override_config(rerank_on_window=True, rerank_meta=False):
+            before = retrieval._rerank_docs([(key, 1)], {key: row}, "voltage")
+            ref = retrieval.snippet_reference([row], "voltage")
+            after = retrieval._rerank_docs([(key, 1)], {key: row}, "voltage")
+        self.assertEqual(before, after)
+        self.assertNotIn("\x03", ref["text"])
+        self.assertEqual(ref["warnings"][0]["code"], "TEXT_CONTROLS_REMOVED")
+
+    def test_best_chunk_reference_not_page_head(self):
+        chunks = [{"uid": "head", "text": "Unrelated title"},
+                  {"uid": "answer", "text": "Supply voltage 3.3V"}]
+        ref = retrieval.snippet_reference(chunks, "Supply voltage")
+        self.assertEqual(ref["chunk_id"], "answer")
+
+
 if __name__ == "__main__":
     unittest.main()

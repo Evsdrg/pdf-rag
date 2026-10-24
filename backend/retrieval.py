@@ -35,7 +35,7 @@ log = logging.getLogger("pdfrag.retrieval")
 # 供子串召回投影的列:不要把 768 维向量列一起物化。
 # 必须含 md5 —— 去重依赖它识别"同料号族共用一份手册"(缺了会让去重静默失效)。
 _PROJ_COLS = ["text", "file", "page", "category", "model_no", "c_id", "version",
-              "title", "md5"]
+              "title", "md5", "uid"]
 # 型号 token 的最小长度:太短会把版本号、单位当型号
 _MODEL_TOKEN_MIN_LEN = 3
 # 中文 2-gram 切分阈值:不超过该长度整体保留,超过则切分
@@ -299,6 +299,51 @@ def page_snippet(chunks: list[dict], query: str, width: int = 0) -> str:
     if best_sc <= 0 and chunks:
         return chunks[0]["text"][:width]
     return best_text
+
+
+def snippet_reference(chunks: list[dict], query: str, width: int = 0) -> dict:
+    """保留现有窗口选择,只给返回展示增加可核对的块引用。"""
+    width = width or config.get("snippet_width")
+    best_row, best_start, best_score = None, 0, -1.0
+    terms, models = _query_terms(query)
+    for row in chunks:
+        text = row["text"]
+        if len(text) <= width:
+            start, score = 0, _score_window(text, terms, models)
+        else:
+            start, score = _best_window(text, query, width)
+        if score > best_score:
+            best_row, best_start, best_score = row, start, score
+    if best_row is None:
+        return {}
+    if best_score <= 0:
+        best_row, best_start = chunks[0], 0
+    text = best_row["text"]
+    end = min(len(text), best_start + width)
+    # 仅有限扩展到邻近行边界,不挪动检索窗口、不改送重排的文本。
+    before = text.rfind("\n", max(0, best_start - 120), best_start)
+    if before >= 0:
+        best_start = before + 1
+    after = text.find("\n", end, min(len(text), end + 120))
+    if after >= 0:
+        end = after + 1
+    segment = text[best_start:end]
+    controls = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+    cleaned = controls.sub("", segment)
+    header = ""
+    if "|" in segment:
+        for match in re.finditer(r"(?m)^\|[^\n]*\n\|\s*:?-", text[:best_start]):
+            header_end = text.find("\n", match.end())
+            candidate = text[match.start():header_end if header_end >= 0 else match.end()]
+            if len(candidate) <= 500:
+                header = candidate
+    return {"chunk_id": best_row.get("uid"), "start_offset": best_start, "end_offset": end,
+            "index_md5": best_row.get("md5"),
+            "offset_basis": "indexed_chunk", "truncated_before": best_start > 0,
+            "truncated_after": end < len(text), "text": cleaned,
+            "table_header": header or None,
+            "warnings": ([{"code": "TEXT_CONTROLS_REMOVED", "message": "展示已移除无意义控制字符,未推测修复字符"}]
+                         if cleaned != segment else [])}
 
 
 # ==================== 页面角色 ====================
@@ -867,6 +912,7 @@ def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
             "version": row.get("version", ""),
             "score": round(cands.scores[k], _SCORE_DECIMALS),
             "snippet": page_snippet(cands.chunks.get(k, [row]), query),
+            "snippet_ref": snippet_reference(cands.chunks.get(k, [row]), query),
         }
         if k in rerank_scores:
             item["rerank_score"] = round(rerank_scores[k], _SCORE_DECIMALS)

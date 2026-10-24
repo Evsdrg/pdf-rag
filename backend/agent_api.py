@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import agent_documents, agent_grep, config, library, retrieval
-from .agent_paging import bounded_items, fingerprint
+from .agent_paging import MAX_RESPONSE_BYTES, bounded_items, fingerprint, json_size
 
 log = logging.getLogger("pdfrag.agent_api")
 SCHEMA_VERSION = 2
@@ -143,14 +143,30 @@ def search(query: str, category: str = "", top_k: int = 5, file: str = "",
     hits = retrieval.search(table, query, category=category or None,
                             top_k=top_k, file=file or None, max_per_doc=max_per_doc,
                             mode=mode, rerank=rerank, diagnostics=diagnostics)
+    hits = [dict(hit) for hit in hits]
+    for hit in hits:
+        reference = hit.get("snippet_ref")
+        if reference:
+            reference = dict(reference)
+            hit["snippet"] = reference.pop("text", hit["snippet"])
+            hit["snippet_ref"] = reference
+    omitted = 0
+    while len(hits) > 1 and json_size(hits) > MAX_RESPONSE_BYTES - 5000:
+        hits.pop()
+        omitted += 1
     identities, warnings = _identity(query, hits)
-    return response(query=query, count=len(hits), results=hits,
+    payload = response(query=query, count=len(hits), results=hits,
+                    truncated=bool(omitted), omitted_results=omitted,
+                    continuation_hint="缩小 file/category 或 top_k 后重查" if omitted else "",
                     identity=identities, warnings=diagnostics.get("warnings", []) + warnings,
                     vector_partitions=diagnostics.get("vector_partitions", []),
                     degraded=diagnostics.get("degraded", []),
                     notice=diagnostics.get("notice", ""),
                     counts=diagnostics.get("counts", {}),
                     cached=diagnostics.get("cached", False))
+    if json_size(payload) > MAX_RESPONSE_BYTES:
+        raise library.LibraryError("返回内容超过上限,请缩小查询范围", code="RESPONSE_TOO_LARGE")
+    return payload
 
 
 def status() -> dict:
