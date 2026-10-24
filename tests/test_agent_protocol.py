@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import fitz
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
 from fastmcp import Client
 
@@ -94,6 +94,20 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(data["last_ingest_status"], "unknown")
         self.assertEqual(data["source_status"], "ok")
 
+    def test_source_scan_failure_keeps_index_status(self):
+        files = [{"file": "guide.md", "kind": "md", "chunks": 2, "category": "docs"}]
+        with patch("backend.agent_api.library.get_table", return_value=object()), \
+             patch("backend.agent_api.library.files_index", return_value=files), \
+             patch("backend.library.os.walk", side_effect=PermissionError("private path")), \
+             patch.object(config, "DB_PATH", str(self.root / "index.lance")):
+            data = agent_api.status()
+        self.assertEqual(data["source_status"], "unavailable")
+        self.assertEqual((data["indexed_files"], data["chunks"]), (1, 2))
+        self.assertEqual(data["indexed_by_kind"], {"pdf": 0, "md": 1})
+        self.assertIsNone(data["source_files"])
+        self.assertEqual(data["warnings"][0]["code"], "SOURCE_UNAVAILABLE")
+        self.assertNotIn("private path", json.dumps(data))
+
     def test_page_image_native_transport_and_clip_validation(self):
         with fitz.open() as doc:
             page = doc.new_page(width=600, height=800)
@@ -113,6 +127,21 @@ class ProtocolTest(unittest.TestCase):
         self.assertIsNone(result.structured_content)
         result = self.client.get("/api/v2/render", params={"file": "guide.md", "page": 1})
         self.assertEqual(result.json()["error"]["code"], "UNSUPPORTED_FORMAT")
+    def test_binary_render_bypasses_gzip_but_json_still_compresses(self):
+        from backend.main import SelectiveGZip
+        app = FastAPI()
+
+        @app.get("/api/v2/render")
+        def image():
+            return Response(b"\xff\xd8" + b"x" * 2000, media_type="image/jpeg")
+
+        @app.get("/api/v2/status")
+        def status():
+            return {"text": "x" * 2000}
+
+        client = TestClient(SelectiveGZip(app))
+        self.assertNotEqual(client.get("/api/v2/render").headers.get("content-encoding"), "gzip")
+        self.assertEqual(client.get("/api/v2/status").headers.get("content-encoding"), "gzip")
 
 
 if __name__ == "__main__":

@@ -109,16 +109,19 @@ def source_inventory(indexed: list[dict]) -> dict:
     def fail(error):
         raise error
 
-    for directory, _, names in os.walk(root, onerror=fail):
-        for name in names:
-            kind = "md" if doc_utils.is_markdown(name) else "pdf" if name.lower().endswith(".pdf") else ""
-            if not kind:
-                continue
-            full = os.path.join(directory, name)
-            if not os.path.isfile(full):
-                continue
-            rel = os.path.relpath(full, root).replace(os.sep, "/")
-            source[rel] = kind
+    try:
+        for directory, _, names in os.walk(root, onerror=fail):
+            for name in names:
+                kind = "md" if doc_utils.is_markdown(name) else "pdf" if name.lower().endswith(".pdf") else ""
+                if not kind:
+                    continue
+                full = os.path.join(directory, name)
+                if not os.path.isfile(full):
+                    continue
+                rel = os.path.relpath(full, root).replace(os.sep, "/")
+                source[rel] = kind
+    except OSError:
+        raise LibraryError("源手册目录扫描失败", code="SOURCE_UNAVAILABLE") from None
     indexed_paths = {item["file"].replace("\\", "/"): item["kind"] for item in indexed}
     unindexed = sorted(set(source) - set(indexed_paths))
     missing = sorted(set(indexed_paths) - set(source))

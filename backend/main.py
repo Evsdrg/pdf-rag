@@ -55,7 +55,7 @@ class SelectiveGZip:
     实测无压缩时:JS bundle 708KB 裸传(gzip 后 222KB,-69%)、/api/files 59KB。
     跳过两类端点:
     * /mcp —— fastmcp 走 SSE 流式,text/event-stream 与缓冲压缩语义相冲;
-    * /api/pdf —— FileResponse 直传 PDF,文件本身已是压缩格式,服务端 CPU 白花。
+    * /api/pdf 与 /api/v2/render —— PDF/JPEG 已是压缩格式,服务端 CPU 白花。
     """
 
     def __init__(self, app, minimum_size: int = 1024):
@@ -67,7 +67,7 @@ class SelectiveGZip:
             return await self.plain(scope, receive, send)
         path = scope.get("path", "")
         if (path == config.MCP_PATH or path.startswith(config.MCP_PATH + "/")
-                or path == "/api/pdf"):
+                or path in ("/api/pdf", "/api/v2/render")):
             return await self.plain(scope, receive, send)
         return await self.gzip(scope, receive, send)
 

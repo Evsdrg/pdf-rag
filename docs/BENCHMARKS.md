@@ -175,7 +175,7 @@ lfm-2.5-embedding-350m、llama-nemotron-embed-vl-1b-v2。注意:Cohere 系**强�
 | `library.cached` | 元数据按 `table.version` 缓存 | `/api/v2/files`、`/api/v2/categories`、`/api/extract/report` 各扫一遍全表，实际只在 ingest 后变化 |
 | `/api/v2/files` 聚合 | `if k not in seen` 而非 `setdefault` | `setdefault` 的默认 dict 每行都构造，让 `product_label` 正则跑满每块（20ms → 1ms） |
 | 前端 `getSWR` | 切回页面先用上次结果、后台刷新 | 每次进入都全量重拉是纯开销 |
-| `SelectiveGZip` | JSON 压缩，跳过 `/mcp`（SSE）与 `/api/pdf`（已压缩） | JS bundle 708KB 裸传 → gzip；旧 `/api/files` 59KB → 9KB（分页前实测） |
+| `SelectiveGZip` | JSON 压缩，跳过 `/mcp`（SSE）、`/api/pdf` 与 `/api/v2/render`（已压缩内容） | JS bundle 708KB 裸传 → gzip；旧 `/api/files` 59KB → 9KB（分页前实测） |
 | 索引碎片整理 | `tools/compact_index.py` | 长期增量后 248MB/517 版本 → 43MB/8 版本,行数与检索结果不变 |
 
 ### 4.2 纯逻辑路径(不含模型调用)

@@ -187,7 +187,10 @@ def status() -> dict:
     except library.LibraryError as error:
         inventory = {key: None for key in ("source_files", "source_by_kind", "indexed_by_kind",
                                             "unindexed_files", "unindexed_by_kind", "missing_source_files")}
-        inventory.update(indexed_files=len(files), unindexed_examples=[], missing_source_examples=[])
+        inventory.update(indexed_files=len(files),
+                         indexed_by_kind={kind: sum(f["kind"] == kind for f in files)
+                                          for kind in ("pdf", "md")},
+                         unindexed_examples=[], missing_source_examples=[])
         source_status = "unavailable"
         warnings = [{"code": error.code, "message": str(error)}]
     return response(indexed=table is not None, files=len(files),
