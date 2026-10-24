@@ -21,7 +21,8 @@ def grep(table, pattern: str, category: str, file: str, max_hits: int, context: 
             continue
         key = (row["file"], int(row["page"]) + 1)
         group = groups.setdefault(key, {"file": key[0], "page": key[1],
-                                  "model_no": row["model_no"], "all_contexts": [],
+                                  "model_no": row["model_no"], "contexts": [],
+                                  "omitted_contexts": 0, "seen": set(),
                                   "indexed_matches": 0})
         windows = []
         text = row["text"]
@@ -36,17 +37,19 @@ def grep(table, pattern: str, category: str, file: str, max_hits: int, context: 
         for window in windows:
             content = text[window["start_offset"]:window["end_offset"]]
             normalized = _normalize(content)
-            if any(_normalize(item["context"]) == normalized for item in group["all_contexts"]):
+            if normalized in group["seen"]:
                 continue
-            group["all_contexts"].append({**window, "context": content,
+            group["seen"].add(normalized)
+            if len(group["contexts"]) < 5:
+                group["contexts"].append({**window, "context": content,
                                           "chunk_id": row["uid"]})
+            else:
+                group["omitted_contexts"] += 1
     items = []
     for key in sorted(groups):
         item = groups[key]
-        contexts = item.pop("all_contexts")
-        item["contexts"] = contexts[:5]
-        item["contexts_truncated"] = len(contexts) > 5
-        item["omitted_contexts"] = max(0, len(contexts) - 5)
+        item.pop("seen")
+        item["contexts_truncated"] = item["omitted_contexts"] > 0
         items.append(item)
     revision = fingerprint((table.version, [(key, value["indexed_matches"]) for key, value in sorted(groups.items())]))
     scope = ("grep", pattern, category, file, context, flex_separator)

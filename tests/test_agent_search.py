@@ -131,6 +131,16 @@ class GrepTest(unittest.TestCase):
         self.assertEqual(item["omitted_contexts"], 3)
         self.assertTrue(item["contexts_truncated"])
 
+    def test_duplicate_after_cap_is_not_counted_as_another_omission(self):
+        texts = ["VDD alpha", "VDD beta", "VDD gamma", "VDD delta", "VDD epsilon", "VDD zeta"]
+        rows = [row(text, f"chunk{i}") for i, text in enumerate(texts)]
+        rows.append(row(texts[0], "duplicate-of-first"))
+        result = self.run_grep(rows, context=2)
+        item = result["results"][0]
+        self.assertEqual(len(item["contexts"]), 5)
+        self.assertEqual(item["omitted_contexts"], 1)
+        self.assertNotIn("seen", item)
+
 
 if __name__ == "__main__":
     unittest.main()

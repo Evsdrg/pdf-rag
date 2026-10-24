@@ -91,15 +91,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 连接/表句柄的单例实现已收进 library(与同进程的 MCP 侧共用一份,见其模块 docstring)。
-# 这里保留 `_db` / `_table` 作为本模块内的习惯叫法,内部直接委托。
-
-
-def _db():
-    """LanceDB 连接单例(实现见 library.get_db)。"""
-    return library.get_db()
-
-
+# 表句柄单例委托 library:按 manifest 版本自动重开,MCP 与 HTTP 共享。
 def _table():
     """表句柄单例(实现见 library.get_table):按 manifest 版本自动重开。"""
     return library.get_table()

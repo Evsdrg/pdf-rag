@@ -214,8 +214,7 @@ def table_to_md(rows) -> str:
     return "\n".join(out)
 
 
-def page_text_with_tables(page, max_chars: int = 0, text: str | None = None,
-                          warnings: list | None = None) -> str:
+def page_text_with_tables(page, text: str | None = None, warnings: list | None = None) -> str:
     """页面文本 + 检测到的表格(markdown 格式)。无表格时只返回文本。"""
     text = page.get_text("text").strip() if text is None else text.strip()
     try:
@@ -227,8 +226,6 @@ def page_text_with_tables(page, max_chars: int = 0, text: str | None = None,
     except Exception:
         if warnings is not None:
             warnings.append({"code": "TABLE_EXTRACTION_FAILED", "message": "表格提取失败,保留原生文本"})
-    if max_chars and len(text) > max_chars:
-        text = text[:max_chars]
     return text
 
 
