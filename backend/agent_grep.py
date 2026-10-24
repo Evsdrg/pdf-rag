@@ -19,6 +19,8 @@ def grep(table, pattern: str, category: str, file: str, max_hits: int, context: 
             continue
         if file and file.replace("\\", "/") not in row["file"]:
             continue
+        if not regex.search(row["text"]):
+            continue
         key = (row["file"], int(row["page"]) + 1)
         group = groups.setdefault(key, {"file": key[0], "page": key[1],
                                   "model_no": row["model_no"], "contexts": [],

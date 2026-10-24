@@ -90,6 +90,11 @@ class GrepTest(unittest.TestCase):
         self.assertEqual(result["results"][0]["indexed_matches"], 3)
         self.assertNotIn("matches_in_page", result["results"][0])
 
+    def test_unmatched_rows_do_not_create_empty_page_hits(self):
+        result = self.run_grep([row("unrelated text", "a"), row("VDD 3.3 V", "b", 1)])
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["results"][0]["page"], 2)
+
     def test_case_and_symbol_differences_are_not_duplicates(self):
         result = self.run_grep([row("VDD 1 mA", "a"), row("VDD 1 MA", "b")])
         self.assertEqual(len(result["results"][0]["contexts"]), 2)
