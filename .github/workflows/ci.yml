@@ -1,0 +1,66 @@
+# 持续集成:后端单测 / 前端测试与构建 / 文档体检,三路并行。
+# 触发:任意分支推送、PR、手动。三份检查都零网络依赖(单测不访问模型服务)。
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 后端单测 (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          # 与 Dockerfile 的 uv 版本保持一致,保证 uv.lock 的解析行为相同
+          version: "0.12.17"
+          python-version: "3.13"
+      - name: 同步依赖
+        run: uv sync --frozen
+      - name: 运行单测
+        run: uv run python -m unittest discover -s tests
+
+  frontend:
+    name: 前端测试与构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          # 与 web/pnpm-lock.yaml 的生成版本一致
+          version: 11.22.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: 安装依赖
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: 运行测试
+        working-directory: web
+        run: pnpm test
+      - name: 类型检查与构建
+        working-directory: web
+        run: pnpm build
+
+  docs:
+    name: 文档链接与敏感信息检查
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: 检查 Markdown 链接与敏感信息
+        run: python3 tools/check_docs.py

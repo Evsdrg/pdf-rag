@@ -1,5 +1,7 @@
 # PDF-RAG
 
+[![CI](https://github.com/Evsdrg/pdf-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/Evsdrg/pdf-rag/actions/workflows/ci.yml)
+
 本地元器件手册检索：对 PDF/Markdown 手册库做**语义向量 + 全文(FTS) + 子串**三路混合检索
 （RRF 融合 → 同文档去重 → 可选重排），支持表格识别与扫描页 OCR 兜底，通过 **Web 界面**、
 **MCP 工具**、**REST API** 三种方式对外提供服务。
@@ -180,6 +182,11 @@ uv run python -m unittest discover -s tests
 数据包导入判断、OCR 内容筛选与读页/入库判定一致性。改动检索/索引逻辑后跑一遍；端到端质量另用 `eval_retrieval.py` 对比
 `snippet@1`；前端配置页可用 `cd web && pnpm test` 校验分类、搜索和并发入口，
 用 `pnpm build` 执行类型检查与构建。
+
+**持续集成**：推送或 PR 时 GitHub Actions 并行运行三份检查（见
+`.github/workflows/ci.yml`）——后端单测（Python 3.13 + uv）、前端测试与构建（pnpm）、
+文档链接与敏感信息检查（`python tools/check_docs.py`，本地也可直接跑）。
+全部零网络依赖，不访问任何模型服务。
 
 ## 鸣谢
 

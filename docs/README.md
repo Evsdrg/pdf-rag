@@ -32,3 +32,5 @@
   `.gitignore` 排除，不进入当前源码或发布包。
 - `.env` 只保存本机配置和密钥；`.env.example` 只能保留示例值。密钥、运行数据、
   PDF 语料与索引均不提交。发布取源码时以 `git archive HEAD` 为准。
+- CI 在推送/PR 时运行文档链接与敏感信息检查（`tools/check_docs.py`），
+  提交前可在本地执行同一脚本预检。
