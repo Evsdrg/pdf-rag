@@ -51,6 +51,12 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 
 `identity` 只是查询中的候选型号与返回文件身份是否匹配。`unconfirmed` 不等于全库不存在，也不据此过滤结果。`rerank_score` 是相关性分数，不是答案正确率概率。
 
+`status` 中 `source_files` 是源目录内 PDF/Markdown 数，`indexed_files` 是索引文件数；
+`unindexed_files` 和 `missing_source_files` 分别表示未索引文件与失效索引引用。按格式计数、
+最多五个示例帮助定位，不返回整份差异清单。`source_status` 表示本次目录扫描是否完成；
+`last_ingest_status=unknown` 明确表示没有可用的入库时间记录。状态只读本地文件名和真实调用历史，
+不主动探测嵌入、重排或 OCR 服务。
+
 ## 5. 按需页图
 
 `pdf_rag_render_page(file, page, clip?, max_size=1600)` 在本地用 MuPDF 渲染 PDF，一次一页，不调用 OCR、视觉、嵌入或重排服务。

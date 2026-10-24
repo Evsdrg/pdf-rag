@@ -78,6 +78,22 @@ class ProtocolTest(unittest.TestCase):
                 self.assertEqual(result.json()["error"]["code"], code)
                 self.assertNotIn(str(self.root), result.text)
 
+    def test_status_distinguishes_source_and_index(self):
+        (self.root / "unindexed.PDF").write_bytes(b"source file only")
+        (self.root / "notes.txt").write_text("not a manual")
+        files = [{"file": "guide.md", "kind": "md", "chunks": 2, "category": "docs"},
+                 {"file": "missing.pdf", "kind": "pdf", "chunks": 1, "category": "docs"}]
+        with patch("backend.agent_api.library.get_table", return_value=object()), \
+             patch("backend.agent_api.library.files_index", return_value=files), \
+             patch.object(config, "DB_PATH", str(self.root / "index.lance")):
+            data = agent_api.status()
+        self.assertEqual((data["source_files"], data["indexed_files"], data["unindexed_files"]), (2, 2, 1))
+        self.assertEqual(data["missing_source_files"], 1)
+        self.assertEqual(data["source_by_kind"], {"pdf": 1, "md": 1})
+        self.assertEqual(data["unindexed_examples"], ["unindexed.PDF"])
+        self.assertEqual(data["last_ingest_status"], "unknown")
+        self.assertEqual(data["source_status"], "ok")
+
     def test_page_image_native_transport_and_clip_validation(self):
         with fitz.open() as doc:
             page = doc.new_page(width=600, height=800)

@@ -112,6 +112,7 @@ class GrepTest(unittest.TestCase):
         self.assertTrue(first["next_cursor"])
         second = self.run_grep(rows, max_hits=1, context=3, cursor=first["next_cursor"])
         self.assertEqual(second["results"][0]["page"], 2)
+
     def test_overlapping_windows_merge_but_distant_matches_remain(self):
         rows = [row("VDDIO low VIL; VDDIO high VIH" + "x" * 200 + "VDDIO supply")]
         result = self.run_grep(rows, context=20)

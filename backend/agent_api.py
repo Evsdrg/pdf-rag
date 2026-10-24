@@ -181,8 +181,21 @@ def status() -> dict:
         last_ingest = records[-1].get("time") if records else None
     except (OSError, ValueError, KeyError, TypeError):
         last_ingest = None
+    try:
+        inventory = library.source_inventory(files)
+        source_status, warnings = "ok", []
+    except library.LibraryError as error:
+        inventory = {key: None for key in ("source_files", "source_by_kind", "indexed_by_kind",
+                                            "unindexed_files", "unindexed_by_kind", "missing_source_files")}
+        inventory.update(indexed_files=len(files), unindexed_examples=[], missing_source_examples=[])
+        source_status = "unavailable"
+        warnings = [{"code": error.code, "message": str(error)}]
     return response(indexed=table is not None, files=len(files),
                     chunks=sum(f["chunks"] for f in files),
                     categories=len({f["category"] for f in files}),
-                    last_ingest=last_ingest, ocr=ocr.status(),
+                    last_ingest=last_ingest,
+                    last_ingest_status="recorded" if last_ingest else "unknown",
+                    source_status=source_status, warnings=warnings,
+                    **inventory,
+                    ocr=ocr.status(),
                     checked_at=datetime.now().isoformat(timespec="seconds"))

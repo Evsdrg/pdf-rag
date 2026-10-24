@@ -129,7 +129,11 @@ def pdf_rag_list_files(category: str = "", file: str = "", model_no: str = "",
 
 @mcp.tool(name="pdf_rag_status", output_schema=None)
 def pdf_rag_status() -> ToolResult:
-    """只读索引规模与 OCR 最近一次真实调用记录,不主动探测任何上游服务。"""
+    """只读索引/源文件数量、覆盖差异及OCR最近真实调用,不主动探测上游。
+
+    source_files是磁盘手册数,indexed_files是索引文件数;unindexed/missing_source
+    分别表示未索引和失效引用。last_ingest_status=unknown表示无可用历史时间。
+    """
     return _call(agent_api.status)
 
 

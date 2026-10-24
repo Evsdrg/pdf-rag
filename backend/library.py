@@ -99,6 +99,46 @@ def reset_table():
     _TABLE_VERSION = -1
 
 
+def source_inventory(indexed: list[dict]) -> dict:
+    """只扫描文件名,对比源目录与索引;不读取手册正文,不访问上游。"""
+    root = os.path.realpath(config.PDF_ROOT)
+    if not os.path.isdir(root):
+        raise LibraryError("源手册目录不可读", code="SOURCE_UNAVAILABLE")
+    source = {}
+
+    def fail(error):
+        raise error
+
+    for directory, _, names in os.walk(root, onerror=fail):
+        for name in names:
+            kind = "md" if doc_utils.is_markdown(name) else "pdf" if name.lower().endswith(".pdf") else ""
+            if not kind:
+                continue
+            full = os.path.join(directory, name)
+            if not os.path.isfile(full):
+                continue
+            rel = os.path.relpath(full, root).replace(os.sep, "/")
+            source[rel] = kind
+    indexed_paths = {item["file"].replace("\\", "/"): item["kind"] for item in indexed}
+    unindexed = sorted(set(source) - set(indexed_paths))
+    missing = sorted(set(indexed_paths) - set(source))
+
+    def counts(paths, mapping):
+        return {kind: sum(mapping[path] == kind for path in paths) for kind in ("pdf", "md")}
+
+    return {
+        "source_files": len(source),
+        "indexed_files": len(indexed_paths),
+        "source_by_kind": counts(source, source),
+        "indexed_by_kind": counts(indexed_paths, indexed_paths),
+        "unindexed_files": len(unindexed),
+        "unindexed_by_kind": counts(unindexed, source),
+        "missing_source_files": len(missing),
+        "unindexed_examples": unindexed[:5],
+        "missing_source_examples": missing[:5],
+    }
+
+
 # ---------- 变体正则(grep) ----------
 
 # PDF 提取时下标经常丢失,同一符号在库里有两种形态("VDD_APC" 与 "VDD APC",
