@@ -21,24 +21,32 @@ def grep(table, pattern: str, category: str, file: str, max_hits: int, context: 
             continue
         key = (row["file"], int(row["page"]) + 1)
         group = groups.setdefault(key, {"file": key[0], "page": key[1],
-                                  "model_no": row["model_no"], "contexts": [],
+                                  "model_no": row["model_no"], "all_contexts": [],
                                   "indexed_matches": 0})
-        for match in regex.finditer(row["text"]):
+        windows = []
+        text = row["text"]
+        for match in regex.finditer(text):
             group["indexed_matches"] += 1
-            if len(group["contexts"]) >= 5:
+            start, end = max(0, match.start() - context), min(len(text), match.end() + context)
+            if windows and start <= windows[-1]["end_offset"]:
+                windows[-1]["end_offset"] = max(end, windows[-1]["end_offset"])
+            else:
+                windows.append({"start_offset": start, "end_offset": end,
+                                "match": match.group(0)})
+        for window in windows:
+            content = text[window["start_offset"]:window["end_offset"]]
+            normalized = _normalize(content)
+            if any(_normalize(item["context"]) == normalized for item in group["all_contexts"]):
                 continue
-            start, end = max(0, match.start() - context), min(len(row["text"]), match.end() + context)
-            window = row["text"][start:end]
-            normalized = _normalize(window)
-            if any(_normalize(item["context"]) == normalized for item in group["contexts"]):
-                continue
-            group["contexts"].append({"match": match.group(0), "context": window,
-                                      "chunk_id": row["uid"], "start_offset": start,
-                                      "end_offset": end})
+            group["all_contexts"].append({**window, "context": content,
+                                          "chunk_id": row["uid"]})
     items = []
     for key in sorted(groups):
         item = groups[key]
-        item["contexts_truncated"] = item["indexed_matches"] > len(item["contexts"])
+        contexts = item.pop("all_contexts")
+        item["contexts"] = contexts[:5]
+        item["contexts_truncated"] = len(contexts) > 5
+        item["omitted_contexts"] = max(0, len(contexts) - 5)
         items.append(item)
     revision = fingerprint((table.version, [(key, value["indexed_matches"]) for key, value in sorted(groups.items())]))
     scope = ("grep", pattern, category, file, context, flex_separator)

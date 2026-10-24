@@ -112,6 +112,23 @@ class GrepTest(unittest.TestCase):
         self.assertTrue(first["next_cursor"])
         second = self.run_grep(rows, max_hits=1, context=3, cursor=first["next_cursor"])
         self.assertEqual(second["results"][0]["page"], 2)
+    def test_overlapping_windows_merge_but_distant_matches_remain(self):
+        rows = [row("VDDIO low VIL; VDDIO high VIH" + "x" * 200 + "VDDIO supply")]
+        result = self.run_grep(rows, context=20)
+        contexts = result["results"][0]["contexts"]
+        self.assertEqual(len(contexts), 2)
+        self.assertIn("low VIL", contexts[0]["context"])
+        self.assertIn("high VIH", contexts[0]["context"])
+        self.assertEqual(contexts[1]["match"], "VDD")
+        self.assertFalse(result["results"][0]["contexts_truncated"])
+
+    def test_context_cap_reports_only_omitted_windows(self):
+        rows = [row(" ".join(f"VDD parameter{i}" for i in range(8)))]
+        result = self.run_grep(rows, context=2)
+        item = result["results"][0]
+        self.assertEqual(len(item["contexts"]), 5)
+        self.assertEqual(item["omitted_contexts"], 3)
+        self.assertTrue(item["contexts_truncated"])
 
 
 if __name__ == "__main__":
