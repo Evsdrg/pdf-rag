@@ -214,9 +214,9 @@ class PolicyIntegrationTest(unittest.TestCase):
         with override_config(ocr_smart_filter=True, ocr_min_chars=200):
             with document([SPARSE, DENSE, DENSE, DENSE]) as doc:
                 with patch("backend.ocr.ocr_image", side_effect=AssertionError("network forbidden")):
-                    text, err = doc_utils.read_page_text(doc, 1)
-                self.assertIn("ABC123", text)
-                self.assertEqual(err, "")
+                    result = doc_utils.read_page_content(doc, 1)
+                self.assertIn("ABC123", result["text"])
+                self.assertEqual(result["warnings"], [])
 
     def test_read_page_legacy_and_temp_cleanup(self):
         with override_config(ocr_smart_filter=False, ocr_min_chars=200):
@@ -227,21 +227,23 @@ class PolicyIntegrationTest(unittest.TestCase):
                 return "OCR output " * 30, ""
             with document([SPARSE, DENSE, DENSE, DENSE]) as doc:
                 with patch("backend.ocr.ocr_image", side_effect=recognize):
-                    text, err = doc_utils.read_page_text(doc, 1)
-            self.assertIn("OCR output", text)
-            self.assertEqual(err, "")
+                    result = doc_utils.read_page_content(doc, 1)
+            self.assertIn("OCR output", result["text"])
+            self.assertEqual(result["warnings"], [])
             self.assertFalse(paths[0].parent.exists())
 
     def test_read_pages_reuses_document_policy(self):
-        from backend import library
+        from backend import agent_api, agent_documents
         with override_config(ocr_smart_filter=True, ocr_min_chars=200):
             with tempfile.TemporaryDirectory() as tmp:
                 path = Path(tmp) / "manual.pdf"
                 with document([SPARSE, SPARSE, DENSE, DENSE, DENSE]) as doc:
                     doc.save(path)
                 with patch("backend.ocr_policy.DocumentPolicy", wraps=ocr_policy.DocumentPolicy) as build:
-                    with patch("backend.ocr.ocr_image", side_effect=AssertionError("network forbidden")):
-                        result = library.read_pages(tmp, "manual.pdf", "1,2,0,6")
+                    with patch("backend.ocr.ocr_image", side_effect=AssertionError("network forbidden")), \
+                         patch("backend.config.PDF_ROOT", tmp):
+                        agent_documents.clear_cache()
+                        result = agent_api.read_pages("manual.pdf", "1,2,0,6")
                 self.assertEqual(build.call_count, 1)
                 self.assertIn("ABC123", result["pages"][0]["text"])
                 self.assertIn("ABC123", result["pages"][1]["text"])
@@ -255,8 +257,8 @@ class PolicyIntegrationTest(unittest.TestCase):
                 raise RuntimeError("OCR failed")
             with document([SPARSE, DENSE, DENSE, DENSE]) as doc:
                 with patch("backend.ocr.ocr_image", side_effect=fail):
-                    _, err = doc_utils.read_page_text(doc, 1)
-            self.assertIn("OCR 调用失败", err)
+                    result = doc_utils.read_page_content(doc, 1)
+            self.assertEqual(result["warnings"][0]["code"], "OCR_FAILED")
             self.assertFalse(paths[0].parent.exists())
 
     def test_extraction_state_keeps_ocr_counts_and_warnings(self):

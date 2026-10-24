@@ -1,4 +1,4 @@
-"""MCP 传输适配:单份 JSON 文本,领域逻辑与 REST v2 共用。"""
+"""MCP 传输适配:单份 JSON 文本,领域逻辑与统一 REST 查询/读取接口共用。"""
 import json
 import os
 import sys
@@ -48,19 +48,19 @@ def pdf_rag_grep(pattern: str, category: str = "", file: str = "",
 
 
 @mcp.tool(name="pdf_rag_read_page", output_schema=None)
-def pdf_rag_read_page(file: str, page: int, max_chars: int = 8000,
+def pdf_rag_read_page(file: str, page: int, max_chars: int = 0,
                       cursor: str = "") -> ToolResult:
     """读取库内文档页,返回 JSON file/page/text/ocr/warnings,错误含稳定 code。
 
     PDF 为从 1 开始的物理页;Markdown 按一级标题分页(page_basis=h1_section)。
     低文本页按内容策略调用 OCR;OCR 失败保留原生文本并给出警告。
-    max_chars 为文本预算(256–12000),truncated=true 时原样传 next_cursor 继续读取。
+    max_chars=0使用page_max_chars配置;显式预算为256–12000,truncated时传next_cursor续读。
     """
     return _call(agent_api.read_page, file=file, page=page, max_chars=max_chars, cursor=cursor)
 
 
 @mcp.tool(name="pdf_rag_read_pages", output_schema=None)
-def pdf_rag_read_pages(file: str, pages: str, max_chars: int = 8000,
+def pdf_rag_read_pages(file: str, pages: str, max_chars: int = 0,
                        cursor: str = "") -> ToolResult:
     """一次读多页,如 pages="62,63" 或 "62-65";返回 JSON pages 数组。
 
@@ -71,7 +71,7 @@ def pdf_rag_read_pages(file: str, pages: str, max_chars: int = 8000,
 
 
 @mcp.tool(name="pdf_rag_read_section", output_schema=None)
-def pdf_rag_read_section(file: str, section_id: str, max_chars: int = 8000,
+def pdf_rag_read_section(file: str, section_id: str, max_chars: int = 0,
                          cursor: str = "") -> ToolResult:
     """按 get_outline 返回的 section_id 读取章节,避免整章/整篇超长输出。
 

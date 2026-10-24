@@ -80,14 +80,6 @@ def md_pages(path: str) -> list[str]:
     return split_md_pages(clean_md(raw))
 
 
-def read_md_page(path: str, page: int) -> tuple[str, str]:
-    """读 Markdown 伪页(1-based)。返回 (文本, 错误信息)。"""
-    pages = md_pages(path)
-    if page < 1 or page > len(pages):
-        return "", f"页码越界: {page} (共 {len(pages)} 页)"
-    return pages[page - 1], ""
-
-
 def md_outline(path: str) -> list[dict]:
     """取 Markdown 标题结构(章节 + 页码),对齐 PDF 的 get_toc()。"""
     out = []
@@ -279,12 +271,3 @@ def read_page_content(doc, page_number: int, policy=None) -> dict:
     if not used_ocr:
         text = page_text_with_tables(page, text=text, warnings=warnings)
     return {"text": text, "ocr": used_ocr, "warnings": warnings}
-
-
-def read_page_text(doc, page_number: int, policy=None) -> tuple[str, str]:
-    """旧读页接口的文本/错误二元组;结构化接口使用 read_page_content。"""
-    result = read_page_content(doc, page_number, policy)
-    error = "; ".join(w["message"] for w in result["warnings"] if w["code"] in ("OCR_FAILED", "OCR_EMPTY"))
-    text = result["text"]
-    limit = config.get("page_max_chars")
-    return text[:limit] if limit else text, error

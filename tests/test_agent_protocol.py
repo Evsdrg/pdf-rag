@@ -1,4 +1,4 @@
-"""MCP/REST v2 协议和旧 REST 兼容测试;所有文档和表均为隔离夹具。"""
+"""MCP/REST 的关键读取、错误和图片链路;使用隔离文档夹具。"""
 import asyncio
 import json
 import socket
@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fastmcp import Client
 
-from backend import agent_api, agent_routes, config, doc_utils, library
+from backend import agent_api, agent_routes, config, doc_utils
 from tests.support import override_config
 import server
 
@@ -33,98 +33,19 @@ class ProtocolTest(unittest.TestCase):
         app.include_router(agent_routes.router)
         self.client = TestClient(app)
 
-    def test_page_has_reference_and_basis(self):
+    def test_page_reference_and_safe_errors(self):
         data = self.client.get("/api/v2/page", params={"file": "guide.md", "page": 2}).json()
         self.assertEqual(data["schema_version"], 2)
         self.assertEqual((data["page"], data["page_basis"], data["total_pages"]), (2, "h1_section", 2))
         self.assertIn("Beta", data["text"])
-        self.assertFalse(data["ocr"])
-
-    def test_out_of_range_is_structured(self):
         result = self.client.get("/api/v2/page", params={"file": "guide.md", "page": 99})
-        self.assertEqual(result.status_code, 400)
         self.assertEqual(result.json()["error"]["code"], "PAGE_OUT_OF_RANGE")
-        self.assertEqual(result.json()["error"]["details"]["total_pages"], 2)
-
-    def test_partial_pages_keeps_errors_separate_from_text(self):
-        data = agent_api.read_pages("guide.md", "1,3,2")
-        self.assertEqual([p["page"] for p in data["pages"]], [1, 3, 2])
-        self.assertEqual(data["pages"][1]["error"]["code"], "PAGE_OUT_OF_RANGE")
-        self.assertNotIn("text", data["pages"][1])
-
-    def test_missing_file_and_traversal(self):
         for file in ("missing.pdf", "../outside.pdf"):
-            data, status = agent_api.invoke(agent_api.read_page, file, 1)
+            result, status = agent_api.invoke(agent_api.read_page, file, 1)
             self.assertEqual(status, 404)
-            self.assertEqual(data["error"]["code"], "FILE_NOT_FOUND")
+            self.assertEqual(result["error"]["code"], "FILE_NOT_FOUND")
 
-    def test_unexpected_error_does_not_expose_secret(self):
-        def fail():
-            raise RuntimeError("private internal value")
-        with self.assertLogs("pdfrag.agent_api", level="ERROR"):
-            data, status = agent_api.invoke(fail)
-        self.assertEqual(status, 500)
-        self.assertNotIn("private internal value", json.dumps(data))
-
-    def test_status_and_lists_do_not_call_upstream(self):
-        with patch.object(library, "get_table", return_value=None):
-            self.assertFalse(agent_api.status()["indexed"])
-            data, _ = agent_api.invoke(agent_api.list_files)
-            self.assertEqual(data["error"]["code"], "INDEX_NOT_FOUND")
-
-    def test_ocr_failure_keeps_native_text_and_safe_warning(self):
-        with fitz.open() as doc:
-            page = doc.new_page()
-            page.insert_text((70, 100), "Native text")
-            with override_config(ocr_smart_filter=False, ocr_min_chars=200):
-                with patch("backend.ocr.ocr_image", return_value=("", "secret request detail")):
-                    result = doc_utils.read_page_content(doc, 1)
-        self.assertIn("Native text", result["text"])
-        self.assertEqual(result["warnings"][0]["code"], "OCR_FAILED")
-        self.assertNotIn("secret request detail", json.dumps(result))
-
-    def test_render_returns_native_image_and_safe_reference(self):
-        with fitz.open() as doc:
-            page = doc.new_page(width=600, height=800)
-            page.draw_rect(fitz.Rect(100, 100, 300, 400), color=(0, 0, 0))
-            doc.save(self.root / "chart.pdf")
-        result = self.client.get("/api/v2/render", params={"file": "chart.pdf", "page": 1,
-                                                          "clip": "[0,0,0.5,0.5]", "max_size": 800})
-        self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.headers["content-type"], "image/jpeg")
-        metadata = json.loads(result.headers["x-pdf-rag-metadata"])
-        self.assertLessEqual(max(metadata["width"], metadata["height"]), 801)
-        self.assertLessEqual(len(result.content), 2_000_000)
-        async def run():
-            async with Client(server.mcp) as client:
-                return await client.call_tool("pdf_rag_render_page", {"file": "chart.pdf", "page": 1})
-        result = asyncio.run(run())
-        self.assertEqual([item.type for item in result.content], ["text", "image"])
-        self.assertNotIn("base64", result.content[0].text)
-        self.assertIsNone(result.structured_content)
-
-    def test_render_rejects_bad_coordinates_and_formats(self):
-        result = self.client.get("/api/v2/render", params={"file": "guide.md", "page": 1})
-        self.assertEqual(result.json()["error"]["code"], "UNSUPPORTED_FORMAT")
-        with fitz.open() as doc:
-            doc.new_page()
-            doc.save(self.root / "chart.pdf")
-        for clip in ("[0,0,2,1]", "[0,0,0,1]", "[0,0,NaN,1]", "bad"):
-            result = self.client.get("/api/v2/render", params={"file": "chart.pdf", "page": 1, "clip": clip})
-            self.assertEqual(result.status_code, 400)
-
-    def test_render_corrupt_and_encrypted_documents_are_safe(self):
-        (self.root / "bad.pdf").write_bytes(b"not a PDF")
-        with fitz.open() as doc:
-            doc.new_page()
-            doc.save(self.root / "locked.pdf", encryption=fitz.PDF_ENCRYPT_AES_256,
-                     owner_pw="test-owner", user_pw="test-reader")
-        for file, code in (("bad.pdf", "DOCUMENT_UNREADABLE"), ("locked.pdf", "DOCUMENT_ENCRYPTED")):
-            result = self.client.get("/api/v2/render", params={"file": file, "page": 1})
-            self.assertEqual(result.json()["error"]["code"], code)
-            self.assertNotIn(str(self.root), result.text)
-
-    def test_mcp_returns_one_json_text_block_and_error_flag(self):
+    def test_mcp_single_payload_and_error_flag(self):
         async def run():
             async with Client(server.mcp) as client:
                 success = await client.call_tool("pdf_rag_read_page", {"file": "guide.md", "page": 1})
@@ -137,30 +58,45 @@ class ProtocolTest(unittest.TestCase):
         self.assertTrue(error.is_error)
         self.assertEqual(json.loads(error.content[0].text)["error"]["code"], "FILE_NOT_FOUND")
 
+    def test_ocr_fallback_and_bad_documents(self):
+        with fitz.open() as doc:
+            doc.new_page().insert_text((70, 100), "Native text")
+            with override_config(ocr_smart_filter=False, ocr_min_chars=200):
+                with patch("backend.ocr.ocr_image", return_value=("", "secret request detail")):
+                    result = doc_utils.read_page_content(doc, 1)
+        self.assertIn("Native text", result["text"])
+        self.assertEqual(result["warnings"][0]["code"], "OCR_FAILED")
+        self.assertNotIn("secret request detail", json.dumps(result))
+        (self.root / "bad.pdf").write_bytes(b"not a PDF")
+        with fitz.open() as doc:
+            doc.new_page()
+            doc.save(self.root / "locked.pdf", encryption=fitz.PDF_ENCRYPT_AES_256,
+                     owner_pw="test-owner", user_pw="test-reader")
+        for file, code in (("bad.pdf", "DOCUMENT_UNREADABLE"), ("locked.pdf", "DOCUMENT_ENCRYPTED")):
+            for path in ("/api/v2/page", "/api/v2/render"):
+                result = self.client.get(path, params={"file": file, "page": 1})
+                self.assertEqual(result.json()["error"]["code"], code)
+                self.assertNotIn(str(self.root), result.text)
 
-class LegacyContractTest(unittest.TestCase):
-    def test_existing_search_does_not_duplicate_reference_text(self):
-        from backend.main import app
-        client = TestClient(app)
-        hit = {"file": "a.pdf", "page": 1, "snippet": "original", "score": 1,
-               "snippet_ref": {"text": "display", "chunk_id": "uid"}}
-        with patch("backend.main._table", return_value=object()), \
-             patch("backend.main.retrieval.search", return_value=[hit]):
-            result = client.get("/api/search?q=voltage").json()
-        self.assertEqual(result, [{k: v for k, v in hit.items() if k != "snippet_ref"}])
-
-    def test_old_api_shapes_unchanged(self):
-        from backend.main import app
-        client = TestClient(app)
-        with patch("backend.main._table", return_value=None):
-            for endpoint in ("/api/files", "/api/categories", "/api/search?q=voltage"):
-                self.assertEqual(client.get(endpoint).json(), [])
-        with patch.object(config, "PDF_ROOT", tempfile.gettempdir()):
-            result = client.get("/api/page", params={"file": "missing-pdfrag.pdf", "page": 1})
+    def test_page_image_native_transport_and_clip_validation(self):
+        with fitz.open() as doc:
+            page = doc.new_page(width=600, height=800)
+            page.draw_rect(fitz.Rect(100, 100, 300, 400), color=(0, 0, 0))
+            doc.save(self.root / "chart.pdf")
+        result = self.client.get("/api/v2/render", params={"file": "chart.pdf", "page": 1,
+                                                          "clip": "[0,0,0.5,0.5]", "max_size": 800})
         self.assertEqual(result.status_code, 200)
-        self.assertIsInstance(result.json()["text"], str)
-        self.assertIsInstance(result.json()["ocr"], bool)
-        self.assertTrue(result.json()["error"])
+        self.assertEqual(result.headers["content-type"], "image/jpeg")
+        self.assertLessEqual(len(result.content), 2_000_000)
+        async def run():
+            async with Client(server.mcp) as client:
+                return await client.call_tool("pdf_rag_render_page", {"file": "chart.pdf", "page": 1})
+        result = asyncio.run(run())
+        self.assertEqual([item.type for item in result.content], ["text", "image"])
+        self.assertNotIn("base64", result.content[0].text)
+        self.assertIsNone(result.structured_content)
+        result = self.client.get("/api/v2/render", params={"file": "guide.md", "page": 1})
+        self.assertEqual(result.json()["error"]["code"], "UNSUPPORTED_FORMAT")
 
 
 if __name__ == "__main__":

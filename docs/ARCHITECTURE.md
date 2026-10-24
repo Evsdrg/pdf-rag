@@ -24,9 +24,9 @@
  传输层      backend/main.py / agent_routes.py (FastAPI) ← 参数→调用→序列化
                           │
                           ▼
- 领域层      backend/agent_api.py ← MCP/REST v2 返回、分页与诊断
+ 领域层      backend/agent_api.py ← MCP/REST 返回、分页与诊断
              backend/agent_documents.py / agent_grep.py / agent_images.py ← 按需读取能力
-             backend/library.py   ← 旧读页/精确检索/元数据聚合,与传输无关
+             backend/library.py   ← 共享索引句柄/元数据/参数解析
              backend/retrieval.py ← 检索核心
              backend/vecstore.py  ← 向量分区
              backend/bundle.py    ← 数据包
@@ -40,9 +40,10 @@
 
 1. **领域层返回 Python 原生结构，不返回 JSON 字符串**。序列化交给传输层；可预期错误
    抛 `LibraryError` 子类（带 `status/code/details`）。MCP 返回单份 JSON 文本并设置
-   `isError`，REST v2 映射为 4xx；旧 `/api/page` 保留 body 内错误的兼容形状。
-2. **MCP 与 HTTP v2 共用 `agent_api.py`，不各自实现**。底层复用 `library`、文档读取器
-   和检索核心。旧 REST 返回形状保留；新协议及输出预算见 [MCP-PROTOCOL.md](MCP-PROTOCOL.md)。
+   `isError`，REST 映射为 4xx/5xx；不维护 body 内字符串错误的旧读页接口。
+2. **MCP 与 HTTP 共用 `agent_api.py`，不各自实现**。底层复用 `library`、文档读取器
+   和检索核心。Web、pi 统一使用 `/api/v2/*`，旧查询/读取路由已删除；协议与输出预算见
+   [MCP-PROTOCOL.md](MCP-PROTOCOL.md)。
    `MCP_INPROC=1`（默认）时连接与表句柄仍共享同一份单例。
 3. **`vecstore` 依赖 `library`，不反向**。表名列表这类薄工具放在 `library`，
    因为 `vecstore` 已经用它的 `scan_arrow`，反向导入会成环。

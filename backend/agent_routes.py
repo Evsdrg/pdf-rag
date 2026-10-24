@@ -1,4 +1,4 @@
-"""Agent 协议的 HTTP 适配;旧 /api/* 响应形状保持不变。"""
+"""与 MCP 共用的唯一 REST 查询/读取协议。"""
 import json
 
 from fastapi import APIRouter
@@ -29,17 +29,17 @@ def grep(pattern: str, category: str = "", file: str = "", max_hits: int = 20,
 
 
 @router.get("/page")
-def read_page(file: str, page: int, max_chars: int = 8000, cursor: str = ""):
+def read_page(file: str, page: int, max_chars: int = 0, cursor: str = ""):
     return _call(agent_api.read_page, file=file, page=page, max_chars=max_chars, cursor=cursor)
 
 
 @router.get("/pages")
-def read_pages(file: str, pages: str, max_chars: int = 8000, cursor: str = ""):
+def read_pages(file: str, pages: str, max_chars: int = 0, cursor: str = ""):
     return _call(agent_api.read_pages, file=file, pages=pages, max_chars=max_chars, cursor=cursor)
 
 
 @router.get("/section")
-def read_section(file: str, section_id: str, max_chars: int = 8000, cursor: str = ""):
+def read_section(file: str, section_id: str, max_chars: int = 0, cursor: str = ""):
     return _call(agent_api.read_section, file=file, section_id=section_id,
                  max_chars=max_chars, cursor=cursor)
 

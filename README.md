@@ -11,7 +11,7 @@
    浏览器   ──────▶  │  Web UI      │ Vue 3 + naive-ui（打进镜像，由后端托管）
                      ├──────────────┤
   MCP 客户端 ─────▶  │  /mcp        │ 10 个 pdf_rag_* 工具（默认内嵌进后端进程）
-  pi 等 REST ─────▶  │  /api/v2/*   │ 与 MCP 共用 backend/agent_api.py，旧 /api/* 兼容 Web
+  Web / pi REST ─▶  │  /api/v2/*   │ 与 MCP 共用 backend/agent_api.py
                      ├──────────────┤
                      │ LanceDB      │ 向量 + FTS 全文索引
                      └──────────────┘
@@ -120,9 +120,9 @@ OCR 地址/模型/提示词在此层（按 `ocr_backend` 联动），但 `OCR_AP
 
 返回结构、游标、页号口径和兼容边界见 [MCP/Agent 协议](docs/MCP-PROTOCOL.md)。
 
-**REST**：新 Agent 能力走 `/api/v2/*`，与 MCP 共用 `backend/agent_api.py`；原 `/api/*`
-保留 Web 使用的裸数组和读页响应。端点表见 [DEPLOY.md](DEPLOY.md)。`clients/pi/pdf-rag-pi/`
-附带使用 v2 的 pi 编码 agent 扩展示例。
+**REST**：Web 和 pi 的查询/读取统一走 `/api/v2/*`，与 MCP 共用 `backend/agent_api.py`。
+旧查询/读取接口已删除，不维护兼容响应。索引、配置、数据包管理接口仍在 `/api/*`；
+端点表见 [DEPLOY.md](DEPLOY.md)，pi 扩展示例在 `clients/pi/pdf-rag-pi/`。
 
 ## 索引
 

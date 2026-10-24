@@ -1,12 +1,10 @@
 """Agent 精确检索:按页聚合索引匹配,不把分块计数冒充印刷页计数。"""
-import re
-
 from . import library
 from .agent_paging import bounded_items, fingerprint
 
 
 def _normalize(text):
-    return re.sub(r"[\s|]+", "", text)
+    return " ".join(text.replace("|", " ").split())
 
 
 def grep(table, pattern: str, category: str, file: str, max_hits: int, context: int,

@@ -9,7 +9,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
-import fitz
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -114,78 +113,9 @@ def _load_state() -> dict:
         return {}
 
 
-@app.get("/api/page")
-def read_page(
-    file: Annotated[str, Query(description="pdfrag_search 返回的文件路径")],
-    page: Annotated[int, Query(ge=1, description="页码,从 1 开始")],
-) -> dict:
-    try:
-        full = doc_utils.resolve_under(config.PDF_ROOT, file)
-    except FileNotFoundError:
-        return {"error": f"文件不存在或路径越界: {file}", "text": "", "ocr": False}
-    if not os.path.isfile(full):
-        return {"error": f"文件不存在: {file}", "text": "", "ocr": False}
-    if doc_utils.is_markdown(full):
-        text, err = doc_utils.read_md_page(full, page)
-        return {"text": text, "ocr": False, "error": err}
-    doc = fitz.open(full)
-    try:
-        if page < 1 or page > len(doc):
-            return {"error": f"页码越界: {page} (共 {len(doc)} 页)", "text": "", "ocr": False}
-        from .doc_utils import read_page_text
-        text, err = read_page_text(doc, page)
-        return {"text": text, "ocr": bool(err), "error": err}
-    finally:
-        doc.close()
-
-
 @app.get("/api/state")
 def get_state() -> dict:
     return _load_state()
-
-
-@app.get("/api/grep")
-def api_grep(
-    pattern: Annotated[str, Query(min_length=1, description="正则/字面,如 VDD_APC")],
-    category: Annotated[str | None, Query(description="按类别过滤")] = None,
-    file: Annotated[str | None, Query(description="只在文件名含该子串的文档内检索")] = None,
-    max_hits: Annotated[int, Query(ge=1, le=200)] = 20,
-    context: Annotated[int, Query(ge=0, le=500)] = 60,
-    flex_separator: Annotated[bool, Query(description="下划线/空白视为等价")] = True,
-) -> dict:
-    """在库文本里精确检索(正则),不走向量。非 MCP 客户端(如 pi)的等价入口。"""
-    table = _table()
-    if table is None:
-        return {"error": "索引不存在,请先运行 ingest"}
-    try:
-        return library.grep_rows(table, pattern, category=category or "",
-                                 file=file or "", max_hits=max_hits,
-                                 context=context, flex_separator=flex_separator)
-    except library.LibraryError as e:
-        raise HTTPException(status_code=e.status, detail=str(e)) from e
-
-
-@app.get("/api/pages")
-def api_pages(
-    file: Annotated[str, Query(description="库内相对路径,同 /api/page")],
-    pages: Annotated[str, Query(description='页码列表,如 "62,63" 或 "62-65"')],
-) -> dict:
-    """一次读多页(规格表常跨页)。单页越界在对应项内回报,不中断整体。"""
-    try:
-        return library.read_pages(config.PDF_ROOT, file, pages)
-    except library.LibraryError as e:
-        raise HTTPException(status_code=e.status, detail=str(e)) from e
-
-
-@app.get("/api/outline")
-def api_outline(
-    file: Annotated[str, Query(description="库内相对路径,同 /api/page")],
-) -> dict:
-    """取文档书签/标题目录(章节 + 页码),用于在大手册里导航后精确读页。"""
-    try:
-        return library.doc_outline(config.PDF_ROOT, file)
-    except library.LibraryError as e:
-        raise HTTPException(status_code=e.status, detail=str(e)) from e
 
 
 @app.get("/api/stats")
@@ -258,47 +188,6 @@ def _vector_status(table) -> dict:
     selected = [m["slug"] for m in vecstore.select_partitions(db)]
     return {"partitions": parts, "selected": selected,
             "current": vecstore.current_slug()}
-
-
-@app.get("/api/categories")
-def get_categories() -> list[str]:
-    table = _table()
-    if table is None:
-        return []
-    return library.categories(table)
-
-
-@app.get("/api/files")
-def list_files(
-    category: Annotated[str | None, Query(description="按类别过滤")] = None,
-) -> list[dict]:
-    table = _table()
-    if table is None:
-        return []
-    all_files = library.files_index(table)
-    # 全量结果缓存一份,category 过滤在内存里做(287 条,过滤成本可忽略);
-    # 每种 category 各缓存一份会让条目数随类别数膨胀,不划算。
-    if category:
-        return [f for f in all_files if f["category"] == category]
-    return all_files
-
-
-@app.get("/api/search")
-def search(
-    q: Annotated[str, Query(min_length=1, max_length=200, description="查询内容")],
-    category: Annotated[str | None, Query(description="按类别过滤")] = None,
-    top_k: Annotated[int, Query(ge=1, le=20)] = 5,
-    mode: Annotated[str, Query(description="mixed/fts/vector")] = "mixed",
-    rerank: Annotated[bool, Query(description="是否重排")] = True,
-    file: Annotated[str | None, Query(description="只在文件名含该子串的文档内检索")] = None,
-    max_per_doc: Annotated[int, Query(ge=0, le=20, description="同一文件最多返回几条,0=不限")] = 0,
-) -> list[dict]:
-    table = _table()
-    if table is None:
-        return []
-    hits = retrieval.search(table, q, category=category, top_k=top_k, mode=mode, rerank=rerank,
-                            file=file, max_per_doc=max_per_doc)
-    return [{key: value for key, value in hit.items() if key != "snippet_ref"} for hit in hits]
 
 
 @app.get("/api/history")

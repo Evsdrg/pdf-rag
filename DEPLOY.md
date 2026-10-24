@@ -281,21 +281,24 @@ curl -X POST -H "Content-Type: application/json" \
 
 ## 十、API 参考（完整端点表）
 
-面向 Agent 的新接口使用 `/api/v2/*`，包含有界分页、续读、章节读取、结构化错误和本地页图；
-完整参数和返回契约见 [MCP/Agent 协议](docs/MCP-PROTOCOL.md)。下表为继续兼容 Web 的旧 `/api/*`，
-搜索/文件列表仍为裸数组，读页仍为 `{text,ocr,error}`，不要把两版返回混用。
+查询/读取统一使用 `/api/v2/*`，包含有界分页、续读、章节读取、结构化错误和本地页图；
+完整参数与返回契约见 [MCP/Agent 协议](docs/MCP-PROTOCOL.md)。Web 与 pi 均已适配，
+旧查询/读取路由已删除。管理、统计及原文件下载接口保持各自用途。
 
 | 端点 | 说明 |
 |---|---|
-| `GET /api/search?q=&category=&top_k=&mode=&rerank=&file=&max_per_doc=` | 混合检索 |
-| `GET /api/grep?pattern=&category=&file=&max_hits=&context=&flex_separator=` | 正则精确检索 |
-| `GET /api/page?file=&page=` | 单页原文（低文本页回退 OCR） |
-| `GET /api/pages?file=&pages=62-65` | 多页 |
-| `GET /api/outline?file=` | 书签目录 |
+| `GET /api/v2/search?query=&category=&top_k=&mode=&rerank=&file=&max_per_doc=` | 混合检索与诊断 |
+| `GET /api/v2/grep?pattern=&category=&file=&max_hits=&context=&flex_separator=&cursor=` | 分页正则精确检索 |
+| `GET /api/v2/page?file=&page=&max_chars=&cursor=` | 有界单页原文（低文本页回退 OCR） |
+| `GET /api/v2/pages?file=&pages=62-65&max_chars=&cursor=` | 有界多页 |
+| `GET /api/v2/outline?file=&max_level=&limit=&cursor=` | 分页目录与章节标识 |
+| `GET /api/v2/section?file=&section_id=&max_chars=&cursor=` | 章节读取 |
+| `GET /api/v2/render?file=&page=&clip=&max_size=` | 本地 PDF 页图 |
+| `GET /api/v2/status` | 索引与 OCR 最近真实调用状态，不探测 |
+| `GET /api/v2/categories` | 类别列表 |
+| `GET /api/v2/files?category=&file=&model_no=&kind=&limit=&cursor=` | 文件元数据分页 |
 | `GET /api/pdf?file=` | 原文内联（PDF 可用 `#page=N` 深链；MD 走下载） |
 | `GET /api/stats` | 文档数/块数/类别分布/索引历史 |
-| `GET /api/categories` | 全部类别目录 |
-| `GET /api/files?category=` | 文件清单与元数据（含提取质量字段） |
 | `GET /api/extract/report?limit=` | 逐文档提取质量体检（低文本页标记） |
 | `GET /api/history` | 索引历史 |
 | `GET /api/state` | 索引进度 |
@@ -311,5 +314,5 @@ curl -X POST -H "Content-Type: application/json" \
 | `POST /api/admin/shutdown` | 关闭后端（需 `X-Admin-Token`） |
 
 所有接受 `file` 的端点只认**语料库内的相对路径**（正斜杠；Windows 风格反斜杠会自动
-归一），绝对路径与 `..` 穿越一律拒绝。`/api/search` 与 `/api/grep` 的 `file` 过滤按
+归一），绝对路径与 `..` 穿越一律拒绝。`/api/v2/search` 与 `/api/v2/grep` 的 `file` 过滤按
 **字面子串**匹配（`%`/`_` 不作通配符解释）。

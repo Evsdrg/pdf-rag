@@ -97,9 +97,15 @@ class Reader:
                 self.total = len(self.md)
             else:
                 self.doc = fitz.open(self.full)
+                if self.doc.needs_pass:
+                    raise library.LibraryError("文档已加密,无法读取", code="DOCUMENT_ENCRYPTED")
                 self.total = len(self.doc)
             return self
-        except (fitz.FileDataError, RuntimeError):
+        except Exception as error:
+            if self.doc is not None:
+                self.doc.close()
+            if isinstance(error, library.LibraryError):
+                raise
             raise library.LibraryError("文档无法打开", code="DOCUMENT_UNREADABLE") from None
 
     def __exit__(self, *args):

@@ -43,6 +43,6 @@ print()
 print("=== 4) 导入后检索 ===")
 q = "QMC6309 供电电压"
 res = json.loads(urllib.request.urlopen(
-    f"{BASE}/api/search?q={urllib.parse.quote(q)}&top_k=2", timeout=120).read())
-for h in res:
+    f"{BASE}/api/v2/search?query={urllib.parse.quote(q)}&top_k=2", timeout=120).read())
+for h in res["results"]:
     print(f"   p{h['page']} {h['file'].split(chr(92))[-1][:40]}  含2.5={'2.5' in h['snippet']}")

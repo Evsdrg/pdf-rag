@@ -241,8 +241,8 @@ _SPECS = [
          "渲染扫描页送 OCR 的 DPI", "OCR_DPI", 72, 600),
     Spec("ocr_timeout", "OCR 调用超时", "float", 300.0, "文档提取",
          "调用本地 OCR 服务的超时(秒)", "OCR_TIMEOUT", 10.0, 1800.0),
-    Spec("page_max_chars", "单页返回上限", "int", 8000, "文档提取",
-         "read_page 返回单页文本的字符上限", "PAGE_MAX_CHARS", 500, 200000),
+    Spec("page_max_chars", "读页默认预算", "int", 8000, "文档提取",
+         "单页/多页/章节的默认文本预算;实际不超过12000字符,超出可用游标续读", "PAGE_MAX_CHARS", 500, 200000),
     Spec("table_min_ratio", "表格有效率下限", "float", 0.10, "文档提取",
          "表格有效内容率低于该值视为误检并丢弃", "TABLE_MIN_RATIO", 0.0, 1.0),
 

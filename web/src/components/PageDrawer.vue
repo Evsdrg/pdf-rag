@@ -5,7 +5,7 @@
  * SearchView / FileListView 各有一份几乎逐字的实现(只有宽度和 OCR 标签文案不同),
  * 收进这里避免两处漂移。翻页时组件自己请求页面,父组件只负责开关。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import { NButton, NDrawer, NDrawerContent, NSpace, NTag } from 'naive-ui'
 import { pdfUrl, readPage } from '../api'
 
@@ -31,25 +31,43 @@ const visible = computed({
   set: (v: boolean) => emit('update:show', v),
 })
 
-const current = ref(props.page)
-const text = ref('')
-const isOcr = ref(false)
-const loading = ref(false)
-const err = ref('')
+const current = shallowRef(props.page)
+const text = shallowRef('')
+const isOcr = shallowRef(false)
+const loading = shallowRef(false)
+const err = shallowRef('')
+const warning = shallowRef('')
+const cursor = shallowRef<string | null>(null)
+const totalPages = shallowRef(0)
+let inFlight: AbortController | null = null
 
-async function load(file: string, page: number) {
+async function load(file: string, page: number, append = false) {
   if (!file || page < 1) return
+  inFlight?.abort()
+  const controller = new AbortController()
+  inFlight = controller
   loading.value = true
   err.value = ''
-  try {
-    const r = await readPage(file, page)
-    text.value = r.text || r.error || '(空)'
-    isOcr.value = !!r.ocr
-  } catch (e) {
+  if (!append) {
     text.value = ''
-    err.value = `读取失败:${(e as Error).message}`
+    warning.value = ''
+    cursor.value = null
+  }
+  try {
+    const response = await readPage(file, page, controller.signal, append ? cursor.value ?? '' : '')
+    if (inFlight !== controller) return
+    text.value = append ? text.value + response.text : response.text || '(空)'
+    isOcr.value = response.ocr
+    warning.value = response.warnings.map((item) => item.message).join('；')
+    totalPages.value = response.total_pages
+    cursor.value = response.next_cursor
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError') err.value = `读取失败:${(e as Error).message}`
   } finally {
-    loading.value = false
+    if (inFlight === controller) {
+      loading.value = false
+      inFlight = null
+    }
   }
 }
 
@@ -67,6 +85,10 @@ watch(visible, (v) => {
   if (v) {
     current.value = props.page
     load(props.file, props.page)
+  } else {
+    inFlight?.abort()
+    inFlight = null
+    loading.value = false
   }
 })
 
@@ -84,17 +106,20 @@ function turn(delta: number) {
       <n-space class="page-nav" align="center">
         <n-button size="small" :disabled="current <= 1" :loading="loading" @click="turn(-1)">上一页</n-button>
         <span>第 {{ current }} 页</span>
-        <n-button size="small" :loading="loading" @click="turn(1)">下一页</n-button>
+        <n-button size="small" :disabled="loading || (totalPages > 0 && current >= totalPages)" :loading="loading" @click="turn(1)">下一页</n-button>
         <n-tag v-if="isOcr" size="small" type="warning" round>{{ ocrLabel }}</n-tag>
         <n-button size="small" tag="a" :href="pdfUrl(file, current)" target="_blank">打开原文</n-button>
       </n-space>
+      <p v-if="warning" class="page-warning" role="status">{{ warning }}</p>
       <pre class="page-text">{{ err || text }}</pre>
+      <n-button v-if="cursor" size="small" :loading="loading" @click="load(file, current, true)">继续读取本页</n-button>
     </n-drawer-content>
   </n-drawer>
 </template>
 
 <style scoped>
 .page-nav { margin-bottom: 12px; }
+.page-warning { color: #f9e2af; font-size: 13px; }
 .page-text {
   white-space: pre-wrap;
   font-family: Consolas, monospace;

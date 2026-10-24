@@ -16,6 +16,7 @@ const category = ref<string | null>(null)
 const results = ref<SearchHit[]>([])
 const searching = ref(false)
 const searched = ref(false)
+const diagnostics = ref('')
 const mode = ref('mixed')
 const rerank = ref(true)
 const topK = ref(8)
@@ -62,10 +63,15 @@ async function run(query?: string) {
   const ctrl = new AbortController()
   inFlight = ctrl
   try {
-    results.value = await searchDocs(
+    const response = await searchDocs(
       queryText, category.value || undefined, topK.value, mode.value, rerank.value,
       fileFilter.value.trim() || undefined, 0, ctrl.signal,
     )
+    results.value = response.results
+    diagnostics.value = [...new Set([
+      response.notice, ...response.warnings.map((item) => item.message),
+      response.truncated ? response.continuation_hint : '',
+    ].filter(Boolean))].join('；')
     searched.value = true
     if (results.value.length) pushHistory(queryText)
   } catch (e) {
@@ -150,6 +156,7 @@ function fileBase(file: string) {
         <n-divider style="margin: 4px 0" />
       </template>
 
+      <p v-if="diagnostics" class="diagnostics" role="status">{{ diagnostics }}</p>
       <n-spin :show="searching">
         <div v-if="!searched" class="hint">
           <n-empty description="输入查询并搜索,将混合 BM25 全文 + 语义向量检索" />
@@ -197,6 +204,7 @@ function fileBase(file: string) {
 </template>
 
 <style scoped>
+.diagnostics { color: #f9e2af; margin: 0; font-size: 13px; }
 .row {
   max-width: 760px;
 }

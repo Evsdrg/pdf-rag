@@ -1,4 +1,4 @@
-"""面向 Agent 的共享响应协议;MCP 和 REST v2 使用同一领域入口。"""
+"""MCP 与统一 REST 查询/读取接口共享的领域入口。"""
 import json
 import logging
 import re
@@ -44,23 +44,25 @@ def check_int(value: int, name: str, low: int, high: int) -> int:
     return value
 
 
-def read_page(file: str, page: int, max_chars: int = 8000, cursor: str = "") -> dict:
+def _read_budget(max_chars: int) -> int:
+    value = max_chars or min(int(config.get("page_max_chars")), 12000)
+    return check_int(value, "max_chars", 256, 12000)
+
+
+def read_page(file: str, page: int, max_chars: int = 0, cursor: str = "") -> dict:
     check_int(page, "page", 1, 1_000_000)
-    check_int(max_chars, "max_chars", 256, 12000)
-    return agent_documents.read(file, [page], max_chars, cursor, single=True)
+    return agent_documents.read(file, [page], _read_budget(max_chars), cursor, single=True)
 
 
-def read_pages(file: str, pages: str, max_chars: int = 8000, cursor: str = "") -> dict:
-    check_int(max_chars, "max_chars", 256, 12000)
+def read_pages(file: str, pages: str, max_chars: int = 0, cursor: str = "") -> dict:
     numbers = library.parse_page_spec(pages, max_pages=50)
-    return agent_documents.read(file, numbers, max_chars, cursor)
+    return agent_documents.read(file, numbers, _read_budget(max_chars), cursor)
 
 
-def read_section(file: str, section_id: str, max_chars: int = 8000, cursor: str = "") -> dict:
-    check_int(max_chars, "max_chars", 256, 12000)
+def read_section(file: str, section_id: str, max_chars: int = 0, cursor: str = "") -> dict:
     if not section_id:
         raise library.LibraryError("section_id 不可为空", code="INVALID_SECTION")
-    return agent_documents.read(file, [], max_chars, cursor, section_id=section_id)
+    return agent_documents.read(file, [], _read_budget(max_chars), cursor, section_id=section_id)
 
 
 def get_outline(file: str, max_level: int = 2, limit: int = 60, cursor: str = "") -> dict:

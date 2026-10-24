@@ -8,7 +8,7 @@
              图片必须内联(base64),因为远端读不到本地路径。
 
 选哪条由 config.get("ocr_backend") 决定。上层(ingest 的 ocr_page、doc_utils 的
-read_page_text)只调本模块,不关心后端差异。
+read_page_content)只调本模块,不关心后端差异。
 """
 import base64
 import time

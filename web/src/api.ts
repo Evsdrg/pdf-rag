@@ -70,6 +70,28 @@ export interface SearchHit {
   snippet: string
 }
 
+export interface ApiWarning {
+  code: string
+  message: string
+}
+
+export interface SearchResponse {
+  results: SearchHit[]
+  warnings: ApiWarning[]
+  notice: string
+  truncated: boolean
+  continuation_hint: string
+}
+
+export interface PageResponse {
+  text: string
+  ocr: boolean
+  warnings: ApiWarning[]
+  total_pages: number
+  truncated: boolean
+  next_cursor: string | null
+}
+
 export interface FileEntry {
   file: string
   category: string
@@ -163,14 +185,26 @@ async function put<T>(path: string, body: unknown): Promise<T> {
 /** 后端用 HTTPException 返回可读原因(如取值超范围),尽量透出给用户 */
 async function errorText(r: Response): Promise<string> {
   const detail = await r.json().catch(() => null)
-  return detail?.detail ?? `${r.status} ${r.statusText}`
+  return detail?.error?.message ?? detail?.detail ?? `${r.status} ${r.statusText}`
 }
 
 export const getState = () => get<IngestState>('/state')
 export const getStats = () => get<Stats>('/stats')
-export const getCategories = () => get<string[]>('/categories')
-export const getFiles = (category?: string) =>
-  get<FileEntry[]>('/files' + (category ? `?category=${encodeURIComponent(category)}` : ''))
+export const getCategories = async () =>
+  (await get<{ categories: string[] }>('/v2/categories')).categories
+export async function getFiles(category?: string): Promise<FileEntry[]> {
+  const files: FileEntry[] = []
+  let cursor = ''
+  do {
+    const params = new URLSearchParams({ limit: '100' })
+    if (category) params.set('category', category)
+    if (cursor) params.set('cursor', cursor)
+    const batch = await get<{ files: FileEntry[]; next_cursor: string | null }>('/v2/files?' + params)
+    files.push(...batch.files)
+    cursor = batch.next_cursor ?? ''
+  } while (cursor)
+  return files
+}
 
 // ---------- SWR(stale-while-revalidate)----------
 // 文件库/资料库这类页面每次切入都全量重拉没有意义:数据只在 ingest 后变化,
@@ -208,15 +242,15 @@ export const searchDocs = (
   q: string, category?: string, topK = 5, mode = 'mixed', rerank = true,
   file?: string, maxPerDoc = 0, signal?: AbortSignal,
 ) => {
-  const params = new URLSearchParams({ q, top_k: String(topK), mode, rerank: String(rerank) })
+  const params = new URLSearchParams({ query: q, top_k: String(topK), mode, rerank: String(rerank) })
   if (category) params.set('category', category)
   if (file) params.set('file', file)
   if (maxPerDoc > 0) params.set('max_per_doc', String(maxPerDoc))
-  return get<SearchHit[]>('/search?' + params.toString(), signal)
+  return get<SearchResponse>('/v2/search?' + params.toString(), signal)
 }
-export const readPage = (file: string, page: number, signal?: AbortSignal) =>
-  get<{ text: string; ocr: boolean; error?: string }>(
-    '/page?' + new URLSearchParams({ file, page: String(page) }), signal,
+export const readPage = (file: string, page: number, signal?: AbortSignal, cursor = '') =>
+  get<PageResponse>(
+    '/v2/page?' + new URLSearchParams({ file, page: String(page), ...(cursor ? { cursor } : {}) }), signal,
   )
 export const runIngest = (rebuild = false) =>
   post<{ ok: boolean; error?: string }>('/ingest' + (rebuild ? '?rebuild=true' : ''))

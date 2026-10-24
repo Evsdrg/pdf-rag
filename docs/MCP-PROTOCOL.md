@@ -1,6 +1,6 @@
 # MCP / Agent 返回协议
 
-本文记录 MCP 与 `/api/v2/*` 的返回契约。原有 `/api/*` 的数组及读页形状保持兼容，Web 不需要迁移；pi 扩展示例使用 v2。
+本文记录 MCP 与唯一 REST 查询/读取接口 `/api/v2/*` 的返回契约。旧 `/api/search`、`page/pages/outline/grep/files/categories` 已移除，不保留兼容别名；Web 和 pi 扩展示例都使用统一协议。索引、配置、数据包管理及原文件下载接口不受此移除影响。
 
 ## 1. 返回与错误
 
@@ -23,7 +23,7 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 
 - 文件列表默认 30、最多 100 项，可筛选 `category/file/model_no/kind`；`file/model_no` 是大小写不敏感的字面子串。
 - 目录默认两级、60 项，可用 `max_level=6` 展开；最多 100 项。
-- 单页、多页、章节的 `max_chars` 默认 8000，范围 256–12000；多页是整次预算，不是每页预算。
+- 单页、多页、章节的 `max_chars=0` 默认使用 `page_max_chars` 配置（初始8000），实际预算最高12000；也可显式指定256–12000。多页是整次预算，不是每页预算。
 - `read_pages` 最多指定 50 页，支持 `62,63`、`62-65`，先校验容量再展开范围。
 - 列表、目录、精确查找和文档读取另有 32000 字节 JSON 上限，Unicode 和转义字符按真实序列化大小计。
 - 搜索过大时保留排序靠前结果，并返回 `omitted_results` 和缩小查询提示；不声称结果完整。
@@ -39,7 +39,7 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 - Markdown：按标题层级读取，包含子节，不包含下一个同级或上级标题。
 - PDF：按书签页范围读取，`section_basis=bookmark_pages`；相邻书签共享物理页时可能包含相邻节，不伪称页内精确定位。无书签不自动推断章节。
 
-搜索保留 `snippet` 字段（v2 使用经过保守展示处理的窗口，旧 REST 保留原窗口），并提供 `snippet_ref`：`chunk_id/index_md5/start_offset/end_offset/offset_basis/truncated_before/truncated_after/table_header/warnings`。偏移基于索引块，不是实时读页或图像坐标。展示可有限扩展到行边界、移除无意义控制字符，但不会猜测修复单位、公式、乱码；送重排器的窗口不因此改变。
+搜索的 `snippet` 使用经过保守展示处理的窗口，并提供 `snippet_ref`：`chunk_id/index_md5/start_offset/end_offset/offset_basis/truncated_before/truncated_after/table_header/warnings`。偏移基于索引块，不是实时读页或图像坐标。展示可有限扩展到行边界、移除无意义控制字符，但不会猜测修复单位、公式、乱码；送重排器的窗口不因此改变。
 
 旧索引不含 OCR 来源、页内坐标、原始表格单元格关系，不能从引用字段推断这些信息。响应协议更新不需要重建索引，也不会自动触发索引。
 
@@ -76,10 +76,10 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 | `pdf_rag_status` | `GET /api/v2/status` |
 | `pdf_rag_render_page` | `GET /api/v2/render?file=...&page=...` |
 
-除 `render.clip` 在 HTTP 查询中用 JSON 字符串表示外，参数名与 MCP 相同。旧 `/api/*` 的搜索/文件列表仍返回裸数组，旧读页仍为 `{text,ocr,error}`，不要与 v2 混用。
+除 `render.clip` 在 HTTP 查询中用 JSON 字符串表示外，参数名与 MCP 相同。Web 与 pi 使用同一结构，不在客户端猜测旧数组响应。
 
 ## 7. 离线验收
 
-`tests/test_agent_protocol.py`、`test_agent_paging.py`、`test_agent_search.py`、`test_snippet.py` 覆盖 MCP 载荷、HTTP 兼容、续读、版本失效、章节、OCR 回退、页图、空召回和来源偏移。夹具为临时文档，模型为确定性替身；协议测试禁网络连接。pi 扩展的适配测试在 `clients/pi/pdf-rag-pi/tests/`。
+`tests/test_agent_protocol.py`、`test_agent_paging.py`、`test_agent_search.py`、`test_snippet.py` 覆盖 MCP 载荷、续读、版本失效、章节、OCR 回退、页图、空召回和来源偏移。夹具为临时文档，模型为确定性替身；协议测试禁网络连接。pi 扩展的适配测试在 `clients/pi/pdf-rag-pi/tests/`。
 
 这些测试不等于新的端到端检索质量分数。真实语料排序质量仍以 [BENCHMARKS.md](BENCHMARKS.md) 的评测方法为准，不以协议测试宣称准确率提升。
