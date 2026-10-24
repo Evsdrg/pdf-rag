@@ -140,7 +140,7 @@ onBeforeRouteLeave(() => !dirtyNames.value.length || window.confirm('有未保�
     <footer v-if="payload" class="save-bar">
       <div><strong>{{ dirtyNames.length ? `${dirtyNames.length} 项未保存` : '所有改动已保存' }}</strong><span class="save-hint">切换分类保留草稿；保存作用于全部分类。</span></div>
       <div class="save-actions">
-        <NPopconfirm @positive-click="reset()"><template #trigger><NButton quaternary :disabled="saving">全部恢复默认</NButton></template>恢复全部设置为环境变量或内置默认值，并立即保存？</NPopconfirm>
+        <NPopconfirm :to="'.settings-page'" @positive-click="reset()"><template #trigger><NButton quaternary :disabled="saving">全部恢复默认</NButton></template>恢复全部设置为环境变量或内置默认值，并立即保存？</NPopconfirm>
         <NButton :disabled="!dirtyNames.length || saving" @click="revert">撤销改动</NButton>
         <NButton type="primary" :loading="saving" :disabled="!dirtyNames.length" @click="saveDraft">保存全部改动</NButton>
       </div>
@@ -158,15 +158,15 @@ onBeforeRouteLeave(() => !dirtyNames.value.length || window.confirm('有未保�
 .search-bar :deep(.n-input) { flex: 1; }
 .settings-layout { display: grid; grid-template-columns: 195px minmax(0, 1fr); gap: 24px; }
 .category-nav { align-self: start; position: sticky; top: 0; display: flex; flex-direction: column; gap: 6px; }
-.category-button { border: 1px solid transparent; border-radius: 8px; color: #cdd6f4; background: transparent; text-align: left; padding: 12px; cursor: pointer; }
-.category-button:hover { background: #252537; }
-.category-button.selected { background: #253246; border-color: #405875; }
+.category-button { border: 1px solid #313244; border-radius: 0; color: #cdd6f4; background: transparent; text-align: left; padding: 12px; cursor: pointer; }
+.category-button:hover { background: #1e1e2e; }
+.category-button.selected { background: #1e1e2e; border-color: #45475a; border-left: 3px solid #89b4fa; }
 .category-heading { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
 .category-description { display: block; margin-top: 4px; color: #7f849c; font-size: 11px; line-height: 1.5; }
 .selected .category-heading { color: #89b4fa; }
 .modified-dot { min-width: 17px; text-align: center; font-size: 10px; color: #f9e2af; }
 .nav-note { margin: 18px 12px; color: #6c7086; font-size: 11px; line-height: 1.8; }
-.settings-content { min-width: 0; border: 1px solid #313244; border-radius: 12px; background: #1e1e2e; padding: 24px; }
+.settings-content { min-width: 0; border: 1px solid #313244; border-radius: 0; background: #1e1e2e; padding: 24px; }
 .section-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
 .section-header h3 { font-size: 18px; margin: 0; }
 .section-hint { margin-bottom: 6px; font-size: 12px; }
@@ -174,7 +174,9 @@ onBeforeRouteLeave(() => !dirtyNames.value.length || window.confirm('有未保�
 .advanced-note { color: #7f849c; font-size: 12px; }
 .empty-state { padding: 48px 0; }
 .notice { margin-bottom: 18px; }
-.save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; padding: 15px 18px; border: 1px solid #45475a; border-radius: 10px; background: #181825; box-shadow: 0 -8px 24px #11111b44; }
+.save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; padding: 15px 18px; border: 1px solid #45475a; border-radius: 0; background: #181825; }
+/* 本页所有组件（含弹层）统一为直角，不引入另一套卡片与按钮语言。 */
+.settings-page :deep(*) { border-radius: 0 !important; }
 .save-bar strong { font-size: 13px; color: #cdd6f4; }
 .save-hint { display: block; font-size: 11px; color: #7f849c; margin-top: 4px; }
 .save-actions { display: flex; gap: 10px; align-items: center; }

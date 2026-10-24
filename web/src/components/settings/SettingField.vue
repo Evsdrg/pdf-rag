@@ -53,7 +53,7 @@ const nextRun = computed(() => props.spec.group === '索引吞吐' || props.spec
       <NSwitch v-if="spec.kind === 'bool'" :value="Boolean(value)" :disabled="disabled || busy"
         :aria-label="spec.label" @update:value="emit('change', $event)" />
       <NSelect v-else-if="name === 'ocr_backend'" :value="String(value)" :options="backendOptions"
-        :disabled="busy" :input-props="{ id: `setting-${name}`, 'aria-label': spec.label }"
+        :disabled="busy" :to="'.settings-page'" :aria-label="spec.label" :input-props="{ id: `setting-${name}`, 'aria-label': spec.label }"
         @update:value="emit('change', $event)" />
       <NInputNumber v-else-if="spec.kind === 'int' || spec.kind === 'float'"
         :value="Number(value)" :min="spec.lo ?? undefined" :max="spec.hi ?? undefined"
