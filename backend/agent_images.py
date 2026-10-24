@@ -9,7 +9,7 @@ from . import agent_documents, library
 MAX_IMAGE_BYTES = 2_000_000
 
 
-def render(file: str, page: int, clip: list[float] | None = None, max_size: int = 1600):
+def _render(file: str, page: int, clip: list[float] | None = None, max_size: int = 1600):
     if isinstance(page, bool) or not isinstance(page, int) or page < 1:
         raise library.LibraryError("page 需为正整数")
     if isinstance(max_size, bool) or not isinstance(max_size, int) or not 256 <= max_size <= 2400:
@@ -18,6 +18,8 @@ def render(file: str, page: int, clip: list[float] | None = None, max_size: int 
     if not full.lower().endswith(".pdf"):
         raise library.LibraryError("页图仅支持PDF", code="UNSUPPORTED_FORMAT")
     with fitz.open(full) as doc:
+        if doc.needs_pass:
+            raise library.LibraryError("文档已加密,无法渲染", code="DOCUMENT_ENCRYPTED")
         if page > len(doc):
             raise agent_documents.page_error(page, len(doc))
         target = doc[page - 1]
@@ -45,6 +47,15 @@ def render(file: str, page: int, clip: list[float] | None = None, max_size: int 
                 return metadata, data
             scale *= .7
     raise library.LibraryError("页图超过返回上限,请缩小裁剪区域", code="IMAGE_TOO_LARGE")
+
+
+def render(file: str, page: int, clip: list[float] | None = None, max_size: int = 1600):
+    try:
+        return _render(file, page, clip, max_size)
+    except library.LibraryError:
+        raise
+    except Exception:
+        raise library.LibraryError("文档无法渲染,请检查文件是否完整", code="DOCUMENT_UNREADABLE") from None
 
 
 def parse_clip(value: str):

@@ -128,6 +128,29 @@ def flex_pattern(pattern: str) -> str:
     i = 0
     while i < len(pattern):
         ch = pattern[i]
+        if ch == "\\" and i + 1 < len(pattern):
+            out.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if ch == "[":
+            end = i + 1
+            while end < len(pattern):
+                if pattern[end] == "\\":
+                    end += 2
+                elif pattern[end] == "]":
+                    end += 1
+                    break
+                else:
+                    end += 1
+            out.append(pattern[i:end])
+            i = end
+            continue
+        if ch == "{":
+            end = pattern.find("}", i + 1)
+            if end >= 0:
+                out.append(pattern[i:end + 1])
+                i = end + 1
+                continue
         if ch != "_" and not ch.isspace():
             out.append(ch)
             i += 1

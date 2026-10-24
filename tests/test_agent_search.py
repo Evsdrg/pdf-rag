@@ -56,6 +56,8 @@ class DiagnosticsTest(unittest.TestCase):
         self.assertEqual(identities[0]["status"], "unconfirmed")
         self.assertEqual(warnings[0]["code"], "MODEL_IDENTITY_UNCONFIRMED")
         self.assertEqual(agent_api._identity("I2C V1.2 100MHz", [row("text")]), ([], []))
+        for query in ("SPI2 时序", "GPIO12 配置", "UART3 初始化", "ADC1 采样"):
+            self.assertEqual(agent_api._identity(query, [row("text")]), ([], []))
 
     def test_cached_diagnostics_preserve_partitions(self):
         def add(table, query, limit, category, file, candidates, degraded, diagnostics):
@@ -87,6 +89,17 @@ class GrepTest(unittest.TestCase):
         self.assertEqual(len(result["results"][0]["contexts"]), 2)
         self.assertEqual(result["results"][0]["indexed_matches"], 3)
         self.assertNotIn("matches_in_page", result["results"][0])
+
+    def test_case_and_symbol_differences_are_not_duplicates(self):
+        result = self.run_grep([row("VDD 1 mA", "a"), row("VDD 1 MA", "b")])
+        self.assertEqual(len(result["results"][0]["contexts"]), 2)
+
+    def test_unicode_regex_and_explicit_separator_class(self):
+        table = SimpleNamespace(version=1)
+        for pattern, text in ((r"\w+", "电压"), (r"VDD[ _]APC", "VDD APC"), (r"VDD[_ ]APC", "VDD_APC")):
+            with patch.object(library, "scan_arrow", return_value=pa.Table.from_pylist([row(text)])):
+                result = agent_grep.grep(table, pattern, "", "", 20, 60, True, "")
+            self.assertEqual(result["count"], 1)
 
     def test_multiple_matches_and_page_cursor(self):
         rows = [row("VDD one VDD two", "a"), row("VDD three", "b", 1)]

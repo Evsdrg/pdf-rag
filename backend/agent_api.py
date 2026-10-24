@@ -112,7 +112,7 @@ def grep(pattern: str, category: str = "", file: str = "", max_hits: int = 20,
 def _identity(query: str, hits: list[dict]) -> tuple[list, list]:
     tokens = re.findall(r"[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*", query)
     tokens = [token for token in tokens if re.search(r"\d", token) and len(token) >= 4
-              and token.casefold() not in {"i2c", "i3c", "qspi", "uart1", "uart2", "gpio1"}
+              and not re.fullmatch(r"(?:i[23]c|spi|qspi|uart|usart|gpio|adc|dac|pwm|timer|tim|usb|can|sdio|i2s)\d*", token, re.I)
               and not re.fullmatch(r"v\d+(?:[._-]\d+)*", token, re.I)]
     if not tokens:
         return [], []
@@ -162,7 +162,7 @@ def search(query: str, category: str = "", top_k: int = 5, file: str = "",
                     vector_partitions=diagnostics.get("vector_partitions", []),
                     degraded=diagnostics.get("degraded", []),
                     notice=diagnostics.get("notice", ""),
-                    counts=diagnostics.get("counts", {}),
+                    counts={**diagnostics.get("counts", {}), "returned": len(hits)},
                     cached=diagnostics.get("cached", False))
     if json_size(payload) > MAX_RESPONSE_BYTES:
         raise library.LibraryError("返回内容超过上限,请缩小查询范围", code="RESPONSE_TOO_LARGE")

@@ -113,6 +113,17 @@ class ProtocolTest(unittest.TestCase):
             result = self.client.get("/api/v2/render", params={"file": "chart.pdf", "page": 1, "clip": clip})
             self.assertEqual(result.status_code, 400)
 
+    def test_render_corrupt_and_encrypted_documents_are_safe(self):
+        (self.root / "bad.pdf").write_bytes(b"not a PDF")
+        with fitz.open() as doc:
+            doc.new_page()
+            doc.save(self.root / "locked.pdf", encryption=fitz.PDF_ENCRYPT_AES_256,
+                     owner_pw="test-owner", user_pw="test-reader")
+        for file, code in (("bad.pdf", "DOCUMENT_UNREADABLE"), ("locked.pdf", "DOCUMENT_ENCRYPTED")):
+            result = self.client.get("/api/v2/render", params={"file": file, "page": 1})
+            self.assertEqual(result.json()["error"]["code"], code)
+            self.assertNotIn(str(self.root), result.text)
+
     def test_mcp_returns_one_json_text_block_and_error_flag(self):
         async def run():
             async with Client(server.mcp) as client:
@@ -128,6 +139,16 @@ class ProtocolTest(unittest.TestCase):
 
 
 class LegacyContractTest(unittest.TestCase):
+    def test_existing_search_does_not_duplicate_reference_text(self):
+        from backend.main import app
+        client = TestClient(app)
+        hit = {"file": "a.pdf", "page": 1, "snippet": "original", "score": 1,
+               "snippet_ref": {"text": "display", "chunk_id": "uid"}}
+        with patch("backend.main._table", return_value=object()), \
+             patch("backend.main.retrieval.search", return_value=[hit]):
+            result = client.get("/api/search?q=voltage").json()
+        self.assertEqual(result, [{k: v for k, v in hit.items() if k != "snippet_ref"}])
+
     def test_old_api_shapes_unchanged(self):
         from backend.main import app
         client = TestClient(app)

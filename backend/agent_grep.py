@@ -1,24 +1,18 @@
 """Agent 精确检索:按页聚合索引匹配,不把分块计数冒充印刷页计数。"""
 import re
 
-import pyarrow.compute as pc
-
 from . import library
 from .agent_paging import bounded_items, fingerprint
 
 
 def _normalize(text):
-    return re.sub(r"[\s|_]+", "", text).casefold()
+    return re.sub(r"[\s|]+", "", text)
 
 
 def grep(table, pattern: str, category: str, file: str, max_hits: int, context: int,
          flex_separator: bool, cursor: str):
     _, regex = library.compile_search_regex(pattern, flex_separator)
     data = library.scan_arrow(table, ["uid", "file", "page", "text", "category", "model_no"])
-    try:
-        data = data.filter(pc.match_substring_regex(data["text"], regex.pattern))
-    except Exception:
-        raise library.LibraryError("正则不受索引检索引擎支持", code="INVALID_PATTERN") from None
     groups = {}
     for row in data.to_pylist():
         if category and row["category"] != category:

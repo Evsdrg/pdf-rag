@@ -296,8 +296,9 @@ def search(
     table = _table()
     if table is None:
         return []
-    return retrieval.search(table, q, category=category, top_k=top_k, mode=mode, rerank=rerank,
+    hits = retrieval.search(table, q, category=category, top_k=top_k, mode=mode, rerank=rerank,
                             file=file, max_per_doc=max_per_doc)
+    return [{key: value for key, value in hit.items() if key != "snippet_ref"} for hit in hits]
 
 
 @app.get("/api/history")
