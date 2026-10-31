@@ -1,0 +1,1431 @@
+{
+ "version": 1,
+ "name": "pdf-rag 关系检索评测集",
+ "scope": "标注的是**检索证据可达性**,不是答案语义正确性。每个 target 只记录:文件(唯一子串)、物理页(1 基)、以及必须同页共存的少量字面值。条件词(cond)与错值(wrong)同样来自索引原文,用于区分'条件归属'与'数值同现'。",
+ "notes": [
+  "所有 literals/cond/wrong 均由 tools/eval_relations.py --validate-only 对当前索引逐条核验:字面值必须与目标页索引文本共存,cond 必须共存,wrong 必须存在于同页,禁止的变体文件与页必须真实存在且含其标注字面值。",
+  "target.model_no 是独立维度:它记录该证据所属的型号,便于按型号切分统计,multi_model 类问题里不同 target 的 model_no 必须互不相同。",
+  "命中判定是纯字面代理:只做'文件身份 + 物理页 + 字面值共存'判断,不声称理解表格行列语义。同一页出现错值只说明'同页存在歧义',不表示系统理解有误。"
+ ],
+ "questions": [
+  {
+   "id": "A01",
+   "category": "multi_model_compare",
+   "query": "AMS1117-3.3、HR1117V-3.3 与 XBL1117-3.3-STR 三款 1A LDO 在 10mA 负载下的 3.3V 固定输出最小值分别是多少",
+   "targets": [
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 2,
+     "model_no": "AMS1117-3.3",
+     "literals": [
+      "1117-3.3",
+      "3.251"
+     ],
+     "cond": [
+      "IO=10mA",
+      "VI=5V"
+     ]
+    },
+    {
+     "file": "C54560864_线性稳压器(LDO)_HR1117V-3.3_规格书_HR1117+SERIES_REV1.0.PDF",
+     "page": 3,
+     "model_no": "HR1117V-3.3",
+     "literals": [
+      "1117-3.3",
+      "3.254"
+     ],
+     "cond": [
+      "IOUT=10mA,VIN =5V"
+     ]
+    },
+    {
+     "file": "C49242128_线性稳压器(LDO)_XBL1117-3.3-STR_规格书_XBLW-XBL1117+(EN)++DATASHEET-V2.0.PDF",
+     "page": 6,
+     "model_no": "XBL1117-3.3-STR",
+     "literals": [
+      "XBL1117-3.3",
+      "3.250"
+     ],
+     "cond": [
+      "lout= 10mA,Vin=5V"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A02",
+   "category": "multi_model_compare",
+   "query": "AMS1117-3.3、LM1117-3.3V 与 SSP1117-3.3V 的 1A 负载压差(dropout)典型值与最大值分别是多少",
+   "targets": [
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 2,
+     "model_no": "AMS1117-3.3",
+     "literals": [
+      "Dropout Voltage",
+      "1.1",
+      "1.3"
+     ],
+     "cond": [
+      "ΔVR=1% IO=1A"
+     ]
+    },
+    {
+     "file": "C55544526_线性稳压器(LDO)_LM1117-3.3V_规格书_LM1117+SERIES_REV1.1.PDF",
+     "page": 4,
+     "model_no": "LM1117-3.3V",
+     "literals": [
+      "Dropout Voltage",
+      "1.3",
+      "1.5"
+     ],
+     "cond": [
+      "IOUT = 1A"
+     ]
+    },
+    {
+     "file": "C49332772_线性稳压器(LDO)_SSP1117-3.3V_规格书_WJ1734557.PDF",
+     "page": 5,
+     "model_no": "SSP1117-3.3V",
+     "literals": [
+      "Vdrop",
+      "1.3",
+      "1.5"
+     ],
+     "cond": [
+      "Iout=1A"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A03",
+   "category": "multi_model_compare",
+   "query": "AMS1117-3.3、AMS1117-3.3V-JSM 与 AMS1117-3.3S 的 3.3V 档负载调整率(load regulation)分别是多少",
+   "targets": [
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 2,
+     "model_no": "AMS1117-3.3",
+     "literals": [
+      "Load",
+      "1117-3.3",
+      "13.2"
+     ],
+     "cond": [
+      "10mA<IO<1A"
+     ]
+    },
+    {
+     "file": "C18190088_线性稳压器(LDO)_AMS1117-3.3V-JSM_规格书_WJ1199429.PDF",
+     "page": 5,
+     "model_no": "AMS1117-3.3V-JSM",
+     "literals": [
+      "AMS1117-3.3",
+      "24",
+      "mV"
+     ],
+     "cond": [
+      "Vin =4.8V,10mA≤lout≤800mA"
+     ]
+    },
+    {
+     "file": "C347256_线性稳压器(LDO)_AMS1117-3.3S_规格书_WJ1878170.PDF",
+     "page": 4,
+     "model_no": "AMS1117-3.3S",
+     "literals": [
+      "AMS1117-3.3",
+      "3.300"
+     ],
+     "cond": [
+      "IOUT=10mA, VIN=5V, TJ=25°C"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A04",
+   "category": "multi_model_compare",
+   "query": "WS2812B-MINI-V6、WS2812E-1313 与 SK6812MINI-HS 三款内置 IC RGB 灯的电源电压范围与工作温度范围分别是多少",
+   "targets": [
+    {
+     "file": "C52941386_RGB+LED(内置IC)_WS2812B-MINI-V6_规格书_WS2812B-MINI-V6当_V1.1_CN.PDF",
+     "page": 2,
+     "model_no": "WS2812B-MINI-V6",
+     "literals": [
+      "+3.3~+5.3",
+      "-40～+85"
+     ],
+     "cond": [
+      "Topt"
+     ]
+    },
+    {
+     "file": "C5446700_RGB+LED(内置IC)_WS2812E-1313_规格书_WJ1058658.PDF",
+     "page": 2,
+     "model_no": "WS2812E-1313",
+     "literals": [
+      "+3.7~+5.3",
+      "-40～+65"
+     ],
+     "cond": [
+      "Topt"
+     ]
+    },
+    {
+     "file": "SK6812MINI-HS_规格书.pdf",
+     "page": 6,
+     "model_no": "SK6812MINI-HS",
+     "literals": [
+      "+3.7～+5.5",
+      "-40~+85"
+     ],
+     "cond": [
+      "Topt"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A05",
+   "category": "multi_model_compare",
+   "query": "WS2812B-MINI-V6、WS2812B-2427-V6 与 SK6812MINI-HS 三款灯珠的红色发光强度与红色波长分别是多少",
+   "targets": [
+    {
+     "file": "C52941386_RGB+LED(内置IC)_WS2812B-MINI-V6_规格书_WS2812B-MINI-V6当_V1.1_CN.PDF",
+     "page": 3,
+     "model_no": "WS2812B-MINI-V6",
+     "literals": [
+      "Red",
+      "310",
+      "500"
+     ],
+     "cond": [
+      "IV"
+     ]
+    },
+    {
+     "file": "C52941389_RGB+LED(内置IC)_WS2812B-2427-V6_规格书_WS2812B-2427-V6_当_V1.1_CN.PDF",
+     "page": 3,
+     "model_no": "WS2812B-2427-V6",
+     "literals": [
+      "Red",
+      "360",
+      "460"
+     ],
+     "cond": [
+      "IV"
+     ]
+    },
+    {
+     "file": "SK6812MINI-HS_规格书.pdf",
+     "page": 6,
+     "model_no": "SK6812MINI-HS",
+     "literals": [
+      "红色（RED)",
+      "620-625",
+      "240-450"
+     ],
+     "cond": [
+      "SK6812MINI-HS"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A06",
+   "category": "multi_model_compare",
+   "query": "AO4409、AO4435 与 AO3401A 三款 P 沟道 MOSFET 的 RDS(ON) 标称值与连续漏极电流分别是多少",
+   "targets": [
+    {
+     "file": "C347462_场效应管(MOSFET)_AO4409_规格书_WJ1798972.PDF",
+     "page": 1,
+     "model_no": "AO4409",
+     "literals": [
+      "RDS(ON) <7.5mΩ",
+      "-15A"
+     ],
+     "cond": [
+      "P-Channel",
+      "VGS=-10V"
+     ]
+    },
+    {
+     "file": "C5224296_场效应管(MOSFET)_AO4435_规格书_AO4435.PDF",
+     "page": 1,
+     "model_no": "AO4435",
+     "literals": [
+      "RDS(ON)=13.5mΩ",
+      "18.5mΩ"
+     ],
+     "cond": [
+      "@VGS=-10V",
+      "@VGS=-4.5V"
+     ]
+    },
+    {
+     "file": "AO3401A_P-MOSFET_规格书.pdf",
+     "page": 1,
+     "model_no": "AO3401A",
+     "literals": [
+      "RDS(ON)",
+      "-4.0A"
+     ],
+     "cond": [
+      "P-Channel",
+      "VGS=-10V"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A07",
+   "category": "multi_model_compare",
+   "query": "TC4424AVOA713 的三个不同厂商手册(微芯片/UMW/TC4424AVOA713-TP)标称的供电范围与峰值输出能力分别是多少",
+   "targets": [
+    {
+     "file": "C44150_栅极驱动芯片_TC4424AVOA713_规格书_WJ184423.PDF",
+     "page": 1,
+     "model_no": "TC4424AVOA713",
+     "literals": [
+      "4.5A (typical)",
+      "4.5V to 18V",
+      "1800 pF in 12 ns"
+     ],
+     "cond": [
+      "Peak Output Current"
+     ]
+    },
+    {
+     "file": "C20623205_栅极驱动芯片_TC4424AVOA713(UMW)_规格书_WJ1798749.PDF",
+     "page": 5,
+     "model_no": "TC4424AVOA713(UMW)",
+     "literals": [
+      "IPK",
+      "Peak output source current"
+     ],
+     "cond": [
+      "IO=100mA"
+     ]
+    },
+    {
+     "file": "C54780947_栅极驱动芯片_TC4424AVOA713-TP_规格书_WJ1862547.PDF",
+     "page": 1,
+     "model_no": "TC4424AVOA713-TP",
+     "literals": [
+      "15-VSingleSupplyRange",
+      "8-A"
+     ],
+     "cond": [
+      "peak"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "A08",
+   "category": "multi_model_compare",
+   "query": "QMI8658A(Rev D)、QMI8658B(Rev D) 与 ICM-42605-HXY 三款六轴 IMU 的陀螺仪量程分别是多少",
+   "targets": [
+    {
+     "file": "QMI8658A_IMU_规格书_RevD.pdf",
+     "page": 22,
+     "model_no": "QMI8658A",
+     "literals": [
+      "fSPC",
+      "15",
+      "MHz",
+      "fSCL",
+      "400",
+      "kHz"
+     ],
+     "cond": [
+      "Host SPI Interface Speed"
+     ]
+    },
+    {
+     "file": "QMI8658B_IMU_规格书_RevD.pdf",
+     "page": 19,
+     "model_no": "QMI8658B",
+     "literals": [
+      "fSPC",
+      "fSCL3",
+      "12.5",
+      "MHz"
+     ],
+     "cond": [
+      "Host I3C Interface Speed"
+     ]
+    },
+    {
+     "file": "C46550688_姿态传感器-陀螺仪_ICM-42605-HXY_规格书_WJ1872168.PDF",
+     "page": 1,
+     "model_no": "ICM-42605-HXY",
+     "literals": [
+      "±125dps/±250dps/±500dps/±1000dps/±2000dps",
+      "±2g/±4g/±8g/±16g"
+     ],
+     "cond": [
+      "加速度计量程范围"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B01",
+   "category": "cross_page",
+   "query": "XC6206(Torex 版)的绝对最大额定值、3.3V 档订货标记与压差测试条件分别在手册哪几页",
+   "targets": [
+    {
+     "file": "XC6206_LDO_规格书(Torex).pdf",
+     "page": 3,
+     "model_no": "XC6206",
+     "literals": [
+      "7.0",
+      "500",
+      "SOT-89"
+     ],
+     "cond": [
+      "ABSOLUTE MAXIMUM RATINGS"
+     ]
+    },
+    {
+     "file": "XC6206_LDO_规格书(Torex).pdf",
+     "page": 16,
+     "model_no": "XC6206",
+     "literals": [
+      "XC6206P33***",
+      "3.3"
+     ],
+     "cond": [
+      "OUTPUT VOLTAGE"
+     ]
+    },
+    {
+     "file": "XC6206_LDO_规格书(Torex).pdf",
+     "page": 4,
+     "model_no": "XC6206",
+     "literals": [
+      "Vdif1",
+      "IOUT=30mA"
+     ],
+     "cond": [
+      "Dropout Voltage"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B02",
+   "category": "cross_page",
+   "query": "AMS1117-3.3(Foshan 版)的绝对最大额定值、3.3V 档电气特性与 SOT-89-3L 封装尺寸分别在手册哪几页",
+   "targets": [
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 1,
+     "model_no": "AMS1117-3.3",
+     "literals": [
+      "Input Voltage",
+      "15",
+      "1000",
+      "mA"
+     ],
+     "cond": [
+      "Absolute Maximum Ratings"
+     ]
+    },
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 2,
+     "model_no": "AMS1117-3.3",
+     "literals": [
+      "1117-3.3",
+      "3.251",
+      "3.350"
+     ],
+     "cond": [
+      "Output Voltage"
+     ]
+    },
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 4,
+     "model_no": "AMS1117-3.3",
+     "literals": [
+      "SOT-89-3L",
+      "1.40",
+      "1.60"
+     ],
+     "cond": [
+      "Dimension"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B03",
+   "category": "cross_page",
+   "query": "74LVC1G04GW 的封装订货信息、静态特性(VIL/VIH)与动态特性(tpd)分别在手册哪几页",
+   "targets": [
+    {
+     "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+     "page": 2,
+     "model_no": "74LVC1G04GW",
+     "literals": [
+      "74LVC1G04GW",
+      "SOT353",
+      "2.1 mm × 1.25 mm"
+     ],
+     "cond": [
+      "Ordering information"
+     ]
+    },
+    {
+     "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+     "page": 6,
+     "model_no": "74LVC1G04GW",
+     "literals": [
+      "VIH",
+      "VIL",
+      "1.7"
+     ],
+     "cond": [
+      "VCC = 2.3 V to 2.7 V"
+     ]
+    },
+    {
+     "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+     "page": 7,
+     "model_no": "74LVC1G04GW",
+     "literals": [
+      "tpd",
+      "2.6",
+      "7.4",
+      "12.6"
+     ],
+     "cond": [
+      "VCC= 1.65 V to 1.95 V"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B04",
+   "category": "cross_page",
+   "query": "TC4424AVOA713(微芯片手册)的特性列表、DC 特性与工作温度范围分别在手册哪几页",
+   "targets": [
+    {
+     "file": "C44150_栅极驱动芯片_TC4424AVOA713_规格书_WJ184423.PDF",
+     "page": 1,
+     "model_no": "TC4424AVOA713",
+     "literals": [
+      "4.5A (typical)",
+      "4.5V to 18V"
+     ],
+     "cond": [
+      "Features"
+     ]
+    },
+    {
+     "file": "C44150_栅极驱动芯片_TC4424AVOA713_规格书_WJ184423.PDF",
+     "page": 3,
+     "model_no": "TC4424AVOA713",
+     "literals": [
+      "ROL",
+      "2.8",
+      "3.5",
+      "Ω"
+     ],
+     "cond": [
+      "ELECTRICAL"
+     ]
+    },
+    {
+     "file": "C44150_栅极驱动芯片_TC4424AVOA713_规格书_WJ184423.PDF",
+     "page": 19,
+     "model_no": "TC4424AVOA713",
+     "literals": [
+      "-40°C to +125°C"
+     ],
+     "cond": [
+      "Temperature Range"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B05",
+   "category": "cross_page",
+   "query": "QMI8658A(Rev D)的 I2C 从机地址、上电时间与温漂系数分别在手册哪几页",
+   "targets": [
+    {
+     "file": "QMI8658A_IMU_规格书_RevD.pdf",
+     "page": 10,
+     "model_no": "QMI8658A",
+     "literals": [
+      "0x6B",
+      "SA0"
+     ],
+     "cond": [
+      "I2C Slave address"
+     ]
+    },
+    {
+     "file": "QMI8658A_IMU_规格书_RevD.pdf",
+     "page": 17,
+     "model_no": "QMI8658A",
+     "literals": [
+      "Accel Turn On Time",
+      "3 ms + 3/ODR"
+     ],
+     "cond": [
+      "3 ms"
+     ]
+    },
+    {
+     "file": "QMI8658A_IMU_规格书_RevD.pdf",
+     "page": 18,
+     "model_no": "QMI8658A",
+     "literals": [
+      "X/Y: ±0.035",
+      "Z: ±0.01",
+      "dps/°C"
+     ],
+     "cond": [
+      "Temperature Coefficient of"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B06",
+   "category": "cross_page",
+   "query": "MX25R3235FM1IL0 的读出频率特性、低功耗模式 dummy cycle 表与订货信息表分别在手册哪几页",
+   "targets": [
+    {
+     "file": "C2802824_NOR+FLASH_MX25R3235FM1IL0_规格书_WJ137634.PDF",
+     "page": 4,
+     "model_no": "MX25R3235FM1IL0",
+     "literals": [
+      "1 I/O: 80MHz with 8 dummy cycles"
+     ],
+     "cond": [
+      "High Performance"
+     ]
+    },
+    {
+     "file": "C2802824_NOR+FLASH_MX25R3235FM1IL0_规格书_WJ137634.PDF",
+     "page": 7,
+     "model_no": "MX25R3235FM1IL0",
+     "literals": [
+      "33MHz",
+      "80MHz",
+      "Ultra Low Power Mode"
+     ],
+     "cond": [
+      "Dummy Cycle"
+     ]
+    },
+    {
+     "file": "C2802824_NOR+FLASH_MX25R3235FM1IL0_规格书_WJ137634.PDF",
+     "page": 77,
+     "model_no": "MX25R3235FM1IL0",
+     "literals": [
+      "MX25R3235FM1IL0",
+      "8-SOP (150mil)",
+      "-40°C to 85°C"
+     ],
+     "cond": [
+      "ORDERING INFORMATION"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B07",
+   "category": "cross_page",
+   "query": "XC6206(UMW 版)的极限参数、电气特性与应用电路分别在手册哪几页",
+   "targets": [
+    {
+     "file": "XC6206_LDO_规格书(UMW).pdf",
+     "page": 2,
+     "model_no": "XC6206",
+     "literals": [
+      "±2.5%",
+      "500",
+      "mA"
+     ],
+     "cond": [
+      "Limit parameter"
+     ]
+    },
+    {
+     "file": "XC6206_LDO_规格书(UMW).pdf",
+     "page": 3,
+     "model_no": "XC6206",
+     "literals": [
+      "IOUT (max)",
+      "100",
+      "mA"
+     ],
+     "cond": [
+      "Maximum output"
+     ]
+    },
+    {
+     "file": "XC6206_LDO_规格书(UMW).pdf",
+     "page": 4,
+     "model_no": "XC6206",
+     "literals": [
+      "C1",
+      "1 uF",
+      "C2"
+     ],
+     "cond": [
+      "Applied circuit"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "B08",
+   "category": "cross_page",
+   "query": "WS2812B-MINI-V6 的主要特点、时序参数与最大额定值分别在手册哪几页",
+   "targets": [
+    {
+     "file": "C52941386_RGB+LED(内置IC)_WS2812B-MINI-V6_规格书_WS2812B-MINI-V6当_V1.1_CN.PDF",
+     "page": 1,
+     "model_no": "WS2812B-MINI-V6",
+     "literals": [
+      "3535",
+      "2KHz",
+      "800Kbps"
+     ],
+     "cond": [
+      "主要特点"
+     ]
+    },
+    {
+     "file": "C52941386_RGB+LED(内置IC)_WS2812B-MINI-V6_规格书_WS2812B-MINI-V6当_V1.1_CN.PDF",
+     "page": 3,
+     "model_no": "WS2812B-MINI-V6",
+     "literals": [
+      "tPLZ",
+      "300",
+      "ns",
+      "15",
+      "pF"
+     ],
+     "cond": [
+      "CL=15pF,DIN→DOUT,RL=10KΩ"
+     ]
+    },
+    {
+     "file": "C52941386_RGB+LED(内置IC)_WS2812B-MINI-V6_规格书_WS2812B-MINI-V6当_V1.1_CN.PDF",
+     "page": 2,
+     "model_no": "WS2812B-MINI-V6",
+     "literals": [
+      "+3.3~+5.3",
+      "Tstg",
+      "-40~+105"
+     ],
+     "cond": [
+      "最大额定值"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C01",
+   "category": "condition",
+   "query": "74LVC1G04GW 在 VCC=3.0V、IO=-24mA 下的高电平输出电压 VOH 是多少,同一手册在 VCC=4.5V、IO=-32mA 下又是多少",
+   "targets": [
+    {
+     "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+     "page": 6,
+     "model_no": "74LVC1G04GW",
+     "literals": [
+      "VOH",
+      "2.3",
+      "2.0"
+     ],
+     "cond": [
+      "IO = -24 mA",
+      "VCC = 3.0 V"
+     ],
+     "wrong": [
+      "VCC = 1.65 V",
+      "1.2"
+     ]
+    },
+    {
+     "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+     "page": 6,
+     "model_no": "74LVC1G04GW",
+     "literals": [
+      "VOH",
+      "3.8",
+      "3.4"
+     ],
+     "cond": [
+      "IO = -32 mA",
+      "VCC = 4.5 V"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C02",
+   "category": "condition",
+   "query": "74LVC1G04GW 在 VCC=1.65V~1.95V 下的传输延迟 tpd 是多少,同一手册在 VCC=4.5V~5.5V 下又是多少",
+   "targets": [
+    {
+     "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+     "page": 7,
+     "model_no": "74LVC1G04GW",
+     "literals": [
+      "tpd",
+      "2.6",
+      "7.4",
+      "12.6"
+     ],
+     "cond": [
+      "VCC= 1.65 V to 1.95 V"
+     ],
+     "wrong": [
+      "VCC= 4.5 V to 5.5 V",
+      "2.9"
+     ]
+    },
+    {
+     "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+     "page": 7,
+     "model_no": "74LVC1G04GW",
+     "literals": [
+      "tpd",
+      "1.2",
+      "2.0",
+      "2.9"
+     ],
+     "cond": [
+      "VCC= 4.5 V to 5.5 V"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C03",
+   "category": "condition",
+   "query": "XC6206(UMW 版手册)在 VOUT(T)=2.6V~3.3V 与 VOUT(T)=3.4V~5.5V 两个条件下的压差 Vdrop 分别是多少",
+   "targets": [
+    {
+     "file": "XC6206_LDO_规格书(UMW).pdf",
+     "page": 3,
+     "model_no": "XC6206",
+     "literals": [
+      "Vdrop",
+      "160",
+      "240",
+      "mV"
+     ],
+     "cond": [
+      "2.6V≤VOUT(T)≤3.3V"
+     ],
+     "wrong": [
+      "3.4V≤VOUT(T)≤5.5V",
+      "120"
+     ]
+    },
+    {
+     "file": "XC6206_LDO_规格书(UMW).pdf",
+     "page": 3,
+     "model_no": "XC6206",
+     "literals": [
+      "Vdrop",
+      "120",
+      "200",
+      "mV"
+     ],
+     "cond": [
+      "3.4V≤VOUT(T)≤5.5V"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C04",
+   "category": "condition",
+   "query": "AMS1117-3.3(Foshan 版手册)中 1117-3.3 档与 1117-1.8 档的负载调整率分别是多少",
+   "targets": [
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 2,
+     "model_no": "AMS1117-3.3",
+     "literals": [
+      "1117-3.3",
+      "13.2"
+     ],
+     "cond": [
+      "Load",
+      "10mA<IO<1A"
+     ],
+     "wrong": [
+      "1117-1.8",
+      "7.2"
+     ]
+    },
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 2,
+     "model_no": "AMS1117-3.3",
+     "literals": [
+      "1117-1.8",
+      "7.2"
+     ],
+     "cond": [
+      "Load",
+      "10mA<IO<1A"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C05",
+   "category": "condition",
+   "query": "SSP1117-3.3V 在 Iout=100mA 与 Iout=1A 两个负载条件下的压差 Vdrop 分别是多少",
+   "targets": [
+    {
+     "file": "C49332772_线性稳压器(LDO)_SSP1117-3.3V_规格书_WJ1734557.PDF",
+     "page": 5,
+     "model_no": "SSP1117-3.3V",
+     "literals": [
+      "Vdrop",
+      "1.15",
+      "1.3",
+      "V"
+     ],
+     "cond": [
+      "Iout =100mA"
+     ],
+     "wrong": [
+      "Iout=1A",
+      "1.5"
+     ]
+    },
+    {
+     "file": "C49332772_线性稳压器(LDO)_SSP1117-3.3V_规格书_WJ1734557.PDF",
+     "page": 5,
+     "model_no": "SSP1117-3.3V",
+     "literals": [
+      "Vdrop",
+      "1.3",
+      "1.5",
+      "V"
+     ],
+     "cond": [
+      "Iout=1A"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C06",
+   "category": "condition",
+   "query": "AMS1117-3.3V-JSM 在 lout=100mA 与 lout=800mA 两个负载条件下的压差 Vdrop 分别是多少",
+   "targets": [
+    {
+     "file": "C18190088_线性稳压器(LDO)_AMS1117-3.3V-JSM_规格书_WJ1199429.PDF",
+     "page": 5,
+     "model_no": "AMS1117-3.3V-JSM",
+     "literals": [
+      "Vdrop",
+      "1.2",
+      "1.3",
+      "V"
+     ],
+     "cond": [
+      "lout =100mA"
+     ],
+     "wrong": [
+      "lout=800mA",
+      "1.5"
+     ]
+    },
+    {
+     "file": "C18190088_线性稳压器(LDO)_AMS1117-3.3V-JSM_规格书_WJ1199429.PDF",
+     "page": 5,
+     "model_no": "AMS1117-3.3V-JSM",
+     "literals": [
+      "Vdrop",
+      "1.3",
+      "1.5",
+      "V"
+     ],
+     "cond": [
+      "lout=800mA"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C07",
+   "category": "condition",
+   "query": "LM1117-3.3V 的 1.5V~5.0V 固定档在 10mA 与 10mA~1A 两个负载条件下的输出电压精度范围分别是多少",
+   "targets": [
+    {
+     "file": "C55544526_线性稳压器(LDO)_LM1117-3.3V_规格书_LM1117+SERIES_REV1.1.PDF",
+     "page": 4,
+     "model_no": "LM1117-3.3V",
+     "literals": [
+      "1.5V to 5.0V",
+      "VOUT×0.985",
+      "VOUT×1.015"
+     ],
+     "cond": [
+      "IOUT  = 10mA"
+     ],
+     "wrong": [
+      "IOUT = 10mA to 1A",
+      "VOUT×0.98"
+     ]
+    },
+    {
+     "file": "C55544526_线性稳压器(LDO)_LM1117-3.3V_规格书_LM1117+SERIES_REV1.1.PDF",
+     "page": 4,
+     "model_no": "LM1117-3.3V",
+     "literals": [
+      "1.5V to 5.0V",
+      "VOUT×0.98",
+      "VOUT×1.02"
+     ],
+     "cond": [
+      "IOUT = 10mA to 1A"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "C08",
+   "category": "condition",
+   "query": "XC6206(Torex 版手册)的压差电压 Vdif1 与 Vdif2 分别在什么测试条件下测量",
+   "targets": [
+    {
+     "file": "XC6206_LDO_规格书(Torex).pdf",
+     "page": 4,
+     "model_no": "XC6206",
+     "literals": [
+      "Vdif1",
+      "IOUT=30mA"
+     ],
+     "cond": [
+      "Dropout Voltage",
+      "E-4"
+     ],
+     "wrong": [
+      "VOUT(T)<1.8V: IOUT=60mA",
+      "E-5"
+     ]
+    },
+    {
+     "file": "XC6206_LDO_规格书(Torex).pdf",
+     "page": 4,
+     "model_no": "XC6206",
+     "literals": [
+      "Vdif2",
+      "VOUT(T)>1.8V: IOUT=100mA"
+     ],
+     "cond": [
+      "Dropout Voltage",
+      "E-5"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "D01",
+   "category": "variant",
+   "query": "XC6206(UMW 版手册)标称的最大输出电流与静态偏置电流分别是多少",
+   "targets": [
+    {
+     "file": "XC6206_LDO_规格书(UMW).pdf",
+     "page": 3,
+     "model_no": "XC6206",
+     "literals": [
+      "IOUT (max)",
+      "100",
+      "mA"
+     ],
+     "cond": [
+      "VIN=VOUT(T)+1V"
+     ]
+    },
+    {
+     "file": "XC6206_LDO_规格书(UMW).pdf",
+     "page": 1,
+     "model_no": "XC6206",
+     "literals": [
+      "6.0μA",
+      "250mA"
+     ],
+     "cond": [
+      "static bias"
+     ]
+    }
+   ],
+   "forbidden_variants": [
+    {
+     "file": "XC6206_LDO_规格书(Torex).pdf",
+     "page": 3,
+     "literals": [
+      "500",
+      "mA"
+     ],
+     "reason": "同型号 XC6206 的另一份厂商手册(Torex)给出不同的最大输出电流,命中它属于取到变体手册"
+    }
+   ]
+  },
+  {
+   "id": "D02",
+   "category": "variant",
+   "query": "AO4407(台舟手册)的 RDS(on) 标称值与最大值,以及该手册标称的连续漏极电流上限分别是多少",
+   "targets": [
+    {
+     "file": "C5370947_场效应管(MOSFET)_AO4407_规格书_TECH+PUBLIC(台舟)场效应管(MOSFET)规格书.PDF",
+     "page": 2,
+     "model_no": "AO4407",
+     "literals": [
+      "RDS(ON)",
+      "11",
+      "20",
+      "mΩ"
+     ],
+     "cond": [
+      "VGs=-10V,lD=-10A"
+     ]
+    },
+    {
+     "file": "C5370947_场效应管(MOSFET)_AO4407_规格书_TECH+PUBLIC(台舟)场效应管(MOSFET)规格书.PDF",
+     "page": 1,
+     "model_no": "AO4407",
+     "literals": [
+      "lD=-60A",
+      "RDS(ON)<11 mΩ"
+     ],
+     "cond": [
+      "P-Channel",
+      "VDs=-30V"
+     ]
+    }
+   ],
+   "forbidden_variants": [
+    {
+     "file": "C5224298_场效应管(MOSFET)_AO4407_规格书_AO4407.PDF",
+     "page": 1,
+     "literals": [
+      "9.5mΩ"
+     ],
+     "reason": "同型号 AO4407 的 ElecSuper 手册给出不同 RDS(on),命中它属于取到变体手册"
+    },
+    {
+     "file": "C6430946_场效应管(MOSFET)_AO4407_规格书_WJ1102477.PDF",
+     "page": 2,
+     "literals": [
+      "9.5",
+      "14"
+     ],
+     "reason": "同型号 AO4407 的第三份手册给出不同 RDS(on),命中它属于取到变体手册"
+    }
+   ]
+  },
+  {
+   "id": "D03",
+   "category": "variant",
+   "query": "TC4424AVOA713-TP 的单电源供电范围、峰值灌电流与传播延迟分别是多少",
+   "targets": [
+    {
+     "file": "C54780947_栅极驱动芯片_TC4424AVOA713-TP_规格书_WJ1862547.PDF",
+     "page": 1,
+     "model_no": "TC4424AVOA713-TP",
+     "literals": [
+      "15-VSingleSupplyRange",
+      "8-A"
+     ],
+     "cond": [
+      "peak"
+     ]
+    },
+    {
+     "file": "C54780947_栅极驱动芯片_TC4424AVOA713-TP_规格书_WJ1862547.PDF",
+     "page": 3,
+     "model_no": "TC4424AVOA713-TP",
+     "literals": [
+      "11",
+      "nS"
+     ],
+     "cond": [
+      "VDD=4.5V"
+     ]
+    }
+   ],
+   "forbidden_variants": [
+    {
+     "file": "C44150_栅极驱动芯片_TC4424AVOA713_规格书_WJ184423.PDF",
+     "page": 1,
+     "literals": [
+      "4.5V to 18V"
+     ],
+     "reason": "基础型号 TC4424AVOA713 的微芯片手册供电范围不同,命中它属于取到兄弟变体手册"
+    },
+    {
+     "file": "C55064283_栅极驱动芯片_TC4424AVOA713-TUDI_规格书_TUDI-TC4423AVOA+TC4423AVPA+TC4424AVOA+TC4424AVPA+TC4425AVOA+TC4425AVPA.PDF",
+     "page": 2,
+     "literals": [
+      "4.5V to 25V"
+     ],
+     "reason": "TC4424AVOA713-TUDI 手册供电范围不同,命中它属于取到兄弟变体手册"
+    }
+   ]
+  },
+  {
+   "id": "D04",
+   "category": "variant",
+   "query": "MX25R3235FM2IH0 的封装形式、默认模式与最大读出频率分别是多少",
+   "targets": [
+    {
+     "file": "C2802826_NOR+FLASH_MX25R3235FM2IH0_规格书_WJ137634.PDF",
+     "page": 77,
+     "model_no": "MX25R3235FM2IH0",
+     "literals": [
+      "MX25R3235FM2IH0",
+      "8-SOP (200mil)",
+      "High Peformance Mode"
+     ],
+     "cond": [
+      "ORDERING INFORMATION"
+     ]
+    },
+    {
+     "file": "C2802826_NOR+FLASH_MX25R3235FM2IH0_规格书_WJ137634.PDF",
+     "page": 4,
+     "model_no": "MX25R3235FM2IH0",
+     "literals": [
+      "1 I/O: 80MHz with 8 dummy cycles"
+     ],
+     "cond": [
+      "High Performance"
+     ]
+    }
+   ],
+   "forbidden_variants": [
+    {
+     "file": "C2802824_NOR+FLASH_MX25R3235FM1IL0_规格书_WJ137634.PDF",
+     "page": 77,
+     "literals": [
+      "8-SOP (150mil)"
+     ],
+     "reason": "同系列 MX25R3235FM1IL0 的手册封装不同,命中它属于取到兄弟变体手册"
+    },
+    {
+     "file": "C2802831_NOR+FLASH_MX25R3235FZNIL0_规格书_WJ137634.PDF",
+     "page": 77,
+     "literals": [
+      "8-WSON (6x5mm)"
+     ],
+     "reason": "同系列 MX25R3235FZNIL0 的手册封装不同,命中它属于取到兄弟变体手册"
+    }
+   ]
+  },
+  {
+   "id": "D05",
+   "category": "variant",
+   "query": "AMS1117-3.3S(UMW 手册)标称的典型压差与绝对最大输入电压分别是多少",
+   "targets": [
+    {
+     "file": "C347256_线性稳压器(LDO)_AMS1117-3.3S_规格书_WJ1878170.PDF",
+     "page": 1,
+     "model_no": "AMS1117-3.3S",
+     "literals": [
+      "1.2V@1A"
+     ],
+     "cond": [
+      "Low Dropout Voltage"
+     ]
+    },
+    {
+     "file": "C347256_线性稳压器(LDO)_AMS1117-3.3S_规格书_WJ1878170.PDF",
+     "page": 3,
+     "model_no": "AMS1117-3.3S",
+     "literals": [
+      "Absolute Maximum Ratings",
+      "18",
+      "260",
+      "150"
+     ],
+     "cond": [
+      "Junction Temperature Range"
+     ]
+    }
+   ],
+   "forbidden_variants": [
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 2,
+     "literals": [
+      "1.1",
+      "1.3"
+     ],
+     "reason": "AMS1117-3.3(Foshan)手册给出的压差不同,命中它属于取到同族兄弟型号手册"
+    },
+    {
+     "file": "C18190088_线性稳压器(LDO)_AMS1117-3.3V-JSM_规格书_WJ1199429.PDF",
+     "page": 5,
+     "literals": [
+      "lout=800mA",
+      "1.5"
+     ],
+     "reason": "AMS1117-3.3V-JSM 手册的压差条件与取值不同,命中它属于取到同族兄弟型号手册"
+    }
+   ]
+  },
+  {
+   "id": "D06",
+   "category": "variant",
+   "query": "QMI8658A(Rev D 手册)的陀螺仪零偏温度系数 TCO 与主机 SPI 接口速度分别是多少",
+   "targets": [
+    {
+     "file": "QMI8658A_IMU_规格书_RevD.pdf",
+     "page": 18,
+     "model_no": "QMI8658A",
+     "literals": [
+      "X/Y: ±0.035",
+      "Z: ±0.01",
+      "dps/°C"
+     ],
+     "cond": [
+      "Temperature Coefficient of"
+     ]
+    },
+    {
+     "file": "QMI8658A_IMU_规格书_RevD.pdf",
+     "page": 22,
+     "model_no": "QMI8658A",
+     "literals": [
+      "fSPC",
+      "15",
+      "MHz"
+     ],
+     "cond": [
+      "Host SPI Interface Speed"
+     ]
+    }
+   ],
+   "forbidden_variants": [
+    {
+     "file": "C3021082_姿态传感器-陀螺仪_QMI8658A_规格书_RevA.PDF",
+     "page": 19,
+     "literals": [
+      "X/Y: ±0.1",
+      "Z: ±0.05"
+     ],
+     "reason": "QMI8658A Rev A 手册给出不同 TCO,命中它属于取到旧修订手册"
+    }
+   ]
+  },
+  {
+   "id": "D07",
+   "category": "variant",
+   "query": "FS1117-3.3 手册里关于过流/过热保护对负载电流的描述,以及该手册的 SOT-89-3L 封装尺寸分别是多少",
+   "targets": [
+    {
+     "file": "C51038980_线性稳压器(LDO)_FS1117-3.3_规格书_FS1117.PDF",
+     "page": 1,
+     "model_no": "FS1117-3.3",
+     "literals": [
+      "FS1117",
+      "1.2A"
+     ],
+     "cond": [
+      "电流限制保护"
+     ]
+    },
+    {
+     "file": "C51038980_线性稳压器(LDO)_FS1117-3.3_规格书_FS1117.PDF",
+     "page": 4,
+     "model_no": "FS1117-3.3",
+     "literals": [
+      "SOT-89-3L",
+      "1.40",
+      "1.60"
+     ],
+     "cond": [
+      "Dimension"
+     ]
+    }
+   ],
+   "forbidden_variants": [
+    {
+     "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
+     "page": 1,
+     "literals": [
+      "1000",
+      "mA"
+     ],
+     "reason": "同厂 AMS1117-3.3 手册没有 FS1117 的 1.2A 过流保护描述,命中它属于取到兄弟型号手册"
+    }
+   ]
+  },
+  {
+   "id": "D08",
+   "category": "variant",
+   "query": "74LVC1G04GV(台舟手册)的封装与打标方式,以及该手册的绝对最大电源电压是多少",
+   "targets": [
+    {
+     "file": "C19829589_反相器_74LVC1G04GV_规格书_WJ1055833.PDF",
+     "page": 1,
+     "model_no": "74LVC1G04GV",
+     "literals": [
+      "74LVC1G04GV",
+      "Marking:V04",
+      "SOT23-5"
+     ],
+     "cond": [
+      "Ordering Information"
+     ]
+    },
+    {
+     "file": "C19829589_反相器_74LVC1G04GV_规格书_WJ1055833.PDF",
+     "page": 2,
+     "model_no": "74LVC1G04GV",
+     "literals": [
+      "Absolute Maximum Ratings",
+      "-0.5 ~ 6.5",
+      "V"
+     ],
+     "cond": [
+      "Supply Voltage"
+     ]
+    }
+   ],
+   "forbidden_variants": [
+    {
+     "file": "C53185133_反相器_74LVC1G04GV_规格书_WJ1832161.PDF",
+     "page": 2,
+     "literals": [
+      "SOT23-5L",
+      "2.92 mm × 1.6 mm"
+     ],
+     "reason": "同型号 74LVC1G04GV 的另一厂商手册封装标注不同,命中它属于取到兄弟手册"
+    },
+    {
+     "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
+     "page": 2,
+     "literals": [
+      "SOT353",
+      "2.1 mm × 1.25 mm"
+     ],
+     "reason": "74LVC1G04GW 是同系列不同封装型号,命中它属于取到兄弟型号手册"
+    }
+   ]
+  }
+ ]
+}
