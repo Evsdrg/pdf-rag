@@ -16,9 +16,11 @@ def _call(function, **kwargs):
 
 @router.get("/search")
 def search(query: str, category: str = "", top_k: int = 5, file: str = "",
-           max_per_doc: int = 0, mode: str = "mixed", rerank: bool = True):
+           max_per_doc: int = 0, mode: str = "mixed", rerank: bool = True,
+           structured: bool = False):
     return _call(agent_api.search, query=query, category=category, top_k=top_k,
-                 file=file, max_per_doc=max_per_doc, mode=mode, rerank=rerank)
+                 file=file, max_per_doc=max_per_doc, mode=mode, rerank=rerank,
+                 structured=structured)
 
 
 @router.get("/grep")

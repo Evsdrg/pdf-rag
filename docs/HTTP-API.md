@@ -8,7 +8,7 @@ REST 查询与读取统一使用 `/api/v2/*`，与 MCP 共用 `backend/agent_api
 
 | 方法与路径 | 主要参数 | 用途 |
 |---|---|---|
-| `GET /api/v2/search` | `query`、`category`、`file`、`top_k`、`max_per_doc`、`mode`、`rerank` | 混合检索，返回片段、块引用和诊断 |
+| `GET /api/v2/search` | `query`、`category`、`file`、`top_k`、`max_per_doc`、`mode`、`rerank`、`structured` | 混合检索，返回片段、块引用和诊断；`structured=true` 启用默认关闭的无模型实体桥实验 |
 | `GET /api/v2/grep` | `pattern`、`category`、`file`、`max_hits`、`context`、`flex_separator`、`cursor` | 精确正则检索，按页聚合上下文 |
 | `GET /api/v2/page` | `file`、`page`、`max_chars`、`cursor` | 读取单页，支持续读 |
 | `GET /api/v2/pages` | `file`、`pages`、`max_chars`、`cursor` | 一次读取最多 50 页，整次共享预算 |

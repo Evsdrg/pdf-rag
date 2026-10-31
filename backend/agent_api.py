@@ -132,19 +132,22 @@ def _identity(query: str, hits: list[dict]) -> tuple[list, list]:
 
 
 def search(query: str, category: str = "", top_k: int = 5, file: str = "",
-           max_per_doc: int = 0, mode: str = "mixed", rerank: bool = True) -> dict:
+           max_per_doc: int = 0, mode: str = "mixed", rerank: bool = True,
+           structured: bool = False) -> dict:
     if not query.strip() or len(query) > 200:
         raise library.LibraryError("query 需包含 1–200 个字符")
     check_int(top_k, "top_k", 1, 20)
     check_int(max_per_doc, "max_per_doc", 0, 20)
     if mode not in ("mixed", "fts", "vector"):
         raise library.LibraryError("mode 需为 mixed、fts 或 vector")
+    if not isinstance(structured, bool):
+        raise library.LibraryError("structured 需为布尔值", details={"parameter": "structured"})
     diagnostics = {}
     table = require_table()
     check_category(table, category)
     hits = retrieval.search(table, query, category=category or None,
                             top_k=top_k, file=file or None, max_per_doc=max_per_doc,
-                            mode=mode, rerank=rerank, diagnostics=diagnostics)
+                            mode=mode, rerank=rerank, structured=structured, diagnostics=diagnostics)
     hits = [dict(hit) for hit in hits]
     for hit in hits:
         reference = hit.get("snippet_ref")
@@ -162,6 +165,7 @@ def search(query: str, category: str = "", top_k: int = 5, file: str = "",
                     continuation_hint="缩小 file/category 或 top_k 后重查" if omitted else "",
                     identity=identities, warnings=diagnostics.get("warnings", []) + warnings,
                     vector_partitions=diagnostics.get("vector_partitions", []),
+                    structured=diagnostics.get("structured", {"enabled": bool(structured), "status": "disabled"}),
                     degraded=diagnostics.get("degraded", []),
                     notice=diagnostics.get("notice", ""),
                     counts={**diagnostics.get("counts", {}), "returned": len(hits)},

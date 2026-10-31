@@ -58,6 +58,48 @@ class ProtocolTest(unittest.TestCase):
         self.assertTrue(error.is_error)
         self.assertEqual(json.loads(error.content[0].text)["error"]["code"], "FILE_NOT_FOUND")
 
+    def test_structured_search_contract_matches_rest_and_mcp(self):
+        calls = []
+
+        def search(*args, **kwargs):
+            enabled = kwargs["structured"]
+            calls.append(enabled)
+            kwargs["diagnostics"].update(
+                structured={"enabled": enabled, "status": "empty" if enabled else "disabled"},
+                degraded=[], warnings=[],
+            )
+            return []
+
+        async def run():
+            async with Client(server.mcp) as client:
+                tools = await client.list_tools()
+                result = await client.call_tool("pdf_rag_search", {"query": "QMC6309", "structured": True})
+                return tools, result
+
+        with patch.object(agent_api, "require_table", return_value=object()), \
+             patch.object(agent_api, "check_category"), \
+             patch.object(agent_api.retrieval, "search", side_effect=search):
+            default = self.client.get("/api/v2/search", params={"query": "QMC6309"}).json()
+            enabled = self.client.get("/api/v2/search", params={"query": "QMC6309", "structured": True}).json()
+            tools, mcp_result = asyncio.run(run())
+        self.assertEqual(calls, [False, True, True])
+        self.assertEqual(default["structured"], {"enabled": False, "status": "disabled"})
+        self.assertEqual(enabled["structured"], {"enabled": True, "status": "empty"})
+        self.assertEqual(len(tools), 10)
+        self.assertEqual(len(mcp_result.content), 1)
+        self.assertIsNone(mcp_result.structured_content)
+        self.assertEqual(json.loads(mcp_result.content[0].text), enabled)
+        self.assertFalse(mcp_result.is_error)
+
+    def test_search_validates_options_before_reading_the_index(self):
+        with patch.object(agent_api, "require_table", side_effect=AssertionError("must validate first")):
+            for kwargs in ({"structured": "yes"}, {"mode": "unknown"}):
+                result, status = agent_api.invoke(agent_api.search, "query", **kwargs)
+                self.assertEqual(status, 400)
+                self.assertEqual(result["error"]["code"], "INVALID_ARGUMENT")
+        result = self.client.get("/api/v2/search", params={"query": "QMC6309", "structured": "invalid"})
+        self.assertEqual(result.status_code, 422)
+
     def test_ocr_fallback_and_bad_documents(self):
         with fitz.open() as doc:
             doc.new_page().insert_text((70, 100), "Native text")

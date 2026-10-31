@@ -44,6 +44,18 @@ class DiagnosticsTest(unittest.TestCase):
         self.assertEqual(degraded, [])
         self.assertEqual(diagnostics["vector_partitions"], ["sample"])
 
+    def test_structured_search_parameter_is_forwarded_and_reported(self):
+        table = object()
+        def fake_search(*args, **kwargs):
+            kwargs["diagnostics"]["structured"] = {"enabled": True, "status": "used"}
+            return []
+        with patch.object(library, "get_table", return_value=table), \
+             patch.object(library, "categories", return_value=[]), \
+             patch.object(retrieval, "search", side_effect=fake_search) as search:
+            result = agent_api.search("QMC6309", structured=True)
+        self.assertTrue(search.call_args.kwargs["structured"])
+        self.assertEqual(result["structured"]["status"], "used")
+
     def test_category_error_happens_before_model_call(self):
         with patch.object(library, "get_table", return_value=object()), \
              patch.object(library, "categories", return_value=["cat"]), \

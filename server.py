@@ -22,16 +22,18 @@ def _call(function, **kwargs) -> ToolResult:
 
 @mcp.tool(name="pdf_rag_search", output_schema=None)
 def pdf_rag_search(query: str, category: str = "", top_k: int = 5,
-                   file: str = "", max_per_doc: int = 0) -> ToolResult:
+                   file: str = "", max_per_doc: int = 0,
+                   structured: bool = False) -> ToolResult:
     """在手册库做 BM25 + 型号子串 + 向量混合检索,不是工作区文件搜索。
 
     query 支持中文/英文;category 按类别,file 按文件路径字面子串筛选。
     返回 schema_version=2 的 JSON:results 含 file/page/snippet/score/rerank_score。
     degraded/notice 标明降级;重排分是相关性信号,不是答案正确率。
     file/page 可直接传给读页工具;max_per_doc 限制同一文件条数(0 使用服务配置)。
+    structured=true 时额外启用无模型的实验性实体桥;它只补充候选,最终证据仍是原始 chunk。
     """
     return _call(agent_api.search, query=query, category=category, top_k=top_k,
-                 file=file, max_per_doc=max_per_doc)
+                 file=file, max_per_doc=max_per_doc, structured=structured)
 
 
 @mcp.tool(name="pdf_rag_grep", output_schema=None)
