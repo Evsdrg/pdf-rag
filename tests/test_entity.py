@@ -58,7 +58,7 @@ class EntityIndexTest(unittest.TestCase):
         with patch.object(entity, "_batches", side_effect=lambda _: pa.Table.from_pylist(rows).to_batches()):
             result = entity.search(table, "QMC6309 VDD voltage")
         self.assertEqual(result.direct_uids, ("a",))
-        self.assertEqual(result.expanded_uids, ("b",))
+        self.assertEqual(result.expanded_uids, ())
         self.assertNotIn("c", result.ordered_uids)
         self.assertEqual(rows[0]["model_no"], "QMC6309")
 
@@ -82,6 +82,36 @@ class EntityIndexTest(unittest.TestCase):
             empty = entity.search(table, "I2C address", file="Z-100%")
         self.assertEqual(result.direct_uids, ("target",))
         self.assertEqual(empty.status, "empty")
+
+    def test_original_seeds_require_query_signals_and_ignore_model_headers(self):
+        rows = [row("header", "QMC6309 repeated heading", page=1),
+                row("seed", "I2C address", page=2),
+                row("neighbor", "I2C electrical", page=3),
+                row("noise", "marketing material", page=4)]
+        table = table_for(rows)
+        with patch.object(entity, "_batches", side_effect=lambda _: pa.Table.from_pylist(rows).to_batches()):
+            result = entity.search(table, "QMC6309 I2C address", limit=2, seed_rows=rows[:2])
+            empty_seeds = entity.search(table, "QMC6309 I2C address", limit=2, seed_rows=[])
+        self.assertEqual(result.seeds, 1)
+        self.assertIn("neighbor", result.expanded_uids)
+        self.assertNotIn("noise", result.ordered_uids)
+        self.assertNotIn("header", result.ordered_uids)
+        self.assertGreater(result.pruned, 0)
+        self.assertFalse(empty_seeds.expanded_uids)
+
+    def test_multi_model_quota_survives_large_first_model(self):
+        rows = [row(f"a{i}", "I2C address", model_no="QMI8658A", page=i) for i in range(8)]
+        rows.append(row("b", "I2C address", model_no="QMI8658B", file="cat/Z.pdf"))
+        table = table_for(rows)
+        with patch.object(entity, "_batches", side_effect=lambda _: pa.Table.from_pylist(rows).to_batches()):
+            result = entity.search(table, "QMI8658A QMI8658B I2C address", limit=4, seed_rows=rows)
+        self.assertEqual(len(result.direct_uids), 2)
+        self.assertIn("b", result.direct_uids)
+        self.assertEqual(result.by_model["qmi8658b"], 1)
+        picked = [((r["file"], r["page"]), 1) for r in rows]
+        balanced = retrieval._balance_models(picked, {(r["file"], r["page"]): r for r in rows},
+                                              "QMI8658A QMI8658B I2C")
+        self.assertEqual(balanced[1][0][0], "cat/Z.pdf")
 
     def test_index_identity_version_and_reset_are_independent(self):
         rows = [row("a", "VDD 3.3 V")]

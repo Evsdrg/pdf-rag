@@ -1,10 +1,11 @@
 """默认关闭的确定性实体桥:查询时局部扩展,原始 chunk 始终是证据。"""
 from __future__ import annotations
 
+import math
 import re
 import threading
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
 MAX_QUERY_ENTITIES = 16
@@ -12,7 +13,9 @@ MAX_ROW_ENTITIES = 48
 MAX_DIRECT_CANDIDATES = 64
 MAX_EXPANDED_CANDIDATES = 32
 MAX_SEEDS = 8
+MAX_SEED_INPUTS = 256
 MAX_POSTING = 256
+MAX_QUERY_CANDIDATES = 4096
 MAX_NEIGHBORS = 64
 MAX_INDEX_ROWS = 50_000
 MAX_INDEX_BYTES = 128_000_000
@@ -139,6 +142,9 @@ class EntityIndex:
     entities_by_uid: dict[str, frozenset[str]]
     metadata_by_uid: dict[str, dict]
     build_ms: float
+    page_entities: dict[tuple[str, int], frozenset[str]] = field(default_factory=dict)
+    document_frequency: dict[str, int] = field(default_factory=dict)
+    file_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +155,10 @@ class EntitySearch:
     status: str
     index: EntityIndex | None = field(default=None, repr=False, compare=False)
     index_cached: bool = False
+    seeds: int = 0
+    pruned: int = 0
+    by_model: dict[str, int] = field(default_factory=dict)
+    paths: dict[str, dict] = field(default_factory=dict, repr=False, compare=False)
 
     @property
     def ordered_uids(self) -> tuple[str, ...]:
@@ -195,8 +205,18 @@ def build(table) -> EntityIndex:
         raise ValueError("实体桥构建期间主表版本变化")
     for uids in postings.values():
         uids.sort(key=lambda uid: (metadata[uid]["file"], metadata[uid]["page"], uid))
+    page_sets: dict[tuple, set] = defaultdict(set)
+    documents: dict[str, set] = defaultdict(set)
+    for uid, keys in entities.items():
+        meta = metadata[uid]
+        page_sets[(meta["file"], meta["page"])].update(keys)
+        for key in keys:
+            documents[key].add(meta["file"])
     return EntityIndex(version, {key: tuple(value) for key, value in postings.items()},
-                       entities, metadata, (time.perf_counter() - start) * 1000)
+                       entities, metadata, (time.perf_counter() - start) * 1000,
+                       {page: frozenset(keys) for page, keys in page_sets.items()},
+                       {key: len(files) for key, files in documents.items()},
+                       len({meta["file"] for meta in metadata.values()}))
 
 
 def _cached_index(table) -> tuple[EntityIndex, bool]:
@@ -248,8 +268,36 @@ def _resolve(index: EntityIndex, keys: tuple[str, ...]) -> dict[str, tuple[str, 
     return resolved
 
 
+def _balanced(uids, groups: dict[str, set[str]], count: int, metadata: dict,
+              seen_pages: set[tuple] | None = None) -> tuple[str, ...]:
+    """多型号独立队列轮流取页,不让一份长手册占满预算。"""
+    pages = seen_pages if seen_pages is not None else set()
+    queues = [deque(uid for uid in uids if uid in scope) for scope in groups.values()] if groups else [deque(uids)]
+    picked = []
+    while any(queues) and len(picked) < count:
+        for queue in queues:
+            while queue:
+                uid = queue.popleft()
+                meta = metadata[uid]
+                page = (meta["file"], meta["page"])
+                if page in pages:
+                    continue
+                pages.add(page)
+                picked.append(uid)
+                break
+            if len(picked) >= count:
+                break
+    return tuple(picked)
+
+
+def model_groups(index: EntityIndex, keys: tuple[str, ...]) -> dict[str, set[str]]:
+    resolved = _resolve(index, keys)
+    return {key: {uid for actual in resolved.get(key, ()) for uid in index.by_entity[actual]}
+            for key in keys if _kind(key) == "model"}
+
+
 def search(table, query: str, *, category: str | None = None, file: str | None = None,
-           limit: int = 80) -> EntitySearch:
+           limit: int = 80, seed_rows: list[dict] | None = None) -> EntitySearch:
     keys = extract_entities(query, query=True, limit=MAX_QUERY_ENTITIES)
     models = {key for key in keys if _kind(key) == "model"}
     signals = {key for key in keys if _kind(key) not in {"model", "value"}}
@@ -257,7 +305,8 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
         return EntitySearch(keys, (), (), "skipped")
     index, cached = _cached_index(table)
     resolved = _resolve(index, keys)
-    model_scope = {uid for key in models for actual in resolved.get(key, ()) for uid in index.by_entity[actual]}
+    groups = model_groups(index, keys)
+    model_scope = set().union(*groups.values()) if groups else set()
 
     def accepts(uid):
         meta = index.metadata_by_uid[uid]
@@ -265,67 +314,84 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
                 and (not category or meta["category"] == category)
                 and (not file or file.replace("\\", "/") in meta["file"]))
 
-    def matched(uid):
-        entities = index.entities_by_uid[uid]
+    def hits(entities):
         return {key for key, actual in resolved.items() if entities.intersection(actual)}
 
-    def order(uid):
-        hits = matched(uid)
+    def page_signals(uid):
         meta = index.metadata_by_uid[uid]
-        return (-sum(_WEIGHTS[_kind(key)] for key in hits), -len(hits), meta["file"], meta["page"], uid)
+        page = (meta["file"], meta["page"])
+        return hits(index.page_entities.get(page, index.entities_by_uid[uid])).intersection(signals)
 
+    def rarity(key):
+        return 1 + math.log((1 + index.file_count) / (1 + index.document_frequency.get(key, 0)))
+
+    def order(uid):
+        matched = hits(index.entities_by_uid[uid])
+        score = sum(_WEIGHTS[_kind(key)] * rarity(key) for key in matched if _kind(key) != "model")
+        meta = index.metadata_by_uid[uid]
+        return (-score, -len(matched), meta["file"], meta["page"], uid)
+
+    # 每个型号先取自己的合格 posting 预算,共享总线的先到块不能挤掉后面的型号。
+    scopes = groups or {"": None}
     candidates = set()
-    for actual_keys in resolved.values():
-        for actual in actual_keys:
-            eligible = (uid for uid in index.by_entity[actual] if accepts(uid))
-            for n, uid in enumerate(eligible):
-                if n >= MAX_POSTING:
-                    break
+    for scope in scopes.values():
+        for query_key, actual_keys in resolved.items():
+            matched_posting = set()
+            for actual in actual_keys:
+                for uid in index.by_entity[actual]:
+                    if accepts(uid) and (scope is None or uid in scope):
+                        matched_posting.add(uid)
+            for uid in sorted(matched_posting, key=order)[:MAX_POSTING]:
                 candidates.add(uid)
-    # 有显式型号但缺少其它白名单词时可做型号召回;否则至少命中一个非型号查询词。
-    direct = [uid for uid in candidates if not signals or matched(uid).intersection(signals)]
-    direct.sort(key=order)
+            if len(candidates) >= MAX_QUERY_CANDIDATES:
+                break
+        if len(candidates) >= MAX_QUERY_CANDIDATES:
+            break
+    direct = sorted((uid for uid in candidates if not signals or hits(index.entities_by_uid[uid]) & signals), key=order)
     direct_limit = min(MAX_DIRECT_CANDIDATES, max(1, limit // 2))
     expanded_limit = min(MAX_EXPANDED_CANDIDATES, max(1, limit // 4))
-
-    def take_pages(uids, count, seen):
-        picked = []
-        for uid in uids:
-            meta = index.metadata_by_uid[uid]
-            page = (meta["file"], meta["page"])
-            if page not in seen:
-                seen.add(page)
-                picked.append(uid)
-                if len(picked) >= count:
-                    break
-        return tuple(picked)
-
     pages: set[tuple] = set()
-    direct_uids = take_pages(direct, direct_limit, pages)
-    neighbors = set()
-    for seed in direct_uids[:MAX_SEEDS]:
+    direct_uids = _balanced(direct, groups, direct_limit, index.metadata_by_uid, pages)
+
+    if seed_rows is None:
+        seeds = direct_uids[:MAX_SEEDS]
+    else:
+        original = {row.get("uid") for row in seed_rows[:MAX_SEED_INPUTS]}
+        eligible = sorted((uid for uid in original if uid in index.entities_by_uid and accepts(uid)
+                           and (not signals or page_signals(uid))), key=order)
+        seeds = _balanced(eligible, groups, MAX_SEEDS, index.metadata_by_uid)
+    neighbors, paths, pruned = set(), {}, 0
+    for seed in seeds:
         seed_entities = index.entities_by_uid[seed]
         edges = sorted(key for key in seed_entities if _kind(key) == "model" or (
-            not models and _kind(key) in {"symbol", "interface"} and key not in _BROAD_SYMBOLS))
+            not models and key in signals and _kind(key) in {"symbol", "interface"} and key not in _BROAD_SYMBOLS))
         for key in edges:
-            n = 0
-            for uid in index.by_entity[key]:
-                if not accepts(uid):
+            eligible = [uid for uid in index.by_entity[key] if accepts(uid)]
+            eligible.sort(key=order)
+            for uid in eligible[:MAX_NEIGHBORS]:
+                if uid == seed:
                     continue
-                n += 1
-                if n > MAX_NEIGHBORS:
-                    break
                 shared = seed_entities.intersection(index.entities_by_uid[uid])
-                if _kind(key) == "model" or len({e for e in shared if _kind(e) != "model"}) >= 2:
-                    neighbors.add(uid)
-    expanded = take_pages(sorted(neighbors, key=order), expanded_limit, pages)
+                related = page_signals(uid)
+                # 只有型号页眉/单一通用总线,而无当前问题信号的邻居不扩展。
+                if (signals and not related) or (_kind(key) != "model" and len(shared - _BROAD_SYMBOLS) < 2):
+                    pruned += 1
+                    continue
+                neighbors.add(uid)
+                paths.setdefault(uid, {"seed_chunk_id": seed, "shared_entities": sorted(shared, key=lambda e: (
+                    _kind(e) == "model", -rarity(e), e))[:4]})
+    expanded = _balanced(sorted(neighbors, key=order), groups, expanded_limit, index.metadata_by_uid, pages)
     status = "used" if direct_uids or expanded else "empty"
-    return EntitySearch(keys, direct_uids, expanded, status, index, cached)
+    selected = direct_uids + expanded
+    counts = {key.removeprefix("model:"): sum(uid in scope for uid in selected) for key, scope in groups.items()}
+    return EntitySearch(keys, direct_uids, expanded, status, index, cached, len(seeds), pruned, counts,
+                        {uid: paths[uid] for uid in expanded})
 
 
 def diagnostics(result: EntitySearch) -> dict:
     out = {"enabled": True, "status": result.status, "query_entities": len(result.query_entities),
-           "direct_candidates": len(result.direct_uids), "expanded_candidates": len(result.expanded_uids)}
+           "direct_candidates": len(result.direct_uids), "expanded_candidates": len(result.expanded_uids),
+           "seeds": result.seeds, "pruned_neighbors": result.pruned, "by_model": result.by_model}
     if result.index is not None:
         out.update(index_rows=len(result.index.entities_by_uid), index_entities=len(result.index.by_entity),
                    index_build_ms=round(result.index.build_ms, 3), index_cached=result.index_cached)

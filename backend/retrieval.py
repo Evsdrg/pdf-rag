@@ -514,7 +514,9 @@ def _channel_structured(table, query: str, limit: int, category, file, cands, de
     from . import entity
 
     try:
-        result = entity.search(table, query, category=category, file=file, limit=limit)
+        seeds = _balance_models(cands.top(len(cands.scores)), cands.rows, query)
+        result = entity.search(table, query, category=category, file=file, limit=limit,
+                               seed_rows=[cands.rows[key] for key, _ in seeds[:entity.MAX_SEED_INPUTS]])
         if diag is not None:
             diag["structured"] = entity.diagnostics(result)
         rows = _hydrate(table, list(result.ordered_uids))
@@ -780,6 +782,35 @@ def _rerank_and_order(cands, rows_by_key: dict, query: str):
     return [cands[i] for i in order], scores
 
 
+def _balance_models(picked, rows_by_key: dict, query: str):
+    """仅结构化多型号查询使用轮转配额,组内保留当前排序。"""
+    from . import entity
+    models = [key for key in entity.extract_entities(query, query=True) if key.startswith("model:")]
+    if len(models) < 2:
+        return picked
+    identities = {key: entity.extract_entities("", model_no=row.get("model_no", ""))
+                  for key, row in rows_by_key.items()}
+    groups = []
+    for model in models:
+        exact = [item for item in picked if model in identities[item[0]]]
+        group = exact or [item for item in picked if len(model.removeprefix("model:")) >= 5
+                         and any(key.startswith(model) for key in identities[item[0]] if key.startswith("model:"))]
+        if group:
+            groups.append(collections.deque(group))
+    if len(groups) < 2:
+        return picked
+    out, seen = [], set()
+    while any(groups):
+        for group in groups:
+            while group:
+                item = group.popleft()
+                if item[0] not in seen:
+                    seen.add(item[0])
+                    out.append(item)
+                    break
+    return out + [item for item in picked if item[0] not in seen]
+
+
 # ==================== 结果缓存 ====================
 
 _RESULT_CACHE: "collections.OrderedDict[tuple, tuple[float, list, dict]]" = collections.OrderedDict()
@@ -914,7 +945,10 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
         return []
 
     pool = max(top_k * config.get("rerank_pool_mult"), config.get("rerank_pool_floor"))
-    picked = _pick_latest(cands.top(pool), cands.rows, cands.scores)
+    ranked = cands.top(len(cands.scores)) if structured else cands.top(pool)
+    if structured:
+        ranked = _balance_models(ranked, cands.rows, query)[:pool]
+    picked = _pick_latest(ranked, cands.rows, cands.scores)
 
     rerank_scores: dict[tuple, float] = {}
     if rerank and picked:
@@ -924,6 +958,8 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
             degraded.append("rerank")
             log.warning("rerank 失败: %s", e)
 
+    if structured:
+        picked = _balance_models(picked, cands.rows, query)
     out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc)
     _finish_diagnostics(diag, len(picked), len(out))
     if not diag["degraded"]:
