@@ -994,6 +994,25 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
     return out
 
 
+def _structured_facts(chunks: list[dict], query: str) -> list[dict]:
+    from . import entity, table_facts
+    signals = {key for key in entity.extract_entities(query, query=True) if not key.startswith("model:")}
+    facts, seen = [], set()
+    query_with_aliases = query + " " + " ".join(key.split(":", 1)[1].replace("_", " ") for key in signals)
+    for chunk in chunks:
+        if chunk.get("uid") in seen:
+            continue
+        seen.add(chunk.get("uid"))
+        candidates = table_facts.extract(chunk, query=query_with_aliases if signals else "", max_facts=4)
+        for fact in candidates:
+            fact["source"].update(file=chunk["file"], page=int(chunk["page"]) + 1)
+            if fact not in facts:
+                facts.append(fact)
+            if len(facts) >= 3:
+                return facts
+    return facts
+
+
 def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
                    top_k: int, max_per_doc: int, evidence_by_key: dict | None = None) -> list[dict]:
     """按页去重、限制同文件条数,并组装返回结构。"""
@@ -1021,6 +1040,7 @@ def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
             bundle = evidence_by_key[k]
             item["snippet"] = bundle["text"]
             item["evidence_refs"] = bundle["references"]
+            item["structured_facts"] = _structured_facts(cands.chunks[k], query)
             if bundle["references"]:
                 item["snippet_ref"] = dict(bundle["references"][0])
         if k in cands.traces:

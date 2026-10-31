@@ -53,6 +53,25 @@ class EvidenceTest(unittest.TestCase):
         self.assertLessEqual(len(bundle["text"]), 200)
         self.assertEqual(len(bundle["references"]), 2)
 
+    def test_structured_facts_keep_row_conditions_and_index_references(self):
+        text = ("| Parameter | Symbol | Conditions | Unit | Value |\n|---|---|---|---|---|\n"
+                "| Supply Current | IDD | mode=low | mA | 0.45 |\n"
+                "| Supply Current | IDD | mode=high | mA | 1.20 |\n")
+        chunk = row("table", text)
+        key = ("part.pdf", 1)
+        cands = retrieval._Candidates(60, 5)
+        cands.add(chunk, 0)
+        bundle = evidence.select([chunk], "ABC123 电流")
+        result = retrieval._build_results(cands.top(5), cands, {}, "ABC123 电流", 5, 0, {key: bundle})
+        facts = result[0]["structured_facts"]
+        self.assertEqual(len(facts), 2)
+        self.assertEqual({fact["conditions"] for fact in facts}, {"mode=low", "mode=high"})
+        for fact in facts:
+            ref = fact["source"]
+            self.assertEqual(ref["file"], "part.pdf")
+            self.assertEqual(ref["page"], 2)
+            self.assertIn(fact["conditions"], text[ref["start_offset"]:ref["end_offset"]])
+
     def test_nonwindow_rerank_setting_remains_explicit(self):
         chunk = row("a", "full text")
         with override_config(rerank_on_window=False, rerank_meta=False):

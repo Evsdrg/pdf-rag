@@ -61,6 +61,13 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 
 ## 4. 精确查找与诊断
 
+结构化搜索每页还可返回最多三条 `structured_facts`：`subject/parameter/symbol/values/unit/conditions/source`。
+只接受单块内明确表头、数值角色及单位的完整 Markdown 表；`values` 保留原字符串，
+条件空白不继承，同参数不同条件不合并。`source` 除 file/page、chunk_id/index_md5 外，还带
+数据行 `start_offset/end_offset` 和表头 `header_start_offset/header_end_offset`，均基于索引块。
+它是保守的行列投影，不是完整参数数据库，不推断缺列、修复 OCR 或数值换算；
+缺失/破损表回退原文。事实可不在 snippet 窗口内，需单独按来源核对。
+
 `grep` 按文件/页聚合，每页最多五个不同上下文；同一索引块内重叠的窗口合并成连续文本，正文和表格的确定重复可合并，不同条件行与远离的内容区域保留。`indexed_matches` 是索引文本出现次数（可能包含正文/表格重复和分块重叠），不等于印刷页次数；`omitted_contexts` 只统计超出五个而未返回的窗口，`contexts_truncated` 表示确有窗口未展示。最多返回 100 页，可用游标继续。
 
 向量通道成功但无命中是正常空召回，不是服务故障。降级按全文、子串、嵌入、分区、维度、覆盖率、重排区分，空结果仍给出诊断；不缓存降级结果。
