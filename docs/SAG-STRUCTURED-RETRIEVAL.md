@@ -184,7 +184,38 @@ uv run --frozen python tools/bench_logic.py --structured-only --json /tmp/bench-
 证据对齐以及明确表头的同行条件事实；不是 SAG 全量引擎或持久化条件事实数据库。
 全库 LLM event 抽取、自动条件筛选、生产部署和默认开启仍在范围外。
 
-## 8. 参考
+## 8. 交付核对（2026-11-01）
+
+| 推荐项 | 实现产物 | 直接验证 |
+|---|---|---|
+| 关系评测集 | `eval_relations.json`、`tools/eval_relations.py` | 32题/80目标；逐页 validate；`tests/test_relation_eval.py` 验证错误文件/页/条件不计覆盖 |
+| 查询相关扩展与多型号配额 | `backend/entity.py`、`retrieval._balance_models` | `tests/test_entity.py` 验证种子来自原召回、型号页眉剪枝、过滤前预算和大手册不挤占另一型号 |
+| 有界检索路径 | `retrieval._entity_trace/_channel_structured` | `test_expansion_path_is_hydrated_and_bounded`；真实索引种子文件/页/MD5 回表检查 |
+| 重排/片段证据对齐 | `backend/evidence.py`、`retrieval._rerank_docs` | `tests/test_evidence.py` 验证正文相等、两窗共预算、块偏移与连续表头边界 |
+| 同行条件事实 | `backend/table_facts.py`、`retrieval._structured_facts` | `tests/test_table_facts.py` 验证不继承/不串用、歧义拒绝、原文偏移；57文档319条字面投影抽查 |
+| 协议和客户端 | 统一 Agent API、`StructuredEvidence.vue`、pi JSON 透传 | `test_structured_fields_survive_single_payload_and_response_budget`；浏览器合成响应验收；前端/pi测试 |
+
+执行的验证入口：
+
+```bash
+uv run --frozen python -m unittest discover -s tests
+uv run --frozen python tools/eval_relations.py --validate-only
+cd web && pnpm test && pnpm build
+node --experimental-strip-types --test clients/pi/pdf-rag-pi/tests/adapter.test.mjs
+python tools/check_docs.py
+git diff --check
+```
+
+实际本轮使用已有 `.venv/bin/python` 运行，避免改动依赖锁；未安装或升级第三方依赖。
+关系集和旧55题均用同一索引、独立进程和禁止网络的环境与第一阶段代码快照对照，
+质量结果重复一致；性能用确定性模型替身，不能替代真实 mixed+rerank 质量验证。
+主会话完成定点复审；额外独立复审任务未返回有效报告后停止，未将其算作验收证据。
+
+本轮不推送、不部署、不运行 ingest，不修改手册/持久索引/运行配置；本地 pi 指南先备份后
+同步。默认模式不会构建实体桥或返回新增轨迹/事实，离线行为断言和实际响应检查均通过。
+跨页证据齐全率、真实模型效果和全知识图谱不在“已经验证提升”的范围内。
+
+## 9. 参考
 
 - [SAG 官方仓库](https://github.com/Zleap-AI/SAG)
 - [SAG 论文](https://arxiv.org/abs/2606.15971)
