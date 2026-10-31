@@ -91,6 +91,32 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(json.loads(mcp_result.content[0].text), enabled)
         self.assertFalse(mcp_result.is_error)
 
+    def test_structured_fields_survive_single_payload_and_response_budget(self):
+        reference = {"chunk_id": "c", "index_md5": "m", "start_offset": 0, "end_offset": 20,
+                     "offset_basis": "indexed_chunk", "snippet_start": 0, "snippet_end": 20}
+        fact = {"subject": "ABC123", "parameter": "Supply Current", "symbol": "IDD",
+                "values": {"typ": "0.45"}, "unit": "mA", "conditions": "mode low",
+                "source": {**reference, "header_start_offset": 0, "header_end_offset": 8,
+                           "file": "a.pdf", "page": 1}}
+        hit = {"file": "a.pdf", "page": 1, "model_no": "ABC123", "snippet": "Supply Current 0.45 mA",
+               "snippet_ref": reference, "evidence_refs": [reference], "structured_facts": [fact],
+               "retrieval_trace": {"kind": "entity_direct", "chunk_id": "c", "scope": "retrieval_only"}}
+        with patch.object(agent_api, "require_table", return_value=object()), \
+             patch.object(agent_api, "check_category"), \
+             patch.object(agent_api.retrieval, "search", return_value=[hit]):
+            payload = self.client.get("/api/v2/search", params={"query": "ABC123 current", "structured": True}).json()
+        self.assertEqual(payload["results"][0]["structured_facts"], [fact])
+        self.assertEqual(payload["results"][0]["evidence_refs"], [reference])
+        self.assertEqual(payload["results"][0]["retrieval_trace"]["scope"], "retrieval_only")
+        large = [{**hit, "snippet": "证据" * 450, "structured_facts": [fact] * 3} for _ in range(20)]
+        with patch.object(agent_api, "require_table", return_value=object()), \
+             patch.object(agent_api, "check_category"), \
+             patch.object(agent_api.retrieval, "search", return_value=large):
+            result = agent_api.search("ABC123", top_k=20, structured=True)
+        self.assertTrue(result["truncated"])
+        self.assertLessEqual(len(json.dumps(result, ensure_ascii=False).encode()), 32000)
+        self.assertTrue(result["results"][0]["structured_facts"])
+
     def test_search_validates_options_before_reading_the_index(self):
         with patch.object(agent_api, "require_table", side_effect=AssertionError("must validate first")):
             for kwargs in ({"structured": "yes"}, {"mode": "unknown"}):

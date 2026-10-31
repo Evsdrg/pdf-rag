@@ -70,6 +70,8 @@ backend/
   agent_paging.py      输出预算和版本绑定游标
   retrieval.py         三路召回、可选实体桥、融合、去重、重排和片段
   entity.py            查询期确定性实体索引与有界扩展（默认关闭）
+  evidence.py          结构化重排与片段共用的有界证据窗口
+  table_facts.py       明确表头/同行条件的保守 Markdown 表格投影
   ingest.py            提取、嵌入与索引写入
   library.py           表句柄、元数据、源文件覆盖和参数解析
   vecstore.py          uid、向量分区、契约与覆盖率
