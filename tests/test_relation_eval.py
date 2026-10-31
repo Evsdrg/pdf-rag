@@ -259,6 +259,7 @@ class DatasetShapeTest(unittest.TestCase):
             counts[item["category"]] = counts.get(item["category"], 0) + 1
         self.assertEqual(set(counts), set(er.CATEGORIES))
         self.assertEqual(sorted(counts.values()), [8, 8, 8, 8])
+        self.assertEqual(sum(len(item["targets"]) for item in qs), 80)
 
     def test_each_question_has_two_or_three_targets(self):
         for item in self.data["questions"]:

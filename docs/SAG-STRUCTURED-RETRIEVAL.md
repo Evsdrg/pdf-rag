@@ -164,7 +164,7 @@ uv run --frozen python tools/bench_logic.py --structured-only --json /tmp/bench-
 
 “grounded”仍不证明数值列、单位、条件和版本正确，只排除来自错误文件的数值碰巧命中。
 纯逻辑基准把模型替换为确定性本地替身，只测计算成本，不测模型排序质量。
-新增关系集 `eval_relations.json` 含 32 题（四类各八题）和 79 个证据目标。
+新增关系集 `eval_relations.json` 含 32 题（四类各八题）和 80 个证据目标。
 先运行 `tools/eval_relations.py --validate-only` 检查标注页和字面值，再用默认离线
 `--mode fts --no-rerank`、可选 `--structured` 和 `--json` 做对照；脚本强制禁止网络。
 全证据页覆盖、平均目标召回、同身份/页/条件片段覆盖、标注错值共现事件、错误变体题占比、
