@@ -53,6 +53,10 @@ description: 检索本地元器件手册库(已索引的 PDF/Markdown 数据手�
   重排分不是正确率概率。可用 `pdf_rag_list_files(model_no=...)` 筛选确认并按游标翻页。
 - **计数与页号**：grep 的 `indexed_matches` 包含索引重复，不是印刷页次数；PDF `page`
   是物理页，Markdown 是一级标题伪页；文件列表的 `pages` 是索引最大页号。
+- **结构化实验**：`structured=true` 时，`retrieval_trace` 说明候选如何通过共享实体连接，
+  不是兼容或因果证明；多窗片段用 `evidence_refs[]` 逐块核对，`snippet_ref` 只指第一窗。
+  `structured_facts[]` 只投影明确表头的数值/单位/条件原文，同参数不同条件不得混用；
+  条件为空表示原行未注明，不能当作任意条件适用。没有结构化事实时仍读原文，不猜测补齐。
 - **提取告警**：检查 `warnings`，OCR 失败保留原生文本；乱码单位、公式和曲线不能靠猜测修复。
 
 ## 类别与文件范围

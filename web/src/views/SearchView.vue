@@ -8,6 +8,7 @@ import { useMessage } from 'naive-ui'
 import { docLabel, getCategories, searchDocs, pdfUrl } from '../api'
 import type { SearchHit } from '../api'
 import PageDrawer from '../components/PageDrawer.vue'
+import StructuredEvidence from '../components/StructuredEvidence.vue'
 
 const message = useMessage()
 const q = ref('')
@@ -205,6 +206,7 @@ function fileBase(file: string) {
               <div class="fname">{{ fileBase(r.file) }}</div>
               <div class="fpath">{{ r.file }}</div>
               <div class="snippet">{{ r.snippet }}</div>
+              <StructuredEvidence :hit="r" />
             </n-card>
           </div>
         </template>

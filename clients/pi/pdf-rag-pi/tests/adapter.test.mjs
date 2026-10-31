@@ -48,12 +48,17 @@ test('search forwards the optional structured bridge flag', async () => {
   adapter({ registerTool: (tool) => tools.set(tool.name, tool) });
   const previous = globalThis.fetch;
   let requested;
+  const hit = { file: 'part.pdf', page: 2, evidence_refs: [{ chunk_id: 'c', start_offset: 1 }],
+    retrieval_trace: { kind: 'entity_expansion', seed_chunk_id: 's', scope: 'retrieval_only' },
+    structured_facts: [{ parameter: 'Current', unit: 'mA', conditions: 'mode=low', values: { typ: '0.45' } }] };
   globalThis.fetch = async (url) => {
     requested = new URL(url);
-    return new Response(JSON.stringify({ schema_version: 2, results: [], structured: { enabled: true, status: 'empty' } }));
+    return new Response(JSON.stringify({ schema_version: 2, results: [hit], structured: { enabled: true, status: 'used' } }));
   };
   try {
-    await tools.get('pdf_rag_search').execute('id', { query: 'QMC6309 voltage', structured: true });
+    const result = await tools.get('pdf_rag_search').execute('id', { query: 'QMC6309 voltage', structured: true });
+    assert.deepEqual(result.details.results[0], hit);
+    assert.deepEqual(JSON.parse(result.content[0].text).results[0], hit);
     assert.equal(requested.pathname, '/api/v2/search');
     assert.equal(requested.searchParams.get('structured'), 'true');
   } finally {

@@ -57,6 +57,39 @@ export interface IngestState {
   finished_at?: string
 }
 
+export interface EvidenceRef {
+  chunk_id: string
+  index_md5: string | null
+  start_offset: number
+  end_offset: number
+  offset_basis: 'indexed_chunk'
+  snippet_start?: number
+  snippet_end?: number
+  table_header?: string | null
+}
+
+export interface RetrievalTrace {
+  kind: 'entity_direct' | 'entity_expansion'
+  chunk_id: string
+  index_md5?: string | null
+  scope: 'retrieval_only'
+  seed_chunk_id?: string
+  seed_file?: string
+  seed_page?: number
+  seed_index_md5?: string | null
+  shared_entities?: string[]
+}
+
+export interface TableFact {
+  parameter: string
+  symbol: string | null
+  subject: string
+  values: Partial<Record<'min' | 'typ' | 'max' | 'value', string>>
+  unit: string
+  conditions: string
+  source: EvidenceRef & { file: string; page: number; header_start_offset: number; header_end_offset: number }
+}
+
 export interface SearchHit {
   file: string
   page: number
@@ -68,6 +101,10 @@ export interface SearchHit {
   version?: string
   score: number
   snippet: string
+  snippet_ref?: EvidenceRef
+  evidence_refs?: EvidenceRef[]
+  retrieval_trace?: RetrievalTrace
+  structured_facts?: TableFact[]
 }
 
 export interface ApiWarning {
@@ -86,6 +123,9 @@ export interface StructuredDiagnostics {
   index_entities?: number
   index_build_ms?: number
   index_cached?: boolean
+  seeds?: number
+  pruned_neighbors?: number
+  by_model?: Record<string, number>
 }
 
 export interface SearchResponse {
