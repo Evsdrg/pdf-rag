@@ -43,7 +43,13 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 - Markdown：按标题层级读取，包含子节，不包含下一个同级或上级标题。
 - PDF：按书签页范围读取，`section_basis=bookmark_pages`；相邻书签共享物理页时可能包含相邻节，不伪称页内精确定位。无书签不自动推断章节。
 
-搜索的 `snippet` 使用经过保守展示处理的窗口，并提供 `snippet_ref`：`chunk_id/index_md5/start_offset/end_offset/offset_basis/truncated_before/truncated_after/table_header/warnings`。偏移基于索引块，不是实时读页或图像坐标。展示可有限扩展到行边界、移除无意义控制字符，但不会猜测修复单位、公式、乱码；送重排器的窗口不因此改变。
+搜索的 `snippet` 使用经过保守展示处理的窗口，并提供 `snippet_ref`：`chunk_id/index_md5/start_offset/end_offset/offset_basis/truncated_before/truncated_after/table_header/warnings`。偏移基于索引块，不是实时读页或图像坐标。展示可有限扩展到行边界、移除无意义控制字符，但不会猜测修复单位、公式、乱码；默认检索送重排器的窗口不因此改变。
+
+`structured=true` 时同页可选最多两个去重证据窗口，共享原有 `snippet_width` 总正文预算。
+`evidence_refs[]` 分别提供每个窗口的块偏移及组合片段内的 `snippet_start/snippet_end`；
+`snippet_ref` 保留第一窗引用用于旧调用方，不能用它解释整个多窗片段。连续 Markdown 表头
+可加入窗口预算，不继承已经结束的表格。开启 `rerank_on_window` 时重排正文与最终 `snippet`
+完全一致（可另外前置文档身份行）；关闭该设置时仍显式使用整代表块重排。
 
 旧索引不含 OCR 来源、页内坐标、原始表格单元格关系，不能从引用字段推断这些信息。响应协议更新不需要重建索引，也不会自动触发索引。
 

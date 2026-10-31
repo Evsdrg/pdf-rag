@@ -750,11 +750,12 @@ def _pick_latest(cands, rows_by_key: dict, scores: dict):
 
 # ==================== 重排 ====================
 
-def _rerank_docs(cands, rows_by_key: dict, query: str) -> list[str]:
-    """构造送重排器的文本。窗口化可显著降低载荷,前置身份行用于区分同族文档。"""
+def _rerank_docs(cands, rows_by_key: dict, query: str, evidence_by_key: dict | None = None) -> list[str]:
+    """结构化模式重用最终证据包;默认仍使用代表块窗口。"""
     docs = [rows_by_key[k]["text"] for k, _ in cands]
     if config.get("rerank_on_window"):
-        docs = [make_snippet(d, query) for d in docs]
+        docs = [evidence_by_key[k]["text"] if evidence_by_key is not None else make_snippet(d, query)
+                for (k, _), d in zip(cands, docs)]
     if config.get("rerank_meta"):
         docs = [f"{_meta_line(rows_by_key[k])}\n{d}" for (k, _), d in zip(cands, docs)]
     return docs
@@ -774,7 +775,7 @@ def _model_identity_match(row: dict, models: set[str]) -> int:
     return 2 if any(m in ident for m in models) else 0
 
 
-def _rerank_and_order(cands, rows_by_key: dict, query: str):
+def _rerank_and_order(cands, rows_by_key: dict, query: str, evidence_by_key: dict | None = None):
     """重排并排序。返回 (排序后的候选, {key: 重排分})。
 
     纯重排分排序,外加一道**型号平局裁决**:同族手册两页的重排分差(实测
@@ -784,7 +785,7 @@ def _rerank_and_order(cands, rows_by_key: dict, query: str):
     排序 —— 实测任何融合权重都会让概述页抢走参数值类查询的 top1
     (snippet@1 58%→38%)。
     """
-    docs = _rerank_docs(cands, rows_by_key, query)
+    docs = _rerank_docs(cands, rows_by_key, query, evidence_by_key)
     rel = _call_reranker(query, docs)
     scores = {cands[i][0]: float(rel[i]) for i in range(len(cands))}
     order = sorted(range(len(cands)),
@@ -971,17 +972,21 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
         ranked = _balance_models(ranked, cands.rows, query)[:pool]
     picked = _pick_latest(ranked, cands.rows, cands.scores)
 
+    evidence_by_key = None
+    if structured:
+        from . import evidence
+        evidence_by_key = {key: evidence.select(cands.chunks[key], query) for key, _ in picked}
     rerank_scores: dict[tuple, float] = {}
     if rerank and picked:
         try:
-            picked, rerank_scores = _rerank_and_order(picked, cands.rows, query)
+            picked, rerank_scores = _rerank_and_order(picked, cands.rows, query, evidence_by_key)
         except Exception as e:
             degraded.append("rerank")
             log.warning("rerank 失败: %s", e)
 
     if structured:
         picked = _balance_models(picked, cands.rows, query)
-    out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc)
+    out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc, evidence_by_key)
     _finish_diagnostics(diag, len(picked), len(out))
     if not diag["degraded"]:
         _cache_put(ckey, [dict(x) for x in out],
@@ -990,7 +995,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
 
 
 def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
-                   top_k: int, max_per_doc: int) -> list[dict]:
+                   top_k: int, max_per_doc: int, evidence_by_key: dict | None = None) -> list[dict]:
     """按页去重、限制同文件条数,并组装返回结构。"""
     per_doc: dict[str, int] = {}
     out: list[dict] = []
@@ -1012,6 +1017,12 @@ def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
             "snippet": page_snippet(cands.chunks.get(k, [row]), query),
             "snippet_ref": snippet_reference(cands.chunks.get(k, [row]), query),
         }
+        if evidence_by_key is not None:
+            bundle = evidence_by_key[k]
+            item["snippet"] = bundle["text"]
+            item["evidence_refs"] = bundle["references"]
+            if bundle["references"]:
+                item["snippet_ref"] = dict(bundle["references"][0])
         if k in cands.traces:
             item["retrieval_trace"] = dict(cands.traces[k])
         if k in rerank_scores:
