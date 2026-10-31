@@ -1,6 +1,9 @@
 """共享检索核心。
 
-流水线:多路召回(FTS / 型号子串 / 向量)→ RRF 融合 → 跨版本去重 → 重排 → 片段。
+流水线:多路召回(FTS / 型号子串 / 向量 / 可选实体桥)→ RRF 融合 → 跨版本去重 → 重排 → 片段。
+
+实体桥是默认关闭的实验通道:它只从现有 chunk 文本构造确定性、有限的实体连接，
+最终仍回到原始 chunk，不改变主表或向量分区契约。
 
 以下设计点均经实测,勿凭直觉回退:
 
@@ -505,6 +508,35 @@ def _channel_substring(table, query: str, limit: int, category, file, cands, deg
                 cands.add(row, 0, bonus=True)
 
 
+def _channel_structured(table, query: str, limit: int, category, file, cands, degraded,
+                        diag: dict | None = None):
+    """实体桥按 uid 回主表,每页最多补一块,不改重排分数。"""
+    from . import entity
+
+    try:
+        result = entity.search(table, query, category=category, file=file, limit=limit)
+        if diag is not None:
+            diag["structured"] = entity.diagnostics(result)
+        rows = _hydrate(table, list(result.ordered_uids))
+        seen: set[tuple[str, int]] = set()
+        for rank, uid in enumerate(result.ordered_uids):
+            row = rows.get(uid)
+            if row is None or not _accepts(row, category, file):
+                continue
+            page_key = (row["file"], int(row["page"]))
+            if page_key in seen:
+                continue
+            seen.add(page_key)
+            cands.add(row, limit + rank)
+        if diag is not None:
+            diag["structured"]["added_pages"] = len(seen)
+    except Exception as e:
+        degraded.append("structured")
+        log.warning("结构化实体检索失败: %s", e)
+        if diag is not None:
+            diag["structured"] = {**diag.get("structured", {}), "enabled": True, "status": "failed"}
+
+
 def _hydrate(main_table, uids: list[str]) -> dict[str, dict]:
     """按 uid 从主表取回元数据与文本。
 
@@ -766,13 +798,16 @@ _CACHE_PARAM_KEYS = (
     "vector_models_priority", "vector_models_exclude",
 )
 
+# `structured` is a request-scoped opt-in rather than a persisted setting, so
+# it is included explicitly in the cache key below instead of this config list.
+
 
 def _params_fingerprint() -> tuple:
     return tuple(config.get(k) for k in _CACHE_PARAM_KEYS)
 
 
 def reset_cache() -> None:
-    """清空全部进程内缓存:结果、查询向量、覆盖率、投影表。
+    """清空全部进程内缓存:结果、查询向量、覆盖率、投影表和实体桥。
 
     配置变更、索引替换后必须调用。投影表也在这里清 —— 它虽按 table.version
     失效,但**导入数据包**时新索引的 version 可能恰好等于旧的(两个独立 lance
@@ -784,11 +819,13 @@ def reset_cache() -> None:
     _EMBED_CACHE.clear()
     _COV_CACHE.clear()
     _PROJ_CACHE = None
+    from . import entity
+    entity.reset_cache()
 
 
-def _cache_key(table, query, category, top_k, mode, rerank, file, max_per_doc):
+def _cache_key(table, query, category, top_k, mode, rerank, file, max_per_doc, structured=False):
     return (table.version, query, category or "", top_k, mode, bool(rerank),
-            file or "", max_per_doc or 0, _params_fingerprint())
+            file or "", max_per_doc or 0, bool(structured), _params_fingerprint())
 
 
 def _cache_get(key):
@@ -825,6 +862,7 @@ def _finish_diagnostics(diag: dict, candidates: int, returned: int):
         "vector:dimension_failed": "查询向量维度与分区契约不匹配",
         "vector:search_failed": "向量检索失败,请检查本地分区",
         "vector:low_coverage": "向量分区覆盖率低于配置下限",
+        "structured": "结构化实体检索失败,已使用其他检索通道",
         "rerank": "本次重排失败,已使用融合排序",
     }
     degraded = list(dict.fromkeys(diag.get("degraded", [])))
@@ -838,7 +876,8 @@ def _finish_diagnostics(diag: dict, candidates: int, returned: int):
 
 def search(table, query: str, category: str | None = None, top_k: int = 5,
            mode: str = "mixed", rerank: bool = True, file: str | None = None,
-           max_per_doc: int = 0, diagnostics: dict | None = None) -> list[dict]:
+           max_per_doc: int = 0, diagnostics: dict | None = None,
+           structured: bool = False) -> list[dict]:
     """混合检索,返回命中列表。
 
     file        按文件路径子串限定检索范围(如 "QMC6309")
@@ -850,7 +889,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
     diag["degraded"] = degraded
     max_per_doc = max_per_doc or config.get("max_per_doc")
 
-    ckey = _cache_key(table, query, category, top_k, mode, rerank, file, max_per_doc)
+    ckey = _cache_key(table, query, category, top_k, mode, rerank, file, max_per_doc, structured)
     cached = _cache_get(ckey)
     if cached is not None:
         out, cdiag = cached
@@ -867,6 +906,8 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
         _channel_substring(table, query, limit, category, file, cands, degraded)
     if mode in ("mixed", "vector"):
         _channel_vector(table, query, limit, category, file, cands, degraded, diag)
+    if structured:
+        _channel_structured(table, query, limit, category, file, cands, degraded, diag)
 
     if not cands:
         _finish_diagnostics(diag, 0, 0)

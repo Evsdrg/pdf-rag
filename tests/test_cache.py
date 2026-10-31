@@ -42,6 +42,16 @@ class ParamsFingerprintTest(unittest.TestCase):
         T.version = 8
         self.assertNotEqual(k1, retrieval._cache_key(T, **base))
 
+    def test_cache_key_separates_structured_opt_in(self):
+        class T:
+            version = 7
+        base = dict(query="q", category=None, top_k=5, mode="mixed",
+                    rerank=True, file=None, max_per_doc=0)
+        self.assertNotEqual(
+            retrieval._cache_key(T, structured=False, **base),
+            retrieval._cache_key(T, structured=True, **base),
+        )
+
 
 class EmbedQueryCacheTest(unittest.TestCase):
     def setUp(self):
