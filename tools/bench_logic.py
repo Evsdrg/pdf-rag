@@ -24,7 +24,7 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from backend import config, library, retrieval, vecstore  # noqa: E402
+from backend import config, entity, library, retrieval, vecstore  # noqa: E402
 
 EVAL = ROOT / "eval_queries.json"
 # 与线上一致的检索参数,避免"测的是另一套配置"
@@ -142,6 +142,39 @@ def bench_channels(t, db, results: dict):
     r = bench(cov_cold, n=10)
     show("覆盖率计算 (缓存未命中)", r, "扫全分区 uid,每版本一次")
     results["channel.coverage"] = r
+
+
+def bench_structured(t, results: dict):
+    """实体冷建和热查询单列,不把模型替身分数当质量指标。"""
+    print("\n--- 结构化实体桥成本(实验通道) ---")
+    q = "QMC6309 供电电压 VDD 范围"
+
+    def cold():
+        entity.reset_cache()
+        entity.get_index(t)
+
+    result = bench(cold, n=3, warmup=0)
+    show("实体索引冷建", result)
+    results["structured.index_cold"] = result
+    result = bench(lambda: entity.search(t, q), n=20, warmup=2)
+    show("实体召回与扩展 [热]", result)
+    results["structured.recall_hot"] = result
+
+    for enabled in (False, True):
+        def pipeline():
+            retrieval._RESULT_CACHE.clear()
+            diag = {}
+            retrieval.search(t, q, **{**SEARCH_KW, "structured": enabled}, diagnostics=diag)
+            if diag.get("degraded"):
+                raise RuntimeError(f"纯逻辑基准降级: {diag['degraded']}")
+        result = bench(pipeline, n=20, warmup=2)
+        show(f"mixed search [热, structured={enabled}]", result)
+        results[f"structured.pipeline_{enabled}"] = result
+    index = entity.index_for(t)
+    results["structured.index"] = {
+        "rows": len(index.entities_by_uid), "entities": len(index.by_entity),
+        "links": sum(len(keys) for keys in index.entities_by_uid.values()),
+    }
 
 
 def bench_pipeline(t, queries: list[str], results: dict):
@@ -294,6 +327,7 @@ def bench_concurrency(t, queries: list[str], results: dict):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", help="把结果写成 JSON")
+    ap.add_argument("--structured-only", action="store_true", help="只测可选实体桥及对应热路径")
     args = ap.parse_args()
 
     db = library.get_db()
@@ -309,12 +343,16 @@ def main() -> None:
 
     results: dict = {"meta": {"chunks": t.count_rows(), "queries": len(queries),
                               "partitions": [m["slug"] for m in vecstore.list_partitions(db)]}}
-    bench_channels(t, db, results)
-    bench_pipeline(t, queries, results)
-    bench_queries(t, queries, results)
-    bench_metadata(t, results)
-    bench_scaling(t, results)
-    bench_concurrency(t, queries, results)
+    if args.structured_only:
+        bench_structured(t, results)
+    else:
+        bench_channels(t, db, results)
+        bench_pipeline(t, queries, results)
+        bench_structured(t, results)
+        bench_queries(t, queries, results)
+        bench_metadata(t, results)
+        bench_scaling(t, results)
+        bench_concurrency(t, queries, results)
 
     if args.json:
         pathlib.Path(args.json).write_text(

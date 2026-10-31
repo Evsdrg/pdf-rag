@@ -1,14 +1,15 @@
-"""检索评测:对 eval_queries.json 计算两级指标。
+"""检索评测:保留历史字面值指标,另报文件身份约束的片段与整页命中。
 
-两级指标的差别是关键 —— 本项目的缺陷恰恰是"文件找对了,片段里没有答案":
-
-    recall@k    文档级:期望文件是否出现在 top-k 结果里
-    snippet@k   答案级:返回的 **片段** 是否真的包含答案字面值(must_contain)
+    recall@k             期望文件是否出现在 top-k
+    snippet@k            任意片段是否含答案字面值(历史口径,不验证文件身份)
+    grounded_snippet@k   期望文件的片段是否含答案字面值
+    grounded_page@k      期望文件命中整页的索引文本是否含答案字面值
 
 用法:
-    python eval_retrieval.py                        # mixed + rerank, k=5
-    python eval_retrieval.py --mode fts --no-rerank # 仅 FTS,不调 embedding API
-    python eval_retrieval.py --json before.json     # 导出机器可读结果,便于改动前后对比
+    python eval_retrieval.py                          # mixed + rerank, k=5
+    python eval_retrieval.py --mode fts --no-rerank    # 无模型对照
+    python eval_retrieval.py --mode fts --no-rerank --structured
+    python eval_retrieval.py --json before.json
 """
 import argparse
 import json
@@ -64,6 +65,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--mode", default="mixed", choices=["mixed", "fts", "vector"])
+    ap.add_argument("--structured", action="store_true",
+                    help="启用无模型的实验性实体桥(默认关闭)")
     ap.add_argument("--no-rerank", action="store_true")
     ap.add_argument("--legacy-snippet", action="store_true",
                     help="消融对照:片段退回旧行为(代表块的前 400 字符)")
@@ -89,14 +92,19 @@ def main():
     tot_recall = 0.0
     tot_s1 = 0
     tot_sk = 0
+    tot_grounded_1 = 0
+    tot_grounded_k = 0
+    tot_page_k = 0
     n_degraded = 0
     degraded_paths: dict[str, int] = {}
     records = []
+    row_count = table.count_rows()
 
     for q in queries:
         diag: dict = {}
         hits = search(table, q["query"], top_k=args.k,
-                      mode=args.mode, rerank=not args.no_rerank, diagnostics=diag)
+                      mode=args.mode, rerank=not args.no_rerank,
+                      structured=args.structured, diagnostics=diag)
         # 降级(嵌入/重排接口不可用)会显著影响排序质量,必须计入并上报 ——
         # 否则一次限流就能让分数无声下滑,把环境问题误读成代码退化。
         deg = diag.get("degraded") or []
@@ -121,10 +129,27 @@ def main():
         sk = bool(must) and not missk
         tot_s1 += s1
         tot_sk += sk
+        expected_hits = [hit for hit in hits if any(_hit([hit["file"]], e) for e in q["expect"])]
+        grounded_1 = bool(must and hits and hits[0] in expected_hits and not miss1)
+        grounded_k = bool(must) and any(not _snippet_ok(hit["snippet"], must) for hit in expected_hits)
+        page_ok = False
+        for hit in expected_hits:
+            indexed_rows = table.search().where(
+                "file = '" + hit["file"].replace("'", "''") + f"' AND page = {hit['page'] - 1}"
+            ).select(["text"]).limit(row_count).to_list()
+            if must and not _snippet_ok("\n".join(item["text"] for item in indexed_rows), must):
+                page_ok = True
+                break
+        tot_grounded_1 += grounded_1
+        tot_grounded_k += grounded_k
+        tot_page_k += page_ok
 
         records.append({
             "query": q["query"], "source": q.get("source", "?"), "recall": recall,
             "snippet_at_1": s1, "snippet_at_k": sk, "degraded": deg,
+            "grounded_snippet_at_1": grounded_1, "grounded_snippet_at_k": grounded_k,
+            "grounded_page_at_k": page_ok,
+            "structured": diag.get("structured", {"enabled": args.structured, "status": "disabled"}),
             "missing_in_top1": miss1, "top1_file": hits[0]["file"] if hits else None,
             "top1_page": hits[0]["page"] if hits else None,
         })
@@ -144,9 +169,12 @@ def main():
     for r in records:
         by_src.setdefault(r["source"], []).append(r)
     print(f"\n{'='*66}")
-    print(f"文档级 recall@{args.k} ({args.mode})      : {tot_recall / n:.0%}")
+    structured_label = " + structured" if args.structured else ""
+    print(f"文档级 recall@{args.k} ({args.mode}{structured_label})      : {tot_recall / n:.0%}")
     print(f"答案级 snippet@{args.k} (任一命中)        : {tot_sk / n:.0%}  ({tot_sk}/{n})")
     print(f"答案级 snippet@1  (top-1 即含答案)        : {tot_s1 / n:.0%}  ({tot_s1}/{n})")
+    print(f"身份+答案 grounded_snippet@1/@{args.k}      : {tot_grounded_1}/{n} / {tot_grounded_k}/{n}")
+    print(f"身份+整页 grounded_page@{args.k}           : {tot_page_k}/{n}")
     if len(by_src) > 1:
         print(f"{'-'*66}")
         print(f"{'来源':<8} {'条数':>4} {'recall':>8} {'snippet@k':>10} {'snippet@1':>10}")
@@ -163,9 +191,12 @@ def main():
 
     if args.json:
         Path(args.json).write_text(json.dumps({
-            "k": args.k, "mode": args.mode, "rerank": not args.no_rerank,
+            "k": args.k, "mode": args.mode, "structured": args.structured,
+            "rerank": not args.no_rerank,
             "legacy_snippet": args.legacy_snippet,
             "recall": tot_recall / n, "snippet_at_k": tot_sk / n, "snippet_at_1": tot_s1 / n,
+            "grounded_snippet_at_1": tot_grounded_1 / n, "grounded_snippet_at_k": tot_grounded_k / n,
+            "grounded_page_at_k": tot_page_k / n,
             "degraded_queries": n_degraded, "degraded_paths": degraded_paths,
             "records": records,
         }, ensure_ascii=False, indent=1), encoding="utf-8")
