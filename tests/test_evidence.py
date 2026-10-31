@@ -45,6 +45,8 @@ class EvidenceTest(unittest.TestCase):
         self.assertIsNone(evidence._table_header(old, len(old)))
         active = "| Parameter | Value |\n| --- | --- |\n| VDD | 3.3 V |\n"
         self.assertIn("Parameter", evidence._table_header(active, active.index("| VDD")))
+        separate = active + "\n| detached row | 1 mA |\n"
+        self.assertIsNone(evidence._table_header(separate, separate.index("| detached")))
 
     def test_two_windows_share_existing_text_budget(self):
         chunks = [row("a", "voltage 3.3 V\n" * 100), row("b", "current 2 mA\n" * 100)]

@@ -9,15 +9,15 @@ MAX_HEADER_CHARS = 500
 
 def _table_header(text: str, start: int) -> str | None:
     """只使用与窗口连续处于同一 Markdown 表中的表头。"""
-    lines = list(re.finditer(r"(?m)^.*(?:\n|$)", text[:start]))
+    lines = text[:start].splitlines(keepends=True)
     for i in range(len(lines) - 1, 0, -1):
-        line = lines[i].group().strip()
-        if not line:
-            continue
+        line = lines[i].strip()
         if not line.startswith("|"):
             return None
         if re.fullmatch(r"\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?", line):
-            header = lines[i - 1].group() + lines[i].group()
+            header = lines[i - 1] + lines[i]
+            if not lines[i - 1].lstrip().startswith("|") or re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", header):
+                return None
             return header.rstrip() if len(header) <= MAX_HEADER_CHARS else None
     return None
 
