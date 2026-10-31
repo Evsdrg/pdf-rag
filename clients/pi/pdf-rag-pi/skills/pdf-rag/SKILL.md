@@ -14,7 +14,7 @@ description: 检索本地元器件手册库(已索引的 PDF/Markdown 数据手�
 
 | 工具 | 走什么 | 什么时候用 |
 |---|---|---|
-| `pdf_rag_search` | BM25 + 型号子串 + 向量,RRF 融合 + 重排 | **默认首选**。问"某个参数是多少""这个型号支持什么" |
+| `pdf_rag_search` | BM25 + 型号子串 + 向量,RRF 融合 + 重排 | **默认首选**。问"某个参数是多少""这个型号支持什么"；需要探索同型号跨页/共享实体时可显式传 `structured=true`，它是默认关闭的无模型实验桥 |
 | `pdf_rag_grep` | 纯正则/字面,不走向量 | 已知**精确符号**:`VDD_APC`、`IddHP`、寄存器位名、引脚名。也用于 `search` 结果不理想时兜底 |
 | `pdf_rag_read_page` / `pdf_rag_read_pages` | 直接读页 | 已从 `search`/`grep` 拿到 file+page,要读完整上下文 |
 

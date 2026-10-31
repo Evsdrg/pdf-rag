@@ -52,7 +52,9 @@ export default function pdfRagExtension(pi: ExtensionAPI) {
 		top_k: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
 		file: Type.Optional(Type.String({ description: "文件路径字面子串" })),
 		max_per_doc: Type.Optional(Type.Integer({ minimum: 0, maximum: 20 })),
+		structured: Type.Optional(Type.Boolean({ description: "启用无模型的实验性实体扩展" })),
 	}));
+
 	register("grep", "手册精确查找", "正则查符号,不调用模型;每页聚合contexts,计数是索引文本口径。", "grep", Type.Object({
 		pattern: Type.String({ minLength: 1, maxLength: 300 }), category,
 		file: Type.Optional(Type.String()), cursor,

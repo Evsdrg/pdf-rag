@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, shallowRef } from 'vue'
 import {
   NCard, NInput, NSelect, NButton, NTag, NSpace, NEmpty, NSpin, NSwitch, NDivider,
 } from 'naive-ui'
@@ -19,6 +19,7 @@ const searched = ref(false)
 const diagnostics = ref('')
 const mode = ref('mixed')
 const rerank = ref(true)
+const structured = shallowRef(false)
 const topK = ref(8)
 const fileFilter = ref('')
 const history = ref<string[]>(JSON.parse(localStorage.getItem('search_history') || '[]'))
@@ -65,11 +66,20 @@ async function run(query?: string) {
   try {
     const response = await searchDocs(
       queryText, category.value || undefined, topK.value, mode.value, rerank.value,
-      fileFilter.value.trim() || undefined, 0, ctrl.signal,
+      fileFilter.value.trim() || undefined, 0, ctrl.signal, structured.value,
     )
     results.value = response.results
+    const structuredStatus = response.structured
+    const statusLabels = {
+      disabled: '未启用', skipped: '未识别可连接实体', empty: '无匹配候选', used: '已参与召回', failed: '已降级',
+    }
     diagnostics.value = [...new Set([
-      response.notice, ...response.warnings.map((item) => item.message),
+      response.notice,
+      structuredStatus.enabled
+        ? `结构化扩展（实验）：${statusLabels[structuredStatus.status]}`
+          + (structuredStatus.status === 'used' ? `，补充 ${structuredStatus.added_pages ?? 0} 页候选` : '')
+        : '',
+      ...response.warnings.map((item) => item.message),
       response.truncated ? response.continuation_hint : '',
     ].filter(Boolean))].join('；')
     searched.value = true
@@ -143,6 +153,8 @@ function fileBase(file: string) {
           ]" />
           <span class="opt-lbl">重排</span>
           <n-switch v-model:value="rerank" />
+          <span class="opt-lbl">结构化扩展（实验）</span>
+          <n-switch v-model:value="structured" aria-label="结构化扩展（实验）" />
         </n-space>
       </div>
 

@@ -14,7 +14,7 @@ export PDF_RAG_TIMEOUT_MS=60000
 
 ## 工具
 
-- `pdf_rag_search`、`pdf_rag_grep`：混合检索、按页聚合精确符号。
+- `pdf_rag_search`、`pdf_rag_grep`：混合检索、按页聚合精确符号。`search` 可选传 `structured=true` 启用默认关闭的无模型实体扩展实验，响应中的 `structured` 仅是运行诊断。
 - `pdf_rag_read_page`、`pdf_rag_read_pages`：读页与有界续读。
 - `pdf_rag_get_outline`、`pdf_rag_read_section`：目录和章节。
 - `pdf_rag_list_categories`、`pdf_rag_list_files`：类别和分页文件列表。

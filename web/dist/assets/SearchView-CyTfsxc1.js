@@ -1,0 +1,42 @@
+import{$t as e,D as t,F as n,Ht as r,In as i,P as a,Pn as o,Qt as s,Rn as c,Sn as l,Ut as u,Vn as d,Vt as f,Wt as p,an as m,bn as h,cn as g,fn as _,in as v,kn as y,ln as b,on as x,rn as S,sn as C,t as w,tn as T,un as E,wn as D}from"./_plugin-vue_export-helper-CaXOlpYa.js";import{E as O,T as k,k as A,o as j,s as ee,v as te,w as ne}from"./api-CqXcLRhi.js";import{t as re}from"./PageDrawer-BM0_9Lbw.js";import{a as M,r as N,t as P}from"./Select-C4nVlb17.js";import{t as F}from"./Card-DFkQdnnw.js";import{t as I}from"./use-message-1ySSbppa.js";import{t as L}from"./Space-BnNSscYq.js";import{t as R}from"./Switch-C6mh-xOD.js";import{o as z}from"./index-dTSQ9Wek.js";var B=f(`divider`,`
+ position: relative;
+ display: flex;
+ width: 100%;
+ box-sizing: border-box;
+ font-size: 16px;
+ color: var(--n-text-color);
+ transition:
+ color .3s var(--n-bezier),
+ background-color .3s var(--n-bezier);
+`,[p(`vertical`,`
+ margin-top: 24px;
+ margin-bottom: 24px;
+ `,[p(`no-title`,`
+ display: flex;
+ align-items: center;
+ `)]),r(`title`,`
+ display: flex;
+ align-items: center;
+ margin-left: 12px;
+ margin-right: 12px;
+ white-space: nowrap;
+ font-weight: var(--n-font-weight);
+ `),u(`title-position-left`,[r(`line`,[u(`left`,{width:`28px`})])]),u(`title-position-right`,[r(`line`,[u(`right`,{width:`28px`})])]),u(`dashed`,[r(`line`,`
+ background-color: #0000;
+ height: 0px;
+ width: 100%;
+ border-style: dashed;
+ border-width: 1px 0 0;
+ `)]),u(`vertical`,`
+ display: inline-block;
+ height: 1em;
+ margin: 0 8px;
+ vertical-align: middle;
+ width: 1px;
+ `),r(`line`,`
+ border: none;
+ transition: background-color .3s var(--n-bezier), border-color .3s var(--n-bezier);
+ height: 1px;
+ width: 100%;
+ margin: 0;
+ `),p(`dashed`,[r(`line`,{backgroundColor:`var(--n-color)`})]),u(`dashed`,[r(`line`,{borderColor:`var(--n-color)`})]),u(`vertical`,{backgroundColor:`var(--n-color)`})]),V=Object.assign(Object.assign({},t.props),{titlePlacement:{type:String,default:`center`},dashed:Boolean,vertical:Boolean}),H=E({name:`Divider`,props:V,setup(e){let{mergedClsPrefixRef:r,inlineThemeDisabled:i}=n(e),o=t(`Divider`,`-divider`,B,z,e,r),s=S(()=>{let{common:{cubicBezierEaseInOut:e},self:{color:t,textColor:n,fontWeight:r}}=o.value;return{"--n-bezier":e,"--n-color":t,"--n-text-color":n,"--n-font-weight":r}}),c=i?a(`divider`,void 0,s,e):void 0;return{mergedClsPrefix:r,cssVars:i?void 0:s,themeClass:c?.themeClass,onRender:c?.onRender}},render(){var e;let{$slots:t,titlePlacement:n,vertical:r,dashed:i,cssVars:a,mergedClsPrefix:o}=this;return(e=this.onRender)==null||e.call(this),_(`div`,{role:`separator`,class:[`${o}-divider`,this.themeClass,{[`${o}-divider--vertical`]:r,[`${o}-divider--no-title`]:!t.default,[`${o}-divider--dashed`]:i,[`${o}-divider--title-position-${n}`]:t.default&&n}],style:a},r?null:_(`div`,{class:`${o}-divider__line ${o}-divider__line--left`}),!r&&t.default?_(T,null,_(`div`,{class:`${o}-divider__title`},this.$slots),_(`div`,{class:`${o}-divider__line ${o}-divider__line--right`})):null)}}),U={class:`row`},W={class:`row`},G={key:1,class:`diagnostics`,role:`status`},K={key:0,class:`hint`},q={key:0,class:`hint`},ie={key:1,class:`results`},ae={class:`hit-head`},oe={class:`loc`},se={class:`fname`},ce={class:`fpath`},le={class:`snippet`},J=w(E({__name:`SearchView`,setup(t){let n=I(),r=o(``),a=o([]),u=o(null),f=o([]),p=o(!1),_=o(!1),w=o(``),E=o(`mixed`),z=o(!0),B=i(!1),V=o(8),J=o(``),Y=o(JSON.parse(localStorage.getItem(`search_history`)||`[]`)),X=o(null),Z=null,Q=S({get:()=>!!X.value,set:e=>{e||(X.value=null)}});h(async()=>{try{let e=await ee();a.value=e.map(e=>({label:e,value:e}))}catch{n.warning(`无法获取类别列表`)}});function ue(e){let t=[e,...Y.value.filter(t=>t!==e)].slice(0,10);Y.value=t,localStorage.setItem(`search_history`,JSON.stringify(t))}async function $(e){let t=(e??r.value).trim();if(!t){n.warning(`请输入查询内容`);return}r.value=t,p.value=!0,Z?.abort();let i=new AbortController;Z=i;try{let e=await ne(t,u.value||void 0,V.value,E.value,z.value,J.value.trim()||void 0,0,i.signal,B.value);f.value=e.results;let n=e.structured;w.value=[...new Set([e.notice,n.enabled?`结构化扩展（实验）：${{disabled:`未启用`,skipped:`未识别可连接实体`,empty:`无匹配候选`,used:`已参与召回`,failed:`已降级`}[n.status]}`+(n.status===`used`?`，补充 ${n.added_pages??0} 页候选`:``):``,...e.warnings.map(e=>e.message),e.truncated?e.continuation_hint:``].filter(Boolean))].join(`；`),_.value=!0,f.value.length&&ue(t)}catch(e){if(e.name===`AbortError`)return;n.error(`查询失败:${e.message}`)}finally{Z===i&&(p.value=!1,Z=null)}}function de(e){X.value={file:e.file,page:e.page}}function fe(e){let t=e.split(/[\\/]/);return t[t.length-1]}return(t,n)=>(l(),C(T,null,[b(c(F),{title:`检索测试`},{default:y(()=>[b(c(L),{vertical:``,size:12},{default:y(()=>[v(`div`,U,[b(c(N),{value:r.value,"onUpdate:value":n[0]||=e=>r.value=e,size:`large`,placeholder:`输入查询,如: W25Q32 供电电压 / SPI Flash 引脚定义`,clearable:``,onKeyup:n[1]||=s(e=>$(),[`enter`])},null,8,[`value`])]),v(`div`,W,[b(c(L),{align:`center`,wrap:``},{default:y(()=>[b(c(P),{value:u.value,"onUpdate:value":n[2]||=e=>u.value=e,options:a.value,placeholder:`全部类别`,clearable:``,style:{width:`220px`}},null,8,[`value`,`options`]),b(c(N),{value:J.value,"onUpdate:value":n[3]||=e=>J.value=e,size:`small`,placeholder:`限定文档:文件名含,如 QMC6309`,clearable:``,style:{width:`200px`}},null,8,[`value`]),b(c(O),{type:`primary`,loading:p.value,onClick:n[4]||=e=>$()},{default:y(()=>[...n[11]||=[g(`搜索`,-1)]]),_:1},8,[`loading`]),b(c(H),{vertical:``,style:{height:`24px`}}),n[12]||=v(`span`,{class:`opt-lbl`},`条数`,-1),b(c(P),{value:V.value,"onUpdate:value":n[5]||=e=>V.value=e,style:{width:`90px`},options:[{label:`3`,value:3},{label:`5`,value:5},{label:`8`,value:8},{label:`12`,value:12},{label:`20`,value:20}]},null,8,[`value`]),n[13]||=v(`span`,{class:`opt-lbl`},`模式`,-1),b(c(P),{value:E.value,"onUpdate:value":n[6]||=e=>E.value=e,style:{width:`130px`},options:[{label:`混合 (BM25+向量)`,value:`mixed`},{label:`仅全文 BM25`,value:`fts`},{label:`仅语义向量`,value:`vector`}]},null,8,[`value`]),n[14]||=v(`span`,{class:`opt-lbl`},`重排`,-1),b(c(R),{value:z.value,"onUpdate:value":n[7]||=e=>z.value=e},null,8,[`value`]),n[15]||=v(`span`,{class:`opt-lbl`},`结构化扩展（实验）`,-1),b(c(R),{value:B.value,"onUpdate:value":n[8]||=e=>B.value=e,"aria-label":`结构化扩展（实验）`},null,8,[`value`])]),_:1})]),Y.value.length?(l(),C(T,{key:0},[b(c(L),{size:`small`,wrap:``},{default:y(()=>[n[16]||=v(`span`,{class:`opt-lbl`},`历史:`,-1),(l(!0),C(T,null,D(Y.value,e=>(l(),m(c(A),{key:e,size:`small`,style:{cursor:`pointer`},onClick:t=>$(e)},{default:y(()=>[g(d(e),1)]),_:2},1032,[`onClick`]))),128))]),_:1}),b(c(H),{style:{margin:`4px 0`}})],64)):x(``,!0),w.value?(l(),C(`p`,G,d(w.value),1)):x(``,!0),b(c(k),{show:p.value},{default:y(()=>[_.value?(l(),C(T,{key:1},[f.value.length?(l(),C(`div`,ie,[(l(!0),C(T,null,D(f.value,(t,r)=>(l(),m(c(F),{key:r,size:`small`,class:`hit`,onClick:e=>de(t)},{header:y(()=>[v(`div`,ae,[b(c(L),{align:`center`,size:`small`},{default:y(()=>[b(c(A),{size:`small`,type:`info`},{default:y(()=>[g(d(t.score),1)]),_:2},1024),t.category?(l(),m(c(A),{key:0,size:`small`,type:`default`},{default:y(()=>[g(d(t.category),1)]),_:2},1024)):x(``,!0),t.model_no?(l(),m(c(A),{key:1,size:`small`,type:`success`},{default:y(()=>[g(d(t.model_no),1)]),_:2},1024)):t.product?(l(),m(c(A),{key:2,size:`small`,type:`success`},{default:y(()=>[g(d(t.product),1)]),_:2},1024)):x(``,!0),t.version?(l(),m(c(A),{key:3,size:`small`,type:`warning`},{default:y(()=>[g(`v`+d(t.version),1)]),_:2},1024)):x(``,!0)]),_:2},1024),b(c(L),{align:`center`,size:`small`},{default:y(()=>[v(`span`,oe,`第 `+d(t.page)+` 页`,1),b(c(O),{size:`tiny`,tag:`a`,href:c(te)(t.file,t.page),target:`_blank`,onClick:n[9]||=e(()=>{},[`stop`])},{default:y(()=>[g(d(c(j)(t.file,t.kind)),1)]),_:2},1032,[`href`])]),_:2},1024)])]),default:y(()=>[v(`div`,se,d(fe(t.file)),1),v(`div`,ce,d(t.file),1),v(`div`,le,d(t.snippet),1)]),_:2},1032,[`onClick`]))),128))])):(l(),C(`div`,q,[b(c(M),{description:`无命中结果`})]))],64)):(l(),C(`div`,K,[b(c(M),{description:`输入查询并搜索,将混合 BM25 全文 + 语义向量检索`})]))]),_:1},8,[`show`])]),_:1})]),_:1}),b(re,{show:Q.value,"onUpdate:show":n[10]||=e=>Q.value=e,file:X.value?.file??``,page:X.value?.page??1,width:760},null,8,[`show`,`file`,`page`])],64))}}),[[`__scopeId`,`data-v-6ce1c468`]]);export{J as default};

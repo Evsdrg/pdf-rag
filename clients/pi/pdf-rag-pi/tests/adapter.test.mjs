@@ -42,6 +42,25 @@ test('register ten read-only tools and preserve v2 JSON continuation', async () 
   }
 });
 
+test('search forwards the optional structured bridge flag', async () => {
+  const adapter = await loadAdapter();
+  const tools = new Map();
+  adapter({ registerTool: (tool) => tools.set(tool.name, tool) });
+  const previous = globalThis.fetch;
+  let requested;
+  globalThis.fetch = async (url) => {
+    requested = new URL(url);
+    return new Response(JSON.stringify({ schema_version: 2, results: [], structured: { enabled: true, status: 'empty' } }));
+  };
+  try {
+    await tools.get('pdf_rag_search').execute('id', { query: 'QMC6309 voltage', structured: true });
+    assert.equal(requested.pathname, '/api/v2/search');
+    assert.equal(requested.searchParams.get('structured'), 'true');
+  } finally {
+    globalThis.fetch = previous;
+  }
+});
+
 test('render returns image content rather than base64 text', async () => {
   const adapter = await loadAdapter();
   const tools = new Map();

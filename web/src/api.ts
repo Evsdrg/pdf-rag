@@ -75,10 +75,24 @@ export interface ApiWarning {
   message: string
 }
 
+export interface StructuredDiagnostics {
+  enabled: boolean
+  status: 'disabled' | 'skipped' | 'empty' | 'used' | 'failed'
+  query_entities?: number
+  direct_candidates?: number
+  expanded_candidates?: number
+  added_pages?: number
+  index_rows?: number
+  index_entities?: number
+  index_build_ms?: number
+  index_cached?: boolean
+}
+
 export interface SearchResponse {
   results: SearchHit[]
   warnings: ApiWarning[]
   notice: string
+  structured: StructuredDiagnostics
   truncated: boolean
   continuation_hint: string
 }
@@ -240,9 +254,11 @@ export function invalidateSWR(prefix = '') {
 }
 export const searchDocs = (
   q: string, category?: string, topK = 5, mode = 'mixed', rerank = true,
-  file?: string, maxPerDoc = 0, signal?: AbortSignal,
+  file?: string, maxPerDoc = 0, signal?: AbortSignal, structured = false,
 ) => {
-  const params = new URLSearchParams({ query: q, top_k: String(topK), mode, rerank: String(rerank) })
+  const params = new URLSearchParams({
+    query: q, top_k: String(topK), mode, rerank: String(rerank), structured: String(structured),
+  })
   if (category) params.set('category', category)
   if (file) params.set('file', file)
   if (maxPerDoc > 0) params.set('max_per_doc', String(maxPerDoc))
