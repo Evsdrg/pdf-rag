@@ -21,9 +21,9 @@ MAX_INDEX_ROWS = 50_000
 MAX_INDEX_BYTES = 128_000_000
 MAX_INDEX_LINKS = 1_000_000
 
-_MODEL_RE = re.compile(r"[A-Za-z0-9]+(?:[-_+#][A-Za-z0-9]+)*(?:\([A-Za-z0-9]+\))?")
+_MODEL_RE = re.compile(r"[A-Za-z0-9]+(?:[-_.+#][A-Za-z0-9]+)*(?:\([A-Za-z0-9]+\))?")
 _NOT_MODEL_RE = re.compile(
-    r"(?:v\d+|0x[0-9a-f]+|(?:i2c|i2s|qspi|spi|usart|uart|gpio|usb|can|sdio|pwm|adc|dac|tim|timer)\d*)$",
+    r"(?:v\d+(?:[._-]\d+)*|0x[0-9a-f]+|(?:i2c|i2s|qspi|spi|usart|uart|gpio|usb|can|sdio|pwm|adc|dac|tim|timer)\d*)$",
     re.I,
 )
 _INTERFACE_RE = re.compile(

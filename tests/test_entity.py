@@ -26,10 +26,14 @@ class EntityExtractionTest(unittest.TestCase):
         self.assertIn("symbol:vdd", keys)
         self.assertIn("value:1.71V", keys)
         self.assertFalse({"model:v1", "model:uart3", "model:100mhz"}.intersection(keys))
-        for model in ("LSM6DS3TR-C", "MPU-9250", "ESP32-C3", "BY25FQ32ELTIG(T)"):
+        for model in ("LSM6DS3TR-C", "MPU-9250", "ESP32-C3", "BY25FQ32ELTIG(T)", "AMS1117-3.3V-JSM"):
             keys = entity.extract_entities(model, query=True)
             self.assertIn("model:" + model.casefold(), keys)
         self.assertNotIn("model:lsm6ds3tr", entity.extract_entities("LSM6DS3TR-C", query=True))
+        self.assertNotIn("model:v1.2", keys)
+        decimal = entity.extract_entities("AMS1117-3.3 供电电压", query=True)
+        self.assertIn("model:ams1117-3.3", decimal)
+        self.assertNotIn("model:ams1117-3", decimal)
 
     def test_units_preserve_prefix_case_and_symbols_normalise_separators(self):
         keys = entity.extract_entities("1 mA 1 MA 500 mΩ 500 MΩ VDD_APC")
