@@ -53,6 +53,11 @@ MCP `pdf_rag_search`、Web「检索测试」的「结构化扩展（实验）」
 这些字段不是实体事实、正确率或条件满足证明。证据继续使用 `results[].snippet`、
 `snippet_ref`、`file/page`，必要时读页、grep 或查看页图。
 
+命中可带有界的 `retrieval_trace`，区分 `entity_direct` 与 `entity_expansion`；扩展包含
+种子块、文件、物理页和最多四个共享实体，`scope=retrieval_only`。种子和目标均回主表核对，
+找不到种子时不返回该条扩展。轨迹解释候选来源，不证明实体关系是事实；参与桥接的块与
+同页最终展示的片段块可能不同，后者以 `snippet_ref` 为准。
+
 ## 3. 确定性实体规则
 
 | 类型 | 来源与约束 |

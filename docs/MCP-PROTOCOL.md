@@ -47,6 +47,12 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 
 旧索引不含 OCR 来源、页内坐标、原始表格单元格关系，不能从引用字段推断这些信息。响应协议更新不需要重建索引，也不会自动触发索引。
 
+结构化命中的结果可含 `retrieval_trace`：`kind=entity_direct/entity_expansion`，
+`chunk_id/index_md5` 指向参与实体召回的块；扩展还带 `seed_chunk_id/seed_file/seed_page/seed_index_md5`
+和最多四个 `shared_entities`。`scope=retrieval_only` 明确这只是检索连接，不证明兼容、
+因果或条件相同。`seed_page` 与搜索页号同为从 1 开始；种子和目标都按 uid 回主表确认，
+孤儿种子不放行。轨迹块可能不同于该页最终片段块，以 `snippet_ref` 核对展示证据。
+
 ## 4. 精确查找与诊断
 
 `grep` 按文件/页聚合，每页最多五个不同上下文；同一索引块内重叠的窗口合并成连续文本，正文和表格的确定重复可合并，不同条件行与远离的内容区域保留。`indexed_matches` 是索引文本出现次数（可能包含正文/表格重复和分块重叠），不等于印刷页次数；`omitted_contexts` 只统计超出五个而未返回的窗口，`contexts_truncated` 表示确有窗口未展示。最多返回 100 页，可用游标继续。

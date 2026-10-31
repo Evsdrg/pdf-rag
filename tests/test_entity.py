@@ -199,6 +199,26 @@ class StructuredChannelTest(unittest.TestCase):
         self.assertEqual(set(cands.rows), {("cat/A_1.pdf", 0)})
         self.assertAlmostEqual(cands.scores[("cat/A_1.pdf", 0)], 1 / 70)
 
+    def test_expansion_path_is_hydrated_and_bounded(self):
+        seed = row("seed", "I2C address", page=1)
+        answer = row("answer", "supply voltage", page=2)
+        result = entity.EntitySearch(("model:qmc6309",), (), ("answer",), "used",
+                                     paths={"answer": {"seed_chunk_id": "seed",
+                                                         "shared_entities": ["model:qmc6309", "interface:i2c"]}})
+        cands = retrieval._Candidates(60, 5)
+        with patch.object(entity, "search", return_value=result), \
+             patch.object(retrieval, "_hydrate", return_value={"seed": seed, "answer": answer}) as hydrate:
+            retrieval._channel_structured(SimpleNamespace(version=1), "QMC6309", 10,
+                                          None, None, cands, [], {})
+        self.assertEqual(set(hydrate.call_args.args[1]), {"seed", "answer"})
+        hit = retrieval._build_results(cands.top(5), cands, {}, "supply voltage", 5, 0)[0]
+        trace = hit["retrieval_trace"]
+        self.assertEqual(trace["kind"], "entity_expansion")
+        self.assertEqual(trace["seed_page"], 2)
+        self.assertEqual(trace["chunk_id"], "answer")
+        self.assertEqual(trace["scope"], "retrieval_only")
+        self.assertEqual(trace["shared_entities"], ["model:qmc6309", "interface:i2c"])
+
     def test_default_does_not_call_entity_bridge(self):
         with patch.object(retrieval, "_channel_fts"), patch.object(retrieval, "_channel_substring"), \
              patch.object(entity, "search", side_effect=AssertionError("default must not build entities")):

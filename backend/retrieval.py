@@ -414,12 +414,13 @@ class _Candidates:
     * 全部命中块供片段跨块取窗口,因为表格常被切到与正文不同的块。
     """
 
-    __slots__ = ("scores", "rows", "chunks", "_best", "_rrf_k", "_bonus_rank")
+    __slots__ = ("scores", "rows", "chunks", "traces", "_best", "_rrf_k", "_bonus_rank")
 
     def __init__(self, rrf_k: int, bonus_rank: int):
         self.scores: dict[tuple, float] = {}
         self.rows: dict[tuple, dict] = {}
         self.chunks: dict[tuple, list[dict]] = {}
+        self.traces: dict[tuple, dict] = {}
         self._best: dict[tuple, tuple[float, dict]] = {}
         self._rrf_k = rrf_k
         self._bonus_rank = bonus_rank
@@ -508,6 +509,19 @@ def _channel_substring(table, query: str, limit: int, category, file, cands, deg
                 cands.add(row, 0, bonus=True)
 
 
+def _entity_trace(result, uid: str, row: dict, seeds: dict[str, dict]) -> dict:
+    """仅描述检索连接,不把共享实体称为事实关系。"""
+    path = result.paths.get(uid)
+    trace = {"kind": "entity_expansion" if path else "entity_direct", "chunk_id": uid,
+             "index_md5": row.get("md5"), "scope": "retrieval_only"}
+    if path and path.get("seed_chunk_id") in seeds:
+        seed = seeds[path["seed_chunk_id"]]
+        trace.update(seed_chunk_id=seed["uid"], seed_file=seed["file"], seed_page=int(seed["page"]) + 1,
+                     seed_index_md5=seed.get("md5"),
+                     shared_entities=[key[:100] for key in path.get("shared_entities", [])[:4]])
+    return trace
+
+
 def _channel_structured(table, query: str, limit: int, category, file, cands, degraded,
                         diag: dict | None = None):
     """实体桥按 uid 回主表,每页最多补一块,不改重排分数。"""
@@ -519,7 +533,8 @@ def _channel_structured(table, query: str, limit: int, category, file, cands, de
                                seed_rows=[cands.rows[key] for key, _ in seeds[:entity.MAX_SEED_INPUTS]])
         if diag is not None:
             diag["structured"] = entity.diagnostics(result)
-        rows = _hydrate(table, list(result.ordered_uids))
+        seed_ids = {path["seed_chunk_id"] for path in result.paths.values() if path.get("seed_chunk_id")}
+        rows = _hydrate(table, list(dict.fromkeys((*result.ordered_uids, *sorted(seed_ids)))))
         seen: set[tuple[str, int]] = set()
         for rank, uid in enumerate(result.ordered_uids):
             row = rows.get(uid)
@@ -528,8 +543,14 @@ def _channel_structured(table, query: str, limit: int, category, file, cands, de
             page_key = (row["file"], int(row["page"]))
             if page_key in seen:
                 continue
+            path = result.paths.get(uid)
+            if path:
+                seed = rows.get(path["seed_chunk_id"])
+                if seed is None or not _accepts(seed, category, file):
+                    continue
             seen.add(page_key)
             cands.add(row, limit + rank)
+            cands.traces[page_key] = _entity_trace(result, uid, row, rows)
         if diag is not None:
             diag["structured"]["added_pages"] = len(seen)
     except Exception as e:
@@ -991,6 +1012,8 @@ def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
             "snippet": page_snippet(cands.chunks.get(k, [row]), query),
             "snippet_ref": snippet_reference(cands.chunks.get(k, [row]), query),
         }
+        if k in cands.traces:
+            item["retrieval_trace"] = dict(cands.traces[k])
         if k in rerank_scores:
             item["rerank_score"] = round(rerank_scores[k], _SCORE_DECIMALS)
         out.append(item)
