@@ -377,10 +377,11 @@ def _proj_table(table) -> pa.Table:
 
 
 def _substring_recall(table, term: str, limit: int, *, query: str = "", category=None, file=None) -> list[dict]:
-    """按完整型号字面前缀召回;先过滤,再按参数相关性选有界页,不按存储顺序截断。"""
+    """按完整型号字面前缀匹配 text 或既有 model_no;先过滤,再按参数相关性截断。"""
     import pyarrow.compute as pc
     df = _proj_table(table)
-    mask = pc.match_substring(df["text"], term, ignore_case=True)
+    mask = pc.or_(pc.match_substring(df["text"], term, ignore_case=True),
+                  pc.match_substring(df["model_no"], term, ignore_case=True))
     if category:
         mask = pc.and_(mask, pc.equal(df["category"], category))
     if file:
@@ -798,6 +799,56 @@ def _balance_models(picked, rows_by_key: dict, query: str):
     return out + [item for item in picked if item[0] not in seen]
 
 
+def _cover_evidence(picked, cands: _Candidates, query: str):
+    """有界型号×参数/条件线索覆盖;只改 opt-in 名额,不修改重排分或推断条件满足。"""
+    slots = query_lex.evidence_slots(query)
+    if len(slots) < 2:
+        return picked
+    query_models = {slot.model for slot in slots if slot.model}
+    page_keys, page_texts, identities = {}, {}, {}
+    available = set()
+    for key, _ in picked:
+        chunks = cands.chunks.get(key, [cands.rows[key]])
+        page_texts[key] = "\n".join(dict.fromkeys(chunk["text"] for chunk in chunks))
+        page_keys[key] = set().union(*(query_lex.extract_entities(chunk["text"]) for chunk in chunks))
+        identities[key] = set(query_lex.extract_entities("", model_no=cands.rows[key].get("model_no", "")))
+        available.update(identities[key])
+
+    def matches(key, model):
+        if not model:
+            return True
+        actual = identities[key]
+        if model in available:
+            return model in actual
+        return (len(model.removeprefix("model:")) >= 5
+                and any(value.startswith(model) for value in actual if value.startswith("model:")))
+
+    groups = []
+    for slot in slots:
+        eligible = [(item, query_lex.slot_score(slot, page_keys[item[0]], page_texts[item[0]]))
+                    for item in picked if matches(item[0], slot.model)]
+        eligible = [(item, score) for item, score in eligible if score > 0]
+        eligible.sort(key=lambda pair: -pair[1])
+        if eligible:
+            strongest = eligible[0][1]
+            groups.append(collections.deque(item for item, score in eligible if score == strongest))
+    if len(groups) < 2:
+        return _balance_models(picked, cands.rows, query) if len(query_models) > 1 else picked
+    selected, seen = [], set()
+    # 每槽只保一份当前排序中最靠前的证据,剩余名额恢复原相关性排序。
+    for group in groups:
+        if any(item[0] in seen for item in group):
+            continue
+        if group:
+            item = group.popleft()
+            selected.append(item)
+            seen.add(item[0])
+    remainder = [item for item in picked if item[0] not in seen]
+    if len(query_models) > 1:
+        remainder = _balance_models(remainder, cands.rows, query)
+    return selected + remainder
+
+
 # ==================== 结果缓存 ====================
 
 _RESULT_CACHE: "collections.OrderedDict[tuple, tuple[float, list, dict]]" = collections.OrderedDict()
@@ -934,7 +985,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
     pool = max(top_k * config.get("rerank_pool_mult"), config.get("rerank_pool_floor"))
     ranked = cands.top(len(cands.scores))
     if structured:
-        ranked = _balance_models(ranked, cands.rows, query)
+        ranked = _cover_evidence(ranked, cands, query)
     source_aliases: dict = {}
     # 先折叠内容副本,否则副本先占满 pool 再被删会白白丢掉其它证据页。
     picked = _pick_latest(ranked, cands.rows, cands.scores, query, source_aliases)[:pool]
@@ -952,7 +1003,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
             log.warning("rerank 失败: %s", e)
 
     if structured:
-        picked = _balance_models(picked, cands.rows, query)
+        picked = _cover_evidence(picked, cands, query)
     out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc, evidence_by_key, source_aliases)
     _finish_diagnostics(diag, len(picked), len(out))
     if not diag["degraded"]:

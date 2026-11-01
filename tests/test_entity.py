@@ -117,6 +117,21 @@ class EntityIndexTest(unittest.TestCase):
                                               "QMI8658A QMI8658B I2C")
         self.assertEqual(balanced[1][0][0], "cat/Z.pdf")
 
+    def test_model_only_query_falls_back_without_building_index(self):
+        with patch.object(entity, "_cached_index", side_effect=AssertionError("no semantic signal")):
+            result = entity.search(table_for([]), "SSP1117-3.3V")
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(result.ordered_uids, ())
+
+    def test_subquestion_slots_preserve_rare_parameter_candidate(self):
+        rows = [row(f"v{i}", "input voltage 3.3 V", page=i) for i in range(8)]
+        rows.append(row("address", "I2C address 0x6a", page=10))
+        table = table_for(rows)
+        with patch.object(entity, "_batches", side_effect=lambda _: pa.Table.from_pylist(rows).to_batches()):
+            result = entity.search(table, "QMC6309 input voltage address", limit=4)
+        self.assertIn("address", result.direct_uids)
+        self.assertEqual(len(result.direct_uids), 2)
+
     def test_index_identity_version_and_reset_are_independent(self):
         rows = [row("a", "VDD 3.3 V")]
         first, second = table_for(rows), table_for(rows)

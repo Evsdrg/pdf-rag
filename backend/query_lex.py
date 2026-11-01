@@ -1,11 +1,12 @@
 """共享查询词法:完整料号、接口/参数符号和值,不推断或回写文档身份。"""
 import re
+from dataclasses import dataclass
 from itertools import islice
 
 _MODEL_RE = re.compile(r"[A-Za-z0-9]+(?:[-_.+#][A-Za-z0-9]+)*(?:\([A-Za-z0-9]+\))?")
 _NOT_MODEL_RE = re.compile(
     r"(?:v\d+(?:[._-]\d+)*|0x[0-9a-f]+|(?:i2c|i2s|qspi|spi|usart|uart|gpio|usb|can|sdio|pwm|adc|dac|tim|timer)\d*|"
-    r"(?:sot|sop|soic|tssop|msop|qfn|dfn|dip|lga|bga)[-]?\d+)$", re.I,
+    r"(?:sot|sop|soic|tssop|msop|qfn|dfn|dip|lga|bga)[-]?\d+[A-Za-z]*(?:-[A-Za-z0-9]+)*)$", re.I,
 )
 _INTERFACE_RE = re.compile(
     r"(?<![a-z0-9_])(?P<name>i[2²]c|i[2²]s|qspi|spi|usart|uart|gpio|usb|can|sdio|pwm)"
@@ -24,7 +25,7 @@ _QUANTITY_RE = re.compile(r"[±+-]?\d+(?:\.\d+)?\s*" + _UNIT, re.I)
 _PARAMETER_ALIASES = (
     ("supply_voltage", ("supply voltage", "operating voltage", "供电电压", "工作电压", "电源电压")),
     ("input_voltage", ("input voltage", "输入电压")),
-    ("output_voltage", ("output voltage", "输出电压")),
+    ("output_voltage", ("output voltage", "fixed output", "输出电压", "固定输出")),
     ("current", ("current", "电流")),
     ("frequency", ("frequency", "频率")),
     ("temperature", ("temperature", "温度")),
@@ -41,6 +42,25 @@ _PARAMETER_ALIASES = (
     ("odr", ("odr", "output data rate", "输出数据率")),
     ("gain", ("gain", "增益")),
     ("pullup", ("pull-up", "pull up", "上拉")),
+    ("dropout", ("dropout", "dropout voltage", "vdif1", "vdif2", "vdrop", "压差")),
+    ("load_regulation", ("load regulation", "load reg", "负载调整率")),
+    ("measurement_range", ("gyroscope range", "gyro range", "full scale range", "陀螺仪量程", "量程")),
+    ("gyroscope", ("gyroscope", "gyro", "陀螺仪")),
+    ("absolute_maximum", ("absolute maximum", "maximum ratings", "limit parameter", "绝对最大", "最大额定", "极限参数")),
+    ("ordering", ("ordering", "marking", "marking rule", "订货", "订购", "打标")),
+    ("dimensions", ("dimension", "dimensions", "封装尺寸", "封装形式")),
+    ("static_characteristics", ("static characteristics", "dc characteristics", "静态特性", "dc 特性", "电气特性")),
+    ("timing", ("dynamic characteristics", "switching characteristics", "timing", "tpd", "tplz", "传输延迟", "动态特性", "时序")),
+    ("features", ("features", "特性列表", "主要特点")),
+    ("turn_on", ("turn on time", "turn-on time", "启动时间")),
+    ("temperature_coefficient", ("temperature coefficient", "tco", "零偏温漂", "零偏温度系数")),
+    ("dummy_cycle", ("dummy cycle", "dummy cycles")),
+    ("application", ("application circuit", "applied circuit", "应用电路")),
+    ("output_high", ("voh", "高电平输出电压")),
+    ("output_low", ("vol", "低电平输出电压")),
+    ("on_resistance", ("rds(on)", "rds (on)", "导通电阻")),
+    ("continuous_current", ("continuous drain current", "连续漏极电流")),
+    ("quiescent_current", ("quiescent current", "static bias", "静态偏置电流", "静态电流")),
 )
 
 
@@ -112,3 +132,60 @@ def extract_entities(text: str, *, model_no: str = "", query: bool = False, limi
                 any(start in folded for start in starts) and pattern.search(folded)):
             keys.add("parameter:" + name)
     return tuple(sorted(keys, key=lambda key: (_PRIORITY[key.split(":", 1)[0]], key))[:limit])
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceSlot:
+    model: str
+    signal: str
+    conditions: tuple[str, ...] = ()
+
+
+MAX_EVIDENCE_SLOTS = 24
+_CONDITION_RE = re.compile(
+    r"(?<![A-Za-z0-9_])(?:VCC|VDD|VGS|VDS|VIN|VOUT(?:\(T\))?|IOUT|IO|IL|RL|CL|TA)"
+    r"\s*=\s*[+-]?\d+(?:\.\d+)?\s*" + _UNIT +
+    r"(?:\s*[~～–]\s*[+-]?\d+(?:\.\d+)?\s*" + _UNIT + r")?(?![A-Za-z0-9_])", re.I,
+)
+
+
+def _condition_key(value: str) -> str:
+    name, literal = re.sub(r"\s+", "", value).split("=", 1)
+    return name.casefold() + "=" + literal.replace("µ", "u").replace("μ", "u")
+
+
+def evidence_slots(query: str) -> tuple[EvidenceSlot, ...]:
+    keys = extract_entities(query, query=True)
+    models = [key for key in keys if key.startswith("model:")] or [""]
+    parameters = [key for key in keys if key.startswith("parameter:")]
+    # 只去已被更具体参数覆盖的父词;温度/频率等独立子问题不能被一概删去。
+    parents = {
+        "current": {"quiescent_current", "continuous_current"},
+        "temperature": {"temperature_coefficient"},
+        "resistance": {"on_resistance"},
+        "package": {"dimensions", "ordering"},
+        "gyroscope": {"measurement_range", "temperature_coefficient"},
+        "output_voltage": {"output_high", "output_low"},
+    }
+    names = {key.split(":", 1)[1] for key in parameters}
+    signals = [key for key in parameters if not names.intersection(parents.get(key.split(":", 1)[1], set()))]
+    signals = signals or [key for key in keys if key.startswith(("symbol:", "interface:"))]
+    if not signals:
+        return ()
+    conditions = tuple(dict.fromkeys(_condition_key(match.group())
+                                    for match in _CONDITION_RE.finditer(query)))[:4]
+    slots = []
+    for model in models:
+        for signal in signals:
+            if len(conditions) > 1 and len(models) == 1 and len(signals) == 1:
+                slots.extend(EvidenceSlot(model, signal, (condition,)) for condition in conditions)
+            else:
+                slots.append(EvidenceSlot(model, signal, conditions))
+    return tuple(slots[:MAX_EVIDENCE_SLOTS])
+
+
+def slot_score(slot: EvidenceSlot, keys, text: str = "") -> float:
+    if slot.signal not in keys:
+        return 0.0
+    actual = {_condition_key(match.group()) for match in _CONDITION_RE.finditer(text)}
+    return 1.0 + sum(condition in actual for condition in slot.conditions)

@@ -20,7 +20,7 @@ MAX_INDEX_ROWS = 50_000
 MAX_INDEX_BYTES = 128_000_000
 MAX_INDEX_LINKS = 1_000_000
 
-from .query_lex import extract_entities
+from .query_lex import evidence_slots, extract_entities
 
 _WEIGHTS = {"model": 6, "symbol": 3, "interface": 2, "parameter": 2, "value": 1}
 _BROAD_SYMBOLS = {"symbol:" + value for value in ("vdd", "vin", "vout", "vbat", "vcc", "sda", "scl", "cs", "en")}
@@ -200,12 +200,23 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
     keys = extract_entities(query, query=True, limit=MAX_QUERY_ENTITIES)
     models = {key for key in keys if _kind(key) == "model"}
     signals = {key for key in keys if _kind(key) not in {"model", "value"}}
-    if not keys or (not models and not signals):
+    if not signals:
         return EntitySearch(keys, (), (), "skipped")
     index, cached = _cached_index(table)
     resolved = _resolve(index, keys)
     groups = model_groups(index, keys)
     model_scope = set().union(*groups.values()) if groups else set()
+    slots = evidence_slots(query)
+
+    def slot_groups(uids):
+        result = {}
+        for i, slot in enumerate(slots):
+            scope = groups.get(slot.model, set()) if slot.model else None
+            matched = {uid for uid in uids if (scope is None or uid in scope)
+                       and slot.signal in index.entities_by_uid[uid]}
+            if matched:
+                result[str(i)] = matched
+        return result or groups
 
     def accepts(uid):
         meta = index.metadata_by_uid[uid]
@@ -250,7 +261,7 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
     direct_limit = min(MAX_DIRECT_CANDIDATES, max(1, limit // 2))
     expanded_limit = min(MAX_EXPANDED_CANDIDATES, max(1, limit // 4))
     pages: set[tuple] = set()
-    direct_uids = _balanced(direct, groups, direct_limit, index.metadata_by_uid, pages)
+    direct_uids = _balanced(direct, slot_groups(direct), direct_limit, index.metadata_by_uid, pages)
 
     if seed_rows is None:
         seeds = direct_uids[:MAX_SEEDS]
@@ -258,7 +269,7 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
         original = {row.get("uid") for row in seed_rows[:MAX_SEED_INPUTS]}
         eligible = sorted((uid for uid in original if uid in index.entities_by_uid and accepts(uid)
                            and (not signals or page_signals(uid))), key=order)
-        seeds = _balanced(eligible, groups, MAX_SEEDS, index.metadata_by_uid)
+        seeds = _balanced(eligible, slot_groups(eligible), MAX_SEEDS, index.metadata_by_uid)
     neighbors, paths, pruned = set(), {}, 0
     for seed in seeds:
         seed_entities = index.entities_by_uid[seed]
@@ -279,7 +290,7 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
                 neighbors.add(uid)
                 paths.setdefault(uid, {"seed_chunk_id": seed, "shared_entities": sorted(shared, key=lambda e: (
                     _kind(e) == "model", -rarity(e), e))[:4]})
-    expanded = _balanced(sorted(neighbors, key=order), groups, expanded_limit, index.metadata_by_uid, pages)
+    expanded = _balanced(sorted(neighbors, key=order), slot_groups(neighbors), expanded_limit, index.metadata_by_uid, pages)
     status = "used" if direct_uids or expanded else "empty"
     selected = direct_uids + expanded
     counts = {key.removeprefix("model:"): sum(uid in scope for uid in selected) for key, scope in groups.items()}

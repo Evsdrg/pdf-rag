@@ -36,11 +36,37 @@ class QueryLexTest(unittest.TestCase):
         self.assertEqual(warnings[0]["code"], "MODEL_IDENTITY_UNCONFIRMED")
         self.assertEqual(agent_api._identity("LSM6DS3TR-C", hits)[0][0]["status"], "matched")
 
+    def test_parameter_condition_slots_are_bounded_and_diversify_evidence(self):
+        query = "QMC6309 input voltage address"
+        slots = query_lex.evidence_slots(query)
+        self.assertEqual({slot.signal for slot in slots}, {"parameter:input_voltage", "parameter:address"})
+        cands = retrieval._Candidates(60, 5)
+        for i in range(5):
+            cands.add({"file": "a.pdf", "page": i, "uid": str(i), "model_no": "QMC6309",
+                       "text": "input voltage 3.3 V"}, i)
+        cands.add({"file": "a.pdf", "page": 8, "uid": "address", "model_no": "QMC6309",
+                   "text": "I2C address 0x6a"}, 30)
+        picked = retrieval._cover_evidence(cands.top(20), cands, query)
+        self.assertIn(("a.pdf", 8), [key for key, _ in picked[:2]])
+        self.assertEqual(len(picked), len(cands.scores))
+        conditions = query_lex.evidence_slots("QMC6309 VCC=3.0V VCC=4.5V VOH")
+        self.assertEqual(len(conditions), 2)
+        self.assertEqual({slot.conditions[0] for slot in conditions}, {"vcc=3.0V", "vcc=4.5V"})
+        unit_slot = query_lex.EvidenceSlot("", "parameter:current", ("iout=1mA",))
+        self.assertEqual(query_lex.slot_score(unit_slot, {"parameter:current"}, "IOUT=1MA"), 1)
+        scoped = retrieval._Candidates(60, 5)
+        for page, text in enumerate(("VOH VCC=3.0V", "VOH VCC=4.5V")):
+            scoped.add({"file": "a.pdf", "page": page, "text": text, "model_no": "QMC6309"}, page)
+        covered = retrieval._cover_evidence(scoped.top(5), scoped, "QMC6309 VCC=3.0V VCC=4.5V VOH")
+        self.assertEqual(len(covered[:2]), 2)
+        self.assertEqual({key[1] for key, _ in covered[:2]}, {0, 1})
+
     def test_substring_filters_before_limit_and_uses_parameter_relevance(self):
         rows = [{"uid": str(i), "file": "other/A.pdf", "page": i, "category": "other", "text": "ICM-42605-HXY voltage"}
                 for i in range(5)]
         rows += [{"uid": "header", "file": "cat/Z_100%.pdf", "page": 0, "category": "cat", "text": "ICM-42605-HXY header"},
-                 {"uid": "answer", "file": "cat/Z_100%.pdf", "page": 6, "category": "cat", "text": "ICM-42605-HXY supply voltage 3.3 V"}]
+                 {"uid": "answer", "file": "cat/Z_100%.pdf", "page": 6, "category": "cat", "text": "supply voltage 3.3 V"}]
+        rows = [{**row, "model_no": "ICM-42605-HXY"} for row in rows]
         with patch.object(retrieval, "_proj_table", return_value=pa.Table.from_pylist(rows)):
             found = retrieval._substring_recall(SimpleNamespace(), "icm-42605-hxy", 1,
                                                 query="ICM-42605-HXY supply voltage", category="cat", file="Z_100%")
