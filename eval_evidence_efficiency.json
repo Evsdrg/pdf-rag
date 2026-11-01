@@ -1,0 +1,712 @@
+{
+ "version": 1,
+ "baseline_commit": "c640ece",
+ "name": "Evidence efficiency frozen validation 2026-11-01",
+ "scope": "20 new parameter/source/negative/multi-evidence questions; deterministic evidence metrics, not answer accuracy",
+ "selector_contract": "model/source_terms/revision/needs are explicit task inputs, not inferred gold; baseline also receives them in query text. No target values or file paths may enter prototype requests.",
+ "limitations": [
+  "not an independent human-authored benchmark",
+  "same library as development; new parameter intents only",
+  "negative means no safely bindable evidence, not physical fact false",
+  "full-chunk anchors only validate literals, not semantic relationships",
+  "no target-model tokenizer installed; bytes/chars and lexical proxy must not be called actual tokens"
+ ],
+ "questions": [
+  {
+   "id": "S01",
+   "query": "QMI8658A Rev A Supply Voltage 最小/最大值",
+   "model": "QMI8658A",
+   "source_terms": [],
+   "revision": "A",
+   "targets": [
+    {
+     "file": "01_传感器/C3021082_姿态传感器-陀螺仪_QMI8658A_规格书_RevA.PDF",
+     "page": 15,
+     "chunk_id": "fb030406f544c0332d7e",
+     "index_md5": "5a0fef65a358430d6499944a75d22e19",
+     "required": [
+      "Supply Voltage",
+      "1.71",
+      "3.6"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2554,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "Supply Voltage",
+     "role": "max",
+     "condition": "",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "S02",
+   "query": "QMI8658A Rev D Supply Voltage 最小/最大值",
+   "model": "QMI8658A",
+   "source_terms": [],
+   "revision": "D",
+   "targets": [
+    {
+     "file": "01_传感器/QMI8658A_IMU_规格书_RevD.pdf",
+     "page": 14,
+     "chunk_id": "ff6cdb477b5c07f74c8c",
+     "index_md5": "5ff0f69c22f6956a59dea104859fc7ee",
+     "required": [
+      "Supply Voltage",
+      "1.71",
+      "3.6"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2634,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "Supply Voltage",
+     "role": "max",
+     "condition": "",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "S03",
+   "query": "QMI8658A Rev Z Supply Voltage",
+   "model": "QMI8658A",
+   "source_terms": [],
+   "revision": "Z",
+   "targets": [],
+   "needs": [],
+   "negative": true
+  },
+  {
+   "id": "S04",
+   "query": "INA180 Lingxing 共模输入电压范围",
+   "model": "INA180",
+   "source_terms": [
+    "Lingxing"
+   ],
+   "revision": "",
+   "targets": [
+    {
+     "file": "14_电流检测/C48533472_电流感应放大器_INA180A1IDBVR(LX)_规格书_INA181 INA180(LX)（中文）.PDF",
+     "page": 3,
+     "chunk_id": "834a82efd26e166ad05b",
+     "index_md5": "4146dc0a22bfddd825ba723574babe57",
+     "required": [
+      "-0.2V~30V",
+      "共模电压"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 710,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [],
+   "negative": false
+  },
+  {
+   "id": "S05",
+   "query": "INA180 Texas Instruments 共模范围",
+   "model": "INA180",
+   "source_terms": [
+    "Texas Instruments"
+   ],
+   "revision": "",
+   "targets": [
+    {
+     "file": "14_电流检测/ina180.pdf",
+     "page": 1,
+     "chunk_id": "7fb7a0f19ba14da962e9",
+     "index_md5": "c6dae2f5389b645e8a004d4bb2096c76",
+     "required": [
+      "共模范围",
+      "+26V"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 1972,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [],
+   "negative": false
+  },
+  {
+   "id": "S06",
+   "query": "INA180 UnknownVendor 共模范围",
+   "model": "INA180",
+   "source_terms": [
+    "UnknownVendor"
+   ],
+   "revision": "",
+   "targets": [],
+   "needs": [],
+   "negative": true
+  },
+  {
+   "id": "S07",
+   "query": "INA180 共模范围，未指定厂商",
+   "model": "INA180",
+   "source_terms": [],
+   "revision": "",
+   "targets": [],
+   "needs": [],
+   "negative": true
+  },
+  {
+   "id": "P01",
+   "query": "FM25W32AI3-SO-T-G3 Input Capacitance 最大值 VIN=0V f=5MHz",
+   "model": "FM25W32AI3-SO-T-G3",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "02_存储/C42431558_NOR+FLASH_FM25W32AI3-SO-T-G3_规格书_英文规格书.PDF",
+     "page": 52,
+     "chunk_id": "62a72b65ee33dc053ee5",
+     "index_md5": "0c8ce89fe507b7d72ece02b7fc46852c",
+     "required": [
+      "Input Capacitance",
+      "6",
+      "pF",
+      "5 MHz"
+     ],
+     "parameter": "Input Capacitance",
+     "role": "max",
+     "condition": "V = 0V, f = 5 MHz IN",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2111,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "Input Capacitance",
+     "role": "max",
+     "condition": "V = 0V, f = 5 MHz IN",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "P02",
+   "query": "RT9527GQW VIN Under Voltage Lockout Threshold 典型值 VIN=0V to 5V",
+   "model": "RT9527GQW",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "04_电源管理/C3028965_电池管理_RT9527GQW_规格书_WJ1093138.PDF",
+     "page": 4,
+     "chunk_id": "37d1b6e5e70dcf44661d",
+     "index_md5": "4657b2a535f5c63a6651a72fa1cf74c2",
+     "required": [
+      "VIN Under Voltage Lockout Threshold",
+      "3.3",
+      "VIN = 0V to 5V"
+     ],
+     "parameter": "VIN Under Voltage Lockout Threshold",
+     "role": "typ",
+     "condition": "VIN = 0V to 5V",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 1537,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "VIN Under Voltage Lockout Threshold",
+     "role": "typ",
+     "condition": "VIN = 0V to 5V",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "P03",
+   "query": "RT6160AWSC Enable Input High Threshold 最小值 VIN=2.2V to 5.5V",
+   "model": "RT6160AWSC",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "04_电源管理/C7065276_DC-DC电源芯片_RT6160AWSC_规格书_WJ897024.PDF",
+     "page": 6,
+     "chunk_id": "0721d720264cff0e55c7",
+     "index_md5": "00831268e7d061f0dfa5290b00560405",
+     "required": [
+      "Enable Input High Threshold",
+      "1.2",
+      "VIN = 2.2V to 5.5V"
+     ],
+     "parameter": "Enable Input High Threshold",
+     "role": "min",
+     "condition": "VIN = 2.2V to 5.5V",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2223,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "Enable Input High Threshold",
+     "role": "min",
+     "condition": "VIN = 2.2V to 5.5V",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "P04",
+   "query": "RT6160AWSC Enable Input Low Threshold 最大值 VIN=2.2V to 5.5V",
+   "model": "RT6160AWSC",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "04_电源管理/C7065276_DC-DC电源芯片_RT6160AWSC_规格书_WJ897024.PDF",
+     "page": 6,
+     "chunk_id": "0721d720264cff0e55c7",
+     "index_md5": "00831268e7d061f0dfa5290b00560405",
+     "required": [
+      "Enable Input Low Threshold",
+      "0.4",
+      "VIN = 2.2V to 5.5V"
+     ],
+     "parameter": "Enable Input Low Threshold",
+     "role": "max",
+     "condition": "VIN = 2.2V to 5.5V",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2223,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "Enable Input Low Threshold",
+     "role": "max",
+     "condition": "VIN = 2.2V to 5.5V",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "P05",
+   "query": "MP4248GQV-0000-Z Oscillator frequency fSW1 典型值 T=25°C",
+   "model": "MP4248GQV-0000-Z",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "17_升降压DC-DC/C41608959_DC-DC电源芯片_MP4248GQV-0000-Z_规格书_WJ1592660.PDF",
+     "page": 8,
+     "chunk_id": "e0edda67c733b7a6550a",
+     "index_md5": "a582aeabe4a3e2d52234d6bb2007cda5",
+     "required": [
+      "Oscillator frequency",
+      "280",
+      "kHz",
+      "25°C"
+     ],
+     "parameter": "Oscillator frequency",
+     "role": "typ",
+     "condition": "T = 25°C J",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2340,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "Oscillator frequency",
+     "role": "typ",
+     "condition": "T = 25°C J",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "P06",
+   "query": "HE9073A33MR Dropout Voltage(1) 最大值 IOUT=100mA VOUT=3.3V，保留通用条件及脚注",
+   "model": "HE9073A33MR",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "04_电源管理/C723793_线性稳压器(LDO)_HE9073A33MR_规格书_WJ1951834.PDF",
+     "page": 5,
+     "chunk_id": "3669e47f8ba18f03fb74",
+     "index_md5": "e6acc9aed6999ed93a403d912ebde1f0",
+     "required": [
+      "Dropout Voltage",
+      "100mA",
+      "120",
+      "mV"
+     ],
+     "parameter": "Dropout Voltage(1)",
+     "role": "max",
+     "condition": "I =100mA OUT V =3.3V OUT",
+     "context_required": true,
+     "start_offset": 0,
+     "end_offset": 2740,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "Dropout Voltage(1)",
+     "role": "max",
+     "condition": "I =100mA OUT V =3.3V OUT",
+     "context_required": true
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "N01",
+   "query": "RT6160AWSC Enable Input High Threshold 最大值 VIN=2.2V to 5.5V",
+   "model": "RT6160AWSC",
+   "source_terms": [],
+   "revision": "",
+   "targets": [],
+   "needs": [
+    {
+     "parameter": "Enable Input High Threshold",
+     "role": "max",
+     "condition": "VIN = 2.2V to 5.5V",
+     "context_required": false
+    }
+   ],
+   "negative": true
+  },
+  {
+   "id": "N02",
+   "query": "FM25W32AI3-SO-T-G3 Input Capacitance 最大值 f=10MHz",
+   "model": "FM25W32AI3-SO-T-G3",
+   "source_terms": [],
+   "revision": "",
+   "targets": [],
+   "needs": [
+    {
+     "parameter": "Input Capacitance",
+     "role": "max",
+     "condition": "f=10MHz",
+     "context_required": false
+    }
+   ],
+   "negative": true
+  },
+  {
+   "id": "N03",
+   "query": "HE9073A33MR Dropout Voltage(1) 最大值 IOUT=200mA，不继承空白参数单元格",
+   "model": "HE9073A33MR",
+   "source_terms": [],
+   "revision": "",
+   "targets": [],
+   "needs": [
+    {
+     "parameter": "Dropout Voltage(1)",
+     "role": "max",
+     "condition": "I =200mA OUT V =3.3V OUT",
+     "context_required": true
+    }
+   ],
+   "negative": true
+  },
+  {
+   "id": "M01",
+   "query": "RT9527GQW VIN Under Voltage Lockout Threshold 与 BAT Pre-Charge Threshold 典型值",
+   "model": "RT9527GQW",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "04_电源管理/C3028965_电池管理_RT9527GQW_规格书_WJ1093138.PDF",
+     "page": 4,
+     "chunk_id": "37d1b6e5e70dcf44661d",
+     "index_md5": "4657b2a535f5c63a6651a72fa1cf74c2",
+     "required": [
+      "VIN Under Voltage Lockout Threshold",
+      "3.3"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 1537,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    },
+    {
+     "file": "04_电源管理/C3028965_电池管理_RT9527GQW_规格书_WJ1093138.PDF",
+     "page": 5,
+     "chunk_id": "9b464d0360a96865141a",
+     "index_md5": "4657b2a535f5c63a6651a72fa1cf74c2",
+     "required": [
+      "BAT Pre-Charge Threshold",
+      "2.8"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2385,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "VIN Under Voltage Lockout Threshold",
+     "role": "typ",
+     "condition": "VIN = 0V to 5V",
+     "context_required": false
+    },
+    {
+     "parameter": "BAT Pre-Charge Threshold",
+     "role": "typ",
+     "condition": "V Falling BAT",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "M02",
+   "query": "RT6160AWSC Enable Input High Threshold 最小值、Enable Input Low Threshold 最大值、Switching Frequency 典型值",
+   "model": "RT6160AWSC",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "04_电源管理/C7065276_DC-DC电源芯片_RT6160AWSC_规格书_WJ897024.PDF",
+     "page": 6,
+     "chunk_id": "0721d720264cff0e55c7",
+     "index_md5": "00831268e7d061f0dfa5290b00560405",
+     "required": [
+      "Enable Input High Threshold",
+      "1.2",
+      "Enable Input Low Threshold",
+      "0.4"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2223,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    },
+    {
+     "file": "04_电源管理/C7065276_DC-DC电源芯片_RT6160AWSC_规格书_WJ897024.PDF",
+     "page": 7,
+     "chunk_id": "0602e4621304fd6c3860",
+     "index_md5": "00831268e7d061f0dfa5290b00560405",
+     "required": [
+      "Switching Frequency",
+      "2.2",
+      "MHz",
+      "Boost or Buck operation"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 1966,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "Enable Input High Threshold",
+     "role": "min",
+     "condition": "VIN = 2.2V to 5.5V",
+     "context_required": false
+    },
+    {
+     "parameter": "Enable Input Low Threshold",
+     "role": "max",
+     "condition": "VIN = 2.2V to 5.5V",
+     "context_required": false
+    },
+    {
+     "parameter": "Switching Frequency",
+     "role": "typ",
+     "condition": "Boost or Buck operation",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "M03",
+   "query": "BC817-40,215 Nexperia collector-base voltage、collector-emitter voltage、emitter-base voltage 最大值",
+   "model": "BC817-40,215",
+   "source_terms": [
+    "Nexperia"
+   ],
+   "revision": "",
+   "targets": [
+    {
+     "file": "15_三极管BJT/C52801_三极管(BJT)_BC817-40,215_规格书_WJ412587.PDF",
+     "page": 3,
+     "chunk_id": "8a9c842e27e1d8aab7c5",
+     "index_md5": "adf9019aedcea56d42d8e74ee6154c40",
+     "required": [
+      "collector-base voltage",
+      "50",
+      "collector-emitter voltage",
+      "45",
+      "emitter-base voltage",
+      "5"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2196,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "collector-base voltage",
+     "role": "max",
+     "condition": "open emitter; T = 25 °C amb",
+     "context_required": false
+    },
+    {
+     "parameter": "collector-emitter voltage",
+     "role": "max",
+     "condition": "open base; T = 25 °C amb",
+     "context_required": false
+    },
+    {
+     "parameter": "emitter-base voltage",
+     "role": "max",
+     "condition": "open collector; T = 25 °C amb",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "M04",
+   "query": "RT9527GQW VIN Under Voltage Lockout Threshold、BAT Pre-Charge Threshold、PGOOD Pull Down Voltage 典型值",
+   "model": "RT9527GQW",
+   "source_terms": [],
+   "revision": "",
+   "targets": [
+    {
+     "file": "04_电源管理/C3028965_电池管理_RT9527GQW_规格书_WJ1093138.PDF",
+     "page": 4,
+     "chunk_id": "37d1b6e5e70dcf44661d",
+     "index_md5": "4657b2a535f5c63a6651a72fa1cf74c2",
+     "required": [
+      "VIN Under Voltage Lockout Threshold",
+      "3.3"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 1537,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    },
+    {
+     "file": "04_电源管理/C3028965_电池管理_RT9527GQW_规格书_WJ1093138.PDF",
+     "page": 5,
+     "chunk_id": "9b464d0360a96865141a",
+     "index_md5": "4657b2a535f5c63a6651a72fa1cf74c2",
+     "required": [
+      "BAT Pre-Charge Threshold",
+      "2.8",
+      "PGOOD Pull Down Voltage",
+      "200"
+     ],
+     "parameter": "",
+     "role": "",
+     "condition": "",
+     "context_required": false,
+     "start_offset": 0,
+     "end_offset": 2385,
+     "offset_basis": "indexed_chunk",
+     "review_basis": "reviewed_parameter_context"
+    }
+   ],
+   "needs": [
+    {
+     "parameter": "VIN Under Voltage Lockout Threshold",
+     "role": "typ",
+     "condition": "VIN = 0V to 5V",
+     "context_required": false
+    },
+    {
+     "parameter": "BAT Pre-Charge Threshold",
+     "role": "typ",
+     "condition": "V Falling BAT",
+     "context_required": false
+    },
+    {
+     "parameter": "PGOOD Pull Down Voltage",
+     "role": "typ",
+     "condition": "I = 5mA PGOOD",
+     "context_required": false
+    }
+   ],
+   "negative": false
+  }
+ ]
+}
