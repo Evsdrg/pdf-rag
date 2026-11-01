@@ -77,15 +77,31 @@ def _piece(row: dict, start: int, end: int, width: int) -> tuple[str, dict]:
     return prefix + text, reference
 
 
+def _prepare(query: str):
+    terms, models = query_lex.query_terms(query)
+    keys = {key for key in query_lex.extract_entities(query, query=True) if not key.startswith("model:")}
+    return terms, models, keys
+
+
+class Bundles(dict):
+    """每请求按需生成并复用证据包;窗口重排会取全池,无重排只取实际展示页。"""
+    def __init__(self, chunks_by_key: dict, query: str):
+        super().__init__()
+        self.chunks_by_key = chunks_by_key
+        self.query = query
+        self.prepared = _prepare(query)
+
+    def __missing__(self, key):
+        bundle = select(self.chunks_by_key[key], self.query, prepared=self.prepared)
+        self[key] = bundle
+        return bundle
+
+
 def select(chunks: list[dict], query: str, *, prepared=None) -> dict:
     from . import retrieval
 
     width = int(config.get("snippet_width"))
-    if prepared is None:
-        terms, models = retrieval._query_terms(query)
-        query_keys = {key for key in query_lex.extract_entities(query, query=True) if not key.startswith("model:")}
-    else:
-        terms, models, query_keys = prepared
+    terms, models, query_keys = _prepare(query) if prepared is None else prepared
     candidates, seen = [], set()
     for row in chunks:
         identity = row.get("uid") or (row.get("file"), row.get("page"), row["text"])

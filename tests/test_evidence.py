@@ -94,6 +94,22 @@ class EvidenceTest(unittest.TestCase):
             self.assertEqual(ref["page"], 2)
             self.assertIn(fact["conditions"], text[ref["start_offset"]:ref["end_offset"]])
 
+    def test_evidence_bundles_are_lazy_but_window_rerank_still_uses_each_candidate(self):
+        chunks = {("part.pdf", page): [dict(row(str(page), "Supply voltage 3.3 V"), page=page)]
+                  for page in range(3)}
+        with patch.object(evidence, "select", wraps=evidence.select) as select:
+            bundles = evidence.Bundles(chunks, "voltage")
+            self.assertEqual(select.call_count, 0)
+            first = bundles[("part.pdf", 0)]
+            self.assertIs(first, bundles[("part.pdf", 0)])
+            self.assertEqual(select.call_count, 1)
+            picked = [(key, 1) for key in chunks]
+            with override_config(rerank_on_window=True, rerank_meta=False):
+                documents = retrieval._rerank_docs(picked, {key: value[0] for key, value in chunks.items()},
+                                                   "voltage", bundles)
+            self.assertEqual(select.call_count, 3)
+            self.assertEqual(documents, [bundles[key]["text"] for key in chunks])
+
     def test_structured_results_do_not_recompute_overwritten_default_windows(self):
         chunk = row("a", "Supply voltage 3.3 V")
         key = ("part.pdf", 1)

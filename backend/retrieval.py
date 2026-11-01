@@ -1016,10 +1016,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
     evidence_by_key = None
     if structured:
         from . import evidence
-        terms, models = _query_terms(query)
-        query_keys = {key for key in query_lex.extract_entities(query, query=True) if not key.startswith("model:")}
-        evidence_by_key = {key: evidence.select(cands.chunks[key], query, prepared=(terms, models, query_keys))
-                           for key, _ in picked}
+        evidence_by_key = evidence.Bundles(cands.chunks, query)
     rerank_scores: dict[tuple, float] = {}
     if rerank and picked:
         try:
