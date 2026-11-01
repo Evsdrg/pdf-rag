@@ -100,7 +100,11 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 
 ## 6. HTTP 对照与客户端
 
-MCP 与 `/api/v2/*` 共用领域入口，参数名基本相同；`render.clip` 在 HTTP 查询中用 JSON 字符串表示。完整端点清单和管理接口见[HTTP API 参考](HTTP-API.md)，本文不重复维护另一份端点表。
+MCP 与 `/api/v2/*` 共用领域入口，参数名基本相同；`render.clip` 在 HTTP 查询中用 JSON 字符串表示。
+搜索的 `mode/rerank` 仅REST暴露，MCP `pdf_rag_search` 使用默认混合召回与重排，不能向它传
+`mode=fts/rerank=false`。需要确保不调用上游的验收应走REST显式FTS/无重排，或MCP的grep/文件列表；
+`structured=true`只保证实体桥本身不请求模型，不会关闭默认搜索中的向量/重排。
+完整端点清单和管理接口见[HTTP API 参考](HTTP-API.md)，本文不重复维护另一份端点表。
 
 Web 与 pi 使用同一结构，不猜测旧数组响应。pi 安装与工具说明见[客户端文档](../clients/pi/pdf-rag-pi/README.md)。
 
