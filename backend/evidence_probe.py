@@ -7,6 +7,29 @@ from . import library, retrieval, table_facts
 MAX_SOURCE_FILES = 4
 MAX_NEEDS = 8
 MAX_PAGE_BLOCKS = 64
+MAX_REFILL_CALLS = 3
+MAX_SOURCE_ROWS = 512
+MAX_SOURCE_CHARS = 2_000_000
+
+
+def _supplement(table, file: str, need: dict, seen_pages: set[int]) -> list[dict]:
+    """有界本地参数字面补查;只用任务参数,不能接收目标页/答案/uid。"""
+    found = table.search().where("file = '" + file.replace("'", "''") + "'").select(
+        ["uid", "file", "page", "text", "md5", "model_no", "category", "c_id", "version"]
+    ).limit(MAX_SOURCE_ROWS + 1).to_list()
+    if len(found) > MAX_SOURCE_ROWS or sum(len(row["text"]) for row in found) > MAX_SOURCE_CHARS:
+        return []
+    matched = [row for row in found if row["page"] + 1 not in seen_pages
+               and _literal(need["parameter"]) in _literal(row["text"])]
+    grouped = {}
+    for row in matched:
+        grouped.setdefault(row["page"], []).append(row)
+    ranked = sorted(grouped, key=lambda page: (not bool(bind_rows(grouped[page], [need])[0]), page))[:2]
+    cands = retrieval._Candidates(60, 5)
+    for rank, page in enumerate(ranked):
+        for row in grouped[page]:
+            cands.add(row, rank)
+    return retrieval._build_results(cands.top(2), cands, {}, need["parameter"], 2, 0)
 
 
 def _condition_literal(text: str) -> str:
@@ -117,7 +140,23 @@ def run(table, query: str, *, model: str, source_terms=(), revision: str = "", n
     hits = retrieval.search(table, query, file=selected.files[0], top_k=5,
                             mode="fts", rerank=False, structured=True, diagnostics=diag)
     bindings, missing = bind_rows(_hit_rows(table, hits), needs) if bind else ([], list(range(len(needs))))
+    turns = [{"stage": "initial", "source": source, "results": list(hits), "bindings": list(bindings),
+              "missing": list(missing), "degraded": diag.get("degraded", [])}]
+    if refill and bind:
+        attempted = set()
+        for _ in range(MAX_REFILL_CALLS):
+            unresolved = [index for index in missing if index not in attempted]
+            if not unresolved:
+                break
+            index = unresolved[0]
+            attempted.add(index)
+            extra = _supplement(table, selected.files[0], needs[index], {hit["page"] for hit in hits})
+            hits.extend(extra)
+            hits = list({(hit["file"], hit["page"]): hit for hit in hits}.values())
+            bindings, missing = bind_rows(_hit_rows(table, hits), needs)
+            turns.append({"stage": "refill", "need": index, "results": extra,
+                          "bindings": list(bindings), "missing": list(missing)})
     result = {"status": "row_evidence" if bindings else "retrieved", "source": source,
               "results": hits, "bindings": bindings, "missing": missing,
               "degraded": diag.get("degraded", [])}
-    return {**result, "_turns": [dict(result)]}
+    return {**result, "_turns": turns}

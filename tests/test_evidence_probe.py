@@ -57,5 +57,20 @@ class BindingTest(unittest.TestCase):
                 self.assertEqual(missing, [0])
 
 
+class RefillTest(unittest.TestCase):
+    def test_only_missing_needs_are_queried_with_a_hard_call_budget(self):
+        selected = evidence_probe.SourceSelection("resolved", ("A.pdf",), ("A.pdf",), "literal")
+        needs = [{"parameter": f"p{i}", "role": "max"} for i in range(6)]
+        with patch.object(evidence_probe, "select_sources", return_value=selected), \
+             patch.object(evidence_probe.retrieval, "search", return_value=[]), \
+             patch.object(evidence_probe, "_hit_rows", return_value=[]), \
+             patch.object(evidence_probe, "_supplement", return_value=[]) as supplement:
+            result = evidence_probe.run(object(), "ABC123", model="ABC123", needs=needs, refill=True)
+        self.assertEqual(supplement.call_count, 3)
+        self.assertEqual(result["missing"], list(range(6)))
+        self.assertEqual(len(result["_turns"]), 4)
+        self.assertEqual([call.args[2]["parameter"] for call in supplement.call_args_list], ["p0", "p1", "p2"])
+
+
 if __name__ == "__main__":
     unittest.main()
