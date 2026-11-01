@@ -51,7 +51,10 @@ def binding_valid(binding, need, rows):
     labels = [cell.strip().casefold().rstrip(".") for cell in header.strip().strip("|").split("|")]
     if len(cells) != len(labels) or need.get("role") not in labels:
         return False
-    value = cells[labels.index(need["role"]) ]
+    value = cells[labels.index(need["role"])]
+    unit_key = next((i for i, label in enumerate(labels) if label in ("unit", "units")), None)
+    if unit_key is None or binding.get("unit") != cells[unit_key]:
+        return False
     condition_key = next((i for i, label in enumerate(labels) if label in ("condition", "conditions", "test conditions")), None)
     condition = cells[condition_key] if condition_key is not None else ""
     normalize = lambda text: re.sub(r"[\s_]+", "", text).replace("µ", "u").replace("μ", "u")
@@ -60,17 +63,32 @@ def binding_valid(binding, need, rows):
             and (not need.get("condition") or normalize(condition) == normalize(need["condition"])))
 
 
+def context_turns(result: dict, by_page: dict, *, max_chars: int = 8000) -> list[dict]:
+    """固定保守策略:每个行绑定所在页全文补读(只读索引),双方等同,不使用gold页。"""
+    turns = []
+    pages = sorted({(binding["source"]["file"], binding["source"]["page"]) for binding in result.get("bindings", [])})
+    for file, page in pages:
+        text = "\n".join(row["text"] for row in by_page[(file, page)])
+        for start in range(0, len(text), max_chars):
+            turns.append({"stage": "indexed_page_context", "file": file, "page": page,
+                          "start_offset": start, "text": text[start:start+max_chars],
+                          "truncated": start+max_chars < len(text), "basis": "indexed_text_not_live_pdf"})
+    return turns
+
+
 def evaluate(data, table, rows, variant="baseline"):
     records = []
     by_page = {}
+    metadata = {row["file"]: row["md5"] for row in rows}
     for row in rows:
         by_page.setdefault((row["file"], row["page"] + 1), []).append(row)
     for q in data["questions"]:
         start = time.perf_counter()
         diagnostics = {}
         if variant == "baseline":
-            hits = retrieval.search(table, q["query"], mode="fts", rerank=False,
-                                    structured=True, diagnostics=diagnostics)
+            from backend.evidence_probe import _api_hits
+            hits = _api_hits(retrieval.search(table, q["query"], mode="fts", rerank=False,
+                                    structured=True, diagnostics=diagnostics))
             result = {"results": hits, "degraded": diagnostics.get("degraded", [])}
             turns = [result]
         else:
@@ -80,18 +98,28 @@ def evaluate(data, table, rows, variant="baseline"):
                 refill=variant in ("refill", "compact"), compact=variant == "compact", bind=variant != "source")
             hits = result["results"]
             turns = result.pop("_turns")
-        page_coverage, snippet_coverage = [], []
+        page_coverage, snippet_coverage, content_pages, content_snippets = [], [], [], []
         for target in q["targets"]:
             matching = [hit for hit in hits if hit["file"] == target["file"] and hit["page"] == target["page"]]
+            aliases = [hit for hit in hits if metadata[hit["file"]] == target["index_md5"] and hit["page"] == target["page"]]
+            content_pages.append(any(contains("\n".join(row["text"] for row in by_page[(hit["file"], hit["page"])]), target["required"]) for hit in aliases))
+            content_snippets.append(any(contains(hit["snippet"], target["required"]) for hit in aliases))
             page_coverage.append(any(contains("\n".join(row["text"] for row in by_page[(hit["file"], hit["page"])]), target["required"]) for hit in matching))
             snippet_coverage.append(any(contains(hit["snippet"], target["required"]) for hit in matching))
         measurements = [size(turn) for turn in turns]
+        contexts = context_turns(result, by_page)
+        verified_measurements = measurements + [size(turn) for turn in contexts]
+        def cumulative(values):
+            return sum(sum(m["bytes"] for m in values[:i+1]) for i in range(len(values)))
         # 固定模拟:一次决策前携带全部既有工具响应,累加前缀,不冒充真实Agent调用。
         records.append({"id": q["id"], "page_covered": sum(page_coverage), "snippet_covered": sum(snippet_coverage),
+            "content_page_covered": sum(content_pages), "content_snippet_covered": sum(content_snippets),
             "targets": len(q["targets"]), "all_pages": bool(page_coverage) and all(page_coverage),
             "negative": q["negative"], "status": result.get("status", "retrieved"),
             "source": result.get("source", {}),
-            "wrong_source_hits": (sum(hit["file"] not in {target["file"] for target in q["targets"]}
+            "wrong_source_hits": (sum(metadata[hit["file"]] not in {target["index_md5"] for target in q["targets"]}
+                                      for hit in hits) if q["id"].startswith("S") and q["targets"] else None),
+            "different_file_hits": (sum(hit["file"] not in {target["file"] for target in q["targets"]}
                                       for hit in hits) if q["id"].startswith("S") and q["targets"] else None),
             "bindings": result.get("bindings", []), "missing": result.get("missing", []),
             "binding_count": len(result.get("bindings", [])),
@@ -101,7 +129,10 @@ def evaluate(data, table, rows, variant="baseline"):
             "calls": len(turns), "response_bytes": sum(m["bytes"] for m in measurements),
             "response_chars": sum(m["chars"] for m in measurements),
             "lexical_units_proxy": sum(m["lexical_units_proxy"] for m in measurements),
-            "cumulative_input_bytes_proxy": sum(sum(m["bytes"] for m in measurements[:i+1]) for i in range(len(measurements))),
+            "cumulative_input_bytes_proxy": cumulative(measurements),
+            "with_context_calls": len(verified_measurements),
+            "with_context_response_bytes": sum(m["bytes"] for m in verified_measurements),
+            "with_context_cumulative_bytes_proxy": cumulative(verified_measurements),
             "elapsed_ms": (time.perf_counter() - start) * 1000,
             "degraded": result.get("degraded", []),
             "hits": [{"file": h["file"], "page": h["page"]} for h in hits]})
@@ -109,10 +140,16 @@ def evaluate(data, table, rows, variant="baseline"):
     summary = {"questions": len(records), "targets": total, "variant": variant,
         "page_coverage": sum(r["page_covered"] for r in records) / total,
         "snippet_coverage": sum(r["snippet_covered"] for r in records) / total,
+        "same_bytes_page_coverage": sum(r["content_page_covered"] for r in records) / total,
+        "same_bytes_snippet_coverage": sum(r["content_snippet_covered"] for r in records) / total,
+        "wrong_source_hits": sum(r["wrong_source_hits"] or 0 for r in records),
         "positive_questions_all_pages": sum(r["all_pages"] for r in records),
         "degraded_queries": sum(bool(r["degraded"]) for r in records),
         "response_bytes": sum(r["response_bytes"] for r in records),
         "cumulative_input_bytes_proxy": sum(r["cumulative_input_bytes_proxy"] for r in records),
+        "with_context_calls": sum(r["with_context_calls"] for r in records),
+        "with_context_response_bytes": sum(r["with_context_response_bytes"] for r in records),
+        "with_context_cumulative_bytes_proxy": sum(r["with_context_cumulative_bytes_proxy"] for r in records),
         "tool_calls": sum(r["calls"] for r in records),
         "binding_count": sum(r["binding_count"] for r in records),
         "invalid_bindings": sum(r["invalid_bindings"] for r in records),

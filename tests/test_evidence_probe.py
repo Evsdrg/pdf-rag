@@ -10,16 +10,49 @@ class SourceTest(unittest.TestCase):
         return [dict(file="A.pdf", page=0, model_no="ABC123", title="manual", version="A", md5="a", text="VendorOne Revision A"),
                 dict(file="B.pdf", page=0, model_no="ABC123", title="manual", version="D", md5="b", text="VendorTwo Revision D")]
 
+    def scan(self, table, columns):
+        return [{key: row[key] for key in columns} for row in self.rows()]
+
+    def table(self):
+        from unittest.mock import MagicMock
+        table = MagicMock()
+        table.count_rows.return_value = 2
+        query = table.search.return_value
+        query.where.side_effect = lambda clause: self._front(clause)
+        return table
+
+    def _front(self, clause):
+        from unittest.mock import MagicMock
+        result = MagicMock()
+        file = clause.split("file = '", 1)[1].split("'", 1)[0]
+        result.select.return_value.limit.return_value.to_list.return_value = [
+            {"text": row["text"]} for row in self.rows() if row["file"] == file]
+        return result
+
     def test_literal_source_and_revision_resolve_without_latest_guessing(self):
-        with patch.object(evidence_probe.library, "scan_columns", return_value=self.rows()):
-            chosen = evidence_probe.select_sources(object(), "ABC123", ["VendorOne"], "A")
-            wrong = evidence_probe.select_sources(object(), "ABC123", ["VendorOne"], "D")
-            unknown = evidence_probe.select_sources(object(), "ABC123", ["Unknown"])
-            ambiguous = evidence_probe.select_sources(object(), "ABC123")
+        with patch.object(evidence_probe.library, "scan_columns", side_effect=self.scan):
+            chosen = evidence_probe.select_sources(self.table(), "ABC123", ["VendorOne"], "A")
+            wrong = evidence_probe.select_sources(self.table(), "ABC123", ["VendorOne"], "D")
+            unknown = evidence_probe.select_sources(self.table(), "ABC123", ["Unknown"])
+            ambiguous = evidence_probe.select_sources(self.table(), "ABC123")
         self.assertEqual(chosen.files, ("A.pdf",))
         self.assertEqual(wrong.status, "not_found")
         self.assertEqual(unknown.status, "not_found")
         self.assertEqual(ambiguous.status, "ambiguous")
+
+    def test_revision_history_cannot_override_explicit_current_revision(self):
+        rows = [dict(file="A.pdf", page=0, model_no="ABC123", title="manual", version="D", md5="a",
+                     text="Revision D. Changes from Revision A")]
+        with patch.object(evidence_probe.library, "scan_columns", return_value=rows), \
+             patch.object(self, "rows", return_value=rows):
+            chosen = evidence_probe.select_sources(self.table(), "ABC123", revision="A")
+        self.assertEqual(chosen.status, "not_found")
+
+    def test_source_budget_is_explicit_not_empty_result(self):
+        table = self.table()
+        table.count_rows.return_value = 50_001
+        with self.assertRaises(evidence_probe.ProbeLimitError):
+            evidence_probe.select_sources(table, "ABC123")
 
     def test_ambiguous_source_never_triggers_retrieval(self):
         with patch.object(evidence_probe.library, "scan_columns", return_value=self.rows()), \
@@ -70,6 +103,26 @@ class RefillTest(unittest.TestCase):
         self.assertEqual(result["missing"], list(range(6)))
         self.assertEqual(len(result["_turns"]), 4)
         self.assertEqual([call.args[2]["parameter"] for call in supplement.call_args_list], ["p0", "p1", "p2"])
+
+
+class CompactTest(unittest.TestCase):
+    def test_compaction_keeps_full_text_references_conditions_and_missing(self):
+        hit = {"file": "A.pdf", "page": 1, "model_no": "ABC123", "snippet": "Value 3 V at mode=low",
+               "snippet_ref": {"chunk_id": "u", "start_offset": 0, "end_offset": 24, "text": "Value 3 V at mode=low"},
+               "retrieval_trace": {"kind": "entity_direct"}, "structured_facts": [{"conditions": "mode=low"}], "score": 1}
+        binding = {"conditions": "mode=low", "values": {"max": "3"}, "context_status": "requires_page_context"}
+        payload = {"results": [hit], "bindings": [binding], "missing": [2], "degraded": ["fts"]}
+        out = evidence_probe.compact_payload(payload)
+        self.assertEqual(out["results"][0]["snippet"], hit["snippet"])
+        self.assertEqual(out["bindings"], [binding])
+        self.assertEqual(out["missing"], [2])
+        self.assertEqual(out["degraded"], ["fts"])
+        self.assertEqual(out["results"][0]["snippet_ref"]["chunk_id"], "u")
+        self.assertIn("text", payload["results"][0]["snippet_ref"])
+        self.assertNotIn("text", out["results"][0]["snippet_ref"])
+        hit["snippet_ref"]["text"] += " Extra condition"
+        out = evidence_probe.compact_payload(payload)
+        self.assertIn("Extra condition", out["results"][0]["snippet_ref"]["text"])
 
 
 if __name__ == "__main__":

@@ -10,6 +10,11 @@ MAX_PAGE_BLOCKS = 64
 MAX_REFILL_CALLS = 3
 MAX_SOURCE_ROWS = 512
 MAX_SOURCE_CHARS = 2_000_000
+MAX_SOURCE_SCAN_ROWS = 50_000
+
+
+class ProbeLimitError(ValueError):
+    """超限时明确停止原型,不能把未扫描部分当成不存在。"""
 
 
 def _supplement(table, file: str, need: dict, seen_pages: set[int]) -> list[dict]:
@@ -18,7 +23,7 @@ def _supplement(table, file: str, need: dict, seen_pages: set[int]) -> list[dict
         ["uid", "file", "page", "text", "md5", "model_no", "category", "c_id", "version"]
     ).limit(MAX_SOURCE_ROWS + 1).to_list()
     if len(found) > MAX_SOURCE_ROWS or sum(len(row["text"]) for row in found) > MAX_SOURCE_CHARS:
-        return []
+        raise ProbeLimitError("来源补查超过原型预算")
     matched = [row for row in found if row["page"] + 1 not in seen_pages
                and _literal(need["parameter"]) in _literal(row["text"])]
     grouped = {}
@@ -29,7 +34,7 @@ def _supplement(table, file: str, need: dict, seen_pages: set[int]) -> list[dict
     for rank, page in enumerate(ranked):
         for row in grouped[page]:
             cands.add(row, rank)
-    return retrieval._build_results(cands.top(2), cands, {}, need["parameter"], 2, 0)
+    return _api_hits(retrieval._build_results(cands.top(2), cands, {}, need["parameter"], 2, 0))
 
 
 def _condition_literal(text: str) -> str:
@@ -73,7 +78,7 @@ def _hit_rows(table, hits: list[dict]) -> list[dict]:
             ["uid", "file", "page", "text", "md5", "model_no"]
         ).limit(MAX_PAGE_BLOCKS + 1).to_list()
         if len(found) > MAX_PAGE_BLOCKS:
-            continue
+            raise ProbeLimitError("页证据块数超过原型预算")
         rows.extend(found)
     return list({row["uid"]: row for row in rows}.values())
 
@@ -94,7 +99,10 @@ def select_sources(table, model: str, source_terms=(), revision: str = "") -> So
     """显式约束只作字面核验;未找到/多内容来源不默默放宽,不推断厂商或版本继承。"""
     if not model.strip():
         return SourceSelection("unconfirmed", (), (), "missing_model")
-    rows = library.scan_columns(table, ["file", "page", "model_no", "version", "title", "text", "md5"])
+    if hasattr(table, "count_rows") and table.count_rows() > MAX_SOURCE_SCAN_ROWS:
+        raise ProbeLimitError("来源候选扫描超过原型预算")
+    # 元数据与有限首页分开读,不能为确认来源把全库正文物化。
+    rows = library.scan_columns(table, ["file", "model_no", "version", "title", "md5"])
     documents = {}
     for row in rows:
         identity = _literal(row.get("model_no") or "")
@@ -102,18 +110,30 @@ def select_sources(table, model: str, source_terms=(), revision: str = "") -> So
             continue
         doc = documents.setdefault(row["file"], {"identity": identity, "md5": row.get("md5"),
             "version": row.get("version", ""), "title": row.get("title", ""), "front": []})
-        if row["page"] == 0:
-            doc["front"].append(row["text"][:8000])
+    if len(documents) > 32:
+        raise ProbeLimitError("来源文件数超过原型预算")
+    if source_terms or revision:
+        for file, doc in documents.items():
+            front = table.search().where("file = '" + file.replace("'", "''") + "' AND page = 0").select(
+                ["text"]
+            ).limit(9).to_list()
+            if len(front) > 8 or sum(len(row["text"]) for row in front) > 64_000:
+                raise ProbeLimitError("来源首页证据超过原型预算")
+            doc["front"] = [row["text"] for row in front]
     selected = []
     for file, doc in documents.items():
         evidence = " ".join([file, doc["title"], *doc["front"]])
         if not all(_literal(term) in _literal(evidence) for term in source_terms):
             continue
-        if revision and _literal(doc["version"]) != _literal(revision):
-            # 只认明确Rev/Revision字段,不能从任意包含字母的标题猜版本。
-            versions = re.findall(r"\bRev(?:ision)?[.:\s]+([A-Za-z0-9]+(?:\.[0-9]+)*)\b", evidence, re.I)
-            if _literal(revision) not in {_literal(value) for value in versions}:
-                continue
+        if revision:
+            if doc["version"]:
+                if _literal(doc["version"]) != _literal(revision):
+                    continue
+            else:
+                # 不让修订历史里的旧版本覆盖明确元数据,多版本提及也不猜当前版本。
+                versions = re.findall(r"\bRev(?:ision)?[.:\s]+([A-Za-z0-9]+(?:\.[0-9]+)*)\b", evidence, re.I)
+                if {_literal(value) for value in versions} != {_literal(revision)}:
+                    continue
         selected.append(file)
     if not selected:
         return SourceSelection("not_found", (), (), "no_literal_source_match")
@@ -123,6 +143,41 @@ def select_sources(table, model: str, source_terms=(), revision: str = "") -> So
     selected.sort(key=lambda file: (documents[file]["identity"] != _literal(model), file))
     # 同字节别名只选一个引用,不据此确认订购行。
     return SourceSelection("resolved", (selected[0],), tuple(selected[:MAX_SOURCE_FILES]), "literal_source_only")
+
+
+def _api_hits(hits: list[dict]) -> list[dict]:
+    """复用现有Agent API已做的片段去重,不能把既有行为重复记作原型收益。"""
+    out = []
+    for hit in hits:
+        item = dict(hit)
+        if item.get("snippet_ref"):
+            reference = dict(item["snippet_ref"])
+            item["snippet"] = reference.pop("text", item["snippet"])
+            item["snippet_ref"] = reference
+        out.append(item)
+    return out
+
+
+def compact_payload(payload: dict) -> dict:
+    """不压缩证据正文,只省重复正文/诊断;原有偏移、条件、值和未解决项原样保留。"""
+    out = {key: value for key, value in payload.items() if key != "results"}
+    results = []
+    for hit in payload.get("results", []):
+        item = {key: hit[key] for key in ("file", "page", "model_no", "snippet", "snippet_ref", "evidence_refs") if key in hit}
+        if "source_aliases" in hit:
+            item["source_aliases_available"] = True
+        if "snippet_ref" in item:
+            reference = dict(item["snippet_ref"])
+            # 只有逐字等同才去重,不裁掉参考文本的额外行/表头。
+            if reference.get("text") == item.get("snippet"):
+                reference.pop("text")
+            item["snippet_ref"] = reference
+        results.append(item)
+    if "results" in payload:
+        out["results"] = results
+    if "results" in payload and any("retrieval_trace" in hit or "structured_facts" in hit for hit in payload["results"]):
+        out["details_available"] = "原始搜索可取检索轨迹/完整表格投影;紧凑层不默认重复发送"
+    return out
 
 
 def run(table, query: str, *, model: str, source_terms=(), revision: str = "", needs=(),
@@ -137,8 +192,8 @@ def run(table, query: str, *, model: str, source_terms=(), revision: str = "", n
                   "missing": list(range(len(needs))), "degraded": []}
         return {**result, "_turns": [dict(result)]}
     diag = {}
-    hits = retrieval.search(table, query, file=selected.files[0], top_k=5,
-                            mode="fts", rerank=False, structured=True, diagnostics=diag)
+    hits = _api_hits(retrieval.search(table, query, file=selected.files[0], top_k=5,
+                            mode="fts", rerank=False, structured=True, diagnostics=diag))
     bindings, missing = bind_rows(_hit_rows(table, hits), needs) if bind else ([], list(range(len(needs))))
     turns = [{"stage": "initial", "source": source, "results": list(hits), "bindings": list(bindings),
               "missing": list(missing), "degraded": diag.get("degraded", [])}]
@@ -159,4 +214,7 @@ def run(table, query: str, *, model: str, source_terms=(), revision: str = "", n
     result = {"status": "row_evidence" if bindings else "retrieved", "source": source,
               "results": hits, "bindings": bindings, "missing": missing,
               "degraded": diag.get("degraded", [])}
+    if compact:
+        result = compact_payload(result)
+        turns = [compact_payload(turn) for turn in turns]
     return {**result, "_turns": turns}
