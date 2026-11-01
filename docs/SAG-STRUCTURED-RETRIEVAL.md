@@ -5,7 +5,7 @@
 本项目没有引入 SAG 应用或 `zleap-sag` 依赖。本实验借鉴“实体连接、查询时局部扩展、
 原始 chunk 作为证据”，而不是复刻 SAG 的 LLM event 抽取或完整动态超图引擎。
 
-实现位于 `backend/entity.py`，通过 `backend/retrieval.py` 的可选召回通道使用。
+实现位于 `backend/entity.py`，共用 `backend/query_lex.py` 的词法，通过 `backend/retrieval.py` 的可选召回通道使用。
 它不修改主表、uid、`model_no`、向量分区、OCR 或数据包格式，不要求重新索引。
 实体桥本身不请求任何模型；完整搜索仍按 `mode/rerank` 选择是否调用原有嵌入和重排服务。
 

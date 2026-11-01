@@ -1,7 +1,6 @@
 """MCP 与统一 REST 查询/读取接口共享的领域入口。"""
 import json
 import logging
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -112,16 +111,14 @@ def grep(pattern: str, category: str = "", file: str = "", max_hits: int = 20,
 
 
 def _identity(query: str, hits: list[dict]) -> tuple[list, list]:
-    tokens = re.findall(r"[A-Za-z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*", query)
-    tokens = [token for token in tokens if re.search(r"\d", token) and len(token) >= 4
-              and not re.fullmatch(r"(?:i[23]c|spi|qspi|uart|usart|gpio|adc|dac|pwm|timer|tim|usb|can|sdio|i2s)\d*", token, re.I)
-              and not re.fullmatch(r"v\d+(?:[._-]\d+)*", token, re.I)]
+    from . import query_lex
+    tokens = query_lex.model_tokens(query)
     if not tokens:
         return [], []
     identities = []
-    for token in dict.fromkeys(tokens):
+    for token in tokens:
         matched = [hit["file"] for hit in hits if token.casefold() in
-                   (Path(hit["file"]).name + " " + hit.get("model_no", "")).casefold()]
+                   {value.casefold() for value in query_lex.model_tokens(hit.get("model_no", ""))}]
         identities.append({"token": token, "status": "matched" if matched else "unconfirmed",
                            "files": list(dict.fromkeys(matched))})
     warnings = []

@@ -77,7 +77,9 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 
 向量通道成功但无命中是正常空召回，不是服务故障。降级按全文、子串、嵌入、分区、维度、覆盖率、重排区分，空结果仍给出诊断；不缓存降级结果。
 
-`identity` 只是查询中的候选型号与返回文件身份是否匹配。`unconfirmed` 不等于全库不存在，也不据此过滤结果。`rerank_score` 是相关性分数，不是答案正确率概率。
+`identity` 只检查共享词法解析的完整查询料号与既有 `model_no` 是否匹配，不以文件名子串或
+内容别名确认身份。前缀模糊召回仍可返回，但标为 `unconfirmed`；不等于全库不存在，
+也不据此过滤结果。`rerank_score` 是相关性分数，不是答案正确率概率。
 
 `status` 中 `source_files` 是源目录内 PDF/Markdown 数，`indexed_files` 是索引文件数；
 `unindexed_files` 和 `missing_source_files` 分别表示未索引文件与失效索引引用。按格式计数、

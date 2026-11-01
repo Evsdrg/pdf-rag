@@ -69,6 +69,7 @@ backend/
   agent_images.py      本地 PDF 页图
   agent_paging.py      输出预算和版本绑定游标
   retrieval.py         三路召回、可选实体桥、融合、去重、重排和片段
+  query_lex.py         召回/片段/身份提示共用的完整料号、符号和单位边界
   entity.py            查询期确定性实体索引与有界扩展（默认关闭）
   evidence.py          结构化重排与片段共用的有界证据窗口
   table_facts.py       明确表头/同行条件的保守 Markdown 表格投影

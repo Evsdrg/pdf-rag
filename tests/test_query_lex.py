@@ -1,0 +1,51 @@
+"""查询词法在实体、子串、片段与身份提示之间必须一致。"""
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pyarrow as pa
+
+from backend import agent_api, entity, query_lex, retrieval
+from tests.support import override_config
+
+
+class QueryLexTest(unittest.TestCase):
+    def test_full_part_number_suffixes_are_neither_models_nor_values(self):
+        for part in ("SSP1117-3.3V", "AMS1117-3.3S", "ICM-42605-HXY", "74LVC1G04GW"):
+            with self.subTest(part=part):
+                self.assertEqual(query_lex.model_tokens(part), [part])
+                self.assertEqual(set(entity.extract_entities(part, query=True)), {"model:" + part.casefold()})
+                terms, models = retrieval._query_terms(part)
+                self.assertEqual(terms, [])
+                self.assertEqual(models, {part.casefold()})
+                with override_config(num_unit_bonus=1.5):
+                    self.assertEqual(retrieval._score_window(part, [], set()), 0)
+        self.assertEqual(query_lex.model_tokens("MSM8216-MSM8616-MSM8916"), ["MSM8216", "MSM8616", "MSM8916"])
+
+    def test_units_symbols_versions_and_interfaces_are_not_models(self):
+        text = "I2C UART3 V1.2 0x6A SA0 VDD_APC SOT-23 100MHz 3.3V 1mA 1MA"
+        self.assertEqual(query_lex.model_tokens(text), [])
+        keys = query_lex.extract_entities(text, query=True)
+        self.assertTrue({"symbol:sa0", "symbol:vddapc", "value:1mA", "value:1MA"}.issubset(keys))
+        self.assertFalse(any(key.startswith("model:") for key in keys))
+
+    def test_prefix_candidate_is_not_an_identity_confirmation(self):
+        hits = [{"file": "cat/LSM6DS3TR-C.pdf", "model_no": "LSM6DS3TR-C"}]
+        identities, warnings = agent_api._identity("LSM6DS3TR", hits)
+        self.assertEqual(identities[0]["status"], "unconfirmed")
+        self.assertEqual(warnings[0]["code"], "MODEL_IDENTITY_UNCONFIRMED")
+        self.assertEqual(agent_api._identity("LSM6DS3TR-C", hits)[0][0]["status"], "matched")
+
+    def test_substring_filters_before_limit_and_uses_parameter_relevance(self):
+        rows = [{"uid": str(i), "file": "other/A.pdf", "page": i, "category": "other", "text": "ICM-42605-HXY voltage"}
+                for i in range(5)]
+        rows += [{"uid": "header", "file": "cat/Z_100%.pdf", "page": 0, "category": "cat", "text": "ICM-42605-HXY header"},
+                 {"uid": "answer", "file": "cat/Z_100%.pdf", "page": 6, "category": "cat", "text": "ICM-42605-HXY supply voltage 3.3 V"}]
+        with patch.object(retrieval, "_proj_table", return_value=pa.Table.from_pylist(rows)):
+            found = retrieval._substring_recall(SimpleNamespace(), "icm-42605-hxy", 1,
+                                                query="ICM-42605-HXY supply voltage", category="cat", file="Z_100%")
+        self.assertEqual([row["uid"] for row in found], ["answer"])
+
+
+if __name__ == "__main__":
+    unittest.main()

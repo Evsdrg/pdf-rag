@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import math
-import re
 import threading
 import time
 from collections import defaultdict, deque
@@ -21,114 +20,14 @@ MAX_INDEX_ROWS = 50_000
 MAX_INDEX_BYTES = 128_000_000
 MAX_INDEX_LINKS = 1_000_000
 
-_MODEL_RE = re.compile(r"[A-Za-z0-9]+(?:[-_.+#][A-Za-z0-9]+)*(?:\([A-Za-z0-9]+\))?")
-_NOT_MODEL_RE = re.compile(
-    r"(?:v\d+(?:[._-]\d+)*|0x[0-9a-f]+|(?:i2c|i2s|qspi|spi|usart|uart|gpio|usb|can|sdio|pwm|adc|dac|tim|timer)\d*)$",
-    re.I,
-)
-_INTERFACE_RE = re.compile(
-    r"(?<![a-z0-9_])(?P<name>i[2²]c|i[2²]s|qspi|spi|usart|uart|gpio|usb|can|sdio|pwm)"
-    r"\d*(?![a-z0-9_])", re.I,
-)
-_SYMBOL_RE = re.compile(
-    r"(?<![a-z0-9_])(?:vdd(?:[ _\t]*(?:apc|core|mem|ioq|io|rf))?|vin|vout|vbat|vled|vcc|"
-    r"idd(?:[ _\t]*(?:hp|lp|pd|standby))?|ibias|iout|sda|scl|sa0|cs|n?reset|en|cbst|"
-    r"r[ _\t]*(?:in|out)|ftype)(?![a-z0-9_])", re.I,
-)
-# SI 前缀区分大小写:mA 与 MA、mΩ 与 MΩ 不能成为同一个实体。
-_VALUE_RE = re.compile(
-    r"(?<![A-Za-z0-9.+-])[+-]?\d+(?:\.\d+)?\s*"
-    r"(?:GHz|MHz|kHz|Hz|dBm|dB|ppm|°C|℃|mm|cm|[µμu]m|nm|"
-    r"[pnumkMµμ]?[AVWΩFH]|[pnumµμ]?s|%)(?![A-Za-z0-9])"
-)
-_PARAMETER_ALIASES = (
-    ("supply_voltage", ("supply voltage", "operating voltage", "供电电压", "工作电压", "电源电压")),
-    ("input_voltage", ("input voltage", "输入电压")),
-    ("output_voltage", ("output voltage", "输出电压")),
-    ("current", ("current", "电流")),
-    ("frequency", ("frequency", "频率")),
-    ("temperature", ("temperature", "温度")),
-    ("address", ("address", "地址")),
-    ("package", ("package", "封装")),
-    ("pin", ("pinout", "pin", "引脚", "管脚")),
-    ("power", ("power consumption", "standby power", "功耗")),
-    ("accuracy", ("accuracy", "精度", "准确度")),
-    ("impedance", ("impedance", "阻抗")),
-    ("resistance", ("resistance", "电阻")),
-    ("capacitance", ("capacitance", "电容")),
-    ("inductance", ("inductance", "电感")),
-    ("bandwidth", ("bandwidth", "带宽")),
-    ("odr", ("odr", "output data rate", "输出数据率")),
-    ("gain", ("gain", "增益")),
-    ("pullup", ("pull-up", "pull up", "上拉")),
-)
+from .query_lex import extract_entities
 
-
-def _compile_aliases():
-    patterns = []
-    for name, aliases in _PARAMETER_ALIASES:
-        english = tuple(alias for alias in aliases if alias.isascii())
-        chinese = tuple(alias for alias in aliases if not alias.isascii())
-        pattern = re.compile(
-            r"(?<![a-z0-9])(?:" + "|".join(
-                re.escape(alias).replace(r"\ ", r"\s+") for alias in english
-            ) + r")(?![a-z0-9])"
-        )
-        patterns.append((name, tuple(alias.split()[0] for alias in english), pattern, chinese))
-    return tuple(patterns)
-
-
-_PARAMETERS = _compile_aliases()
 _WEIGHTS = {"model": 6, "symbol": 3, "interface": 2, "parameter": 2, "value": 1}
-_PRIORITY = {"model": 0, "symbol": 1, "interface": 2, "parameter": 3, "value": 4}
 _BROAD_SYMBOLS = {"symbol:" + value for value in ("vdd", "vin", "vout", "vbat", "vcc", "sda", "scl", "cs", "en")}
 
 
 def _kind(key: str) -> str:
     return key.split(":", 1)[0]
-
-
-def _model_tokens(text: str) -> set[str]:
-    tokens = set()
-    for match in _MODEL_RE.finditer(text):
-        value = match.group().casefold()
-        if (len(value) >= 3 and re.search(r"[a-z]", value) and re.search(r"\d", value)
-                and not _NOT_MODEL_RE.fullmatch(value) and not _SYMBOL_RE.fullmatch(value)):
-            tokens.add(value)
-            # 多型号文档可列 MSM8216-MSM8616-MSM8916;普通料号的 -C/-TR 后缀不拆。
-            parts = value.split("-")
-            if len(parts) > 1 and all(len(p) >= 4 and re.search(r"[a-z]", p) and re.search(r"\d", p)
-                                      for p in parts):
-                tokens.update(parts)
-    return tokens
-
-
-def extract_entities(text: str, *, model_no: str = "", query: bool = False,
-                     limit: int = MAX_ROW_ENTITIES) -> tuple[str, ...]:
-    keys: set[str] = set()
-    values = tuple(_VALUE_RE.finditer(text))
-    if query:
-        # 数字+单位不作为料号解析,例如 100MHz 和 3.3V。
-        identity = _VALUE_RE.sub(" ", text)
-    else:
-        identity = model_no
-    keys.update("model:" + token for token in _model_tokens(identity))
-    for match in _INTERFACE_RE.finditer(text):
-        name = match["name"].casefold().replace("²", "2")
-        if name != "can" or match["name"].isupper():
-            keys.add("interface:" + name)
-    for match in _SYMBOL_RE.finditer(text):
-        value = re.sub(r"[ _\t]+", "", match.group()).casefold()
-        keys.add("symbol:" + value)
-    for match in values[:16]:
-        value = re.sub(r"\s+", "", match.group()).replace("µ", "u").replace("μ", "u").replace("℃", "°C")
-        keys.add("value:" + value)
-    folded = text.casefold()
-    for name, starts, pattern, chinese in _PARAMETERS:
-        if any(alias in folded for alias in chinese) or (
-                any(start in folded for start in starts) and pattern.search(folded)):
-            keys.add("parameter:" + name)
-    return tuple(sorted(keys, key=lambda key: (_PRIORITY[_kind(key)], key))[:limit])
 
 
 class IndexLimitError(ValueError):

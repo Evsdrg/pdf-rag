@@ -29,7 +29,7 @@ import time
 import httpx
 import pyarrow as pa
 
-from . import config
+from . import config, query_lex
 from .doc_utils import product_label as _product_label
 
 log = logging.getLogger("pdfrag.retrieval")
@@ -39,18 +39,6 @@ log = logging.getLogger("pdfrag.retrieval")
 # 必须含 md5 —— 去重依赖它识别"同料号族共用一份手册"(缺了会让去重静默失效)。
 _PROJ_COLS = ["text", "file", "page", "category", "model_no", "c_id", "version",
               "title", "md5", "uid"]
-# 型号 token 的最小长度:太短会把版本号、单位当型号
-_MODEL_TOKEN_MIN_LEN = 3
-# 中文 2-gram 切分阈值:不超过该长度整体保留,超过则切分
-_CJK_WHOLE_MAX = 3
-_CJK_GRAM = 2
-# 允许中文串切分/英文词提取的查询词形态
-_TERM_RE = re.compile(r"[\u4e00-\u9fff]+|[A-Za-z0-9][A-Za-z0-9\-\._]{2,}")
-_MODEL_RE = re.compile(r"[A-Za-z0-9]+")
-# 参数值几乎总以"数字 + 单位"形式出现,作为窗口定位的正向信号
-_NUM_UNIT_RE = re.compile(
-    r"\d+(?:\.\d+)?\s*(?:mA|uA|µA|nA|mV|V|MHz|kHz|GHz|Hz|mΩ|kΩ|Ω|mH|uH|nH|pH|dBm|dB|%|G|"
-    r"pF|nF|uF|ms|us|ns|s|°C)", re.I)
 # 目录/修订史页特征(这类页关键词密度高,天然占优,需降权)
 _TOC_REV_RE = re.compile(
     r"(revision history|修订历史|修订记录|table of contents|contents\s*$|目录)", re.I)
@@ -200,30 +188,12 @@ def _call_reranker(query: str, docs: list[str]) -> list[float]:
 # ==================== 查询词解析 ====================
 
 def _model_tokens(query: str) -> list[str]:
-    """查询里可能是元器件型号的 token:含字母与数字、长度达标。"""
-    return [tk for tk in _MODEL_RE.findall(query)
-            if len(tk) >= _MODEL_TOKEN_MIN_LEN
-            and any(c.isdigit() for c in tk) and any(c.isalpha() for c in tk)]
+    return query_lex.model_tokens(query)
 
 
 def _query_terms(query: str) -> tuple[list[str], set[str]]:
-    """切分查询词。返回 (全部词, 型号类词)。
-
-    中文连续串切 2-gram:不做分词也能对部分匹配给分。否则"发送功率电流"会被当成
-    一个整词、必须逐字命中,而文档往往写作"发送功率" —— 中文查询对窗口打分
-    几乎不贡献(实测显著拉低片段命中率)。
-    """
-    models = {t.lower() for t in _model_tokens(query)}
-    terms: list[str] = []
-    for run in _TERM_RE.findall(query):
-        if "\u4e00" <= run[0] <= "\u9fff":
-            if len(run) <= _CJK_WHOLE_MAX:
-                terms.append(run)
-            else:
-                terms.extend(run[i:i + _CJK_GRAM] for i in range(len(run) - 1))
-        else:
-            terms.append(run)
-    return terms, models
+    """型号保持完整且不参与页内定位;中文按原有 2-gram 切分。"""
+    return query_lex.query_terms(query)
 
 
 # ==================== 片段窗口 ====================
@@ -240,7 +210,7 @@ def _score_window(seg: str, terms: list[str], models: set[str]) -> float:
     """
     low = seg.lower()
     sc = sum(1.0 for t in terms if t.lower() not in models and t.lower() in low)
-    if _NUM_UNIT_RE.search(seg):
+    if query_lex.VALUE_RE.search(seg):
         sc += config.get("num_unit_bonus")
     return sc
 
@@ -377,7 +347,7 @@ def _meta_line(row: dict) -> str:
 
 # ==================== 投影表与子串召回 ====================
 
-_PROJ_CACHE: tuple[int, pa.Table] | None = None
+_PROJ_CACHE: tuple[object, int, pa.Table] | None = None
 
 
 def _proj_table(table) -> pa.Table:
@@ -388,20 +358,27 @@ def _proj_table(table) -> pa.Table:
     """
     global _PROJ_CACHE
     ver = table.version
-    if _PROJ_CACHE is None or _PROJ_CACHE[0] != ver:
+    if _PROJ_CACHE is None or _PROJ_CACHE[0] is not table or _PROJ_CACHE[1] != ver:
         full = table.to_arrow()
         try:
-            _PROJ_CACHE = (ver, full.select(_PROJ_COLS))
+            _PROJ_CACHE = (table, ver, full.select(_PROJ_COLS))
         finally:
             del full
-    return _PROJ_CACHE[1]
+    return _PROJ_CACHE[2]
 
 
-def _substring_recall(table, term: str, limit: int) -> list[dict]:
-    """对 text 列做精确子串召回,补 FTS 的型号前缀匹配盲区。"""
+def _substring_recall(table, term: str, limit: int, *, query: str = "", category=None, file=None) -> list[dict]:
+    """按完整型号字面前缀召回;先过滤,再按参数相关性选有界页,不按存储顺序截断。"""
     import pyarrow.compute as pc
     df = _proj_table(table)
-    return df.filter(pc.match_substring(df["text"], term)).to_pylist()[:limit]
+    mask = pc.match_substring(df["text"], term, ignore_case=True)
+    if category:
+        mask = pc.and_(mask, pc.equal(df["category"], category))
+    if file:
+        mask = pc.and_(mask, pc.match_substring(df["file"], file.replace("\\", "/")))
+    rows = df.filter(mask).to_pylist()
+    terms, models = _query_terms(query)
+    return sorted(rows, key=lambda row: -_score_window(row["text"], terms, models))[:limit]
 
 
 # ==================== 候选收集 ====================
@@ -499,7 +476,7 @@ def _channel_fts(table, query: str, limit: int, category, file, cands, degraded)
 def _channel_substring(table, query: str, limit: int, category, file, cands, degraded):
     for term in _model_tokens(query):
         try:
-            found = _substring_recall(table, term, limit)
+            found = _substring_recall(table, term, limit, query=query, category=category, file=file)
         except Exception as e:
             degraded.append("substring")
             log.warning("子串召回失败(%s): %s", term, e)
@@ -746,17 +723,10 @@ def _rerank_docs(cands, rows_by_key: dict, query: str, evidence_by_key: dict | N
 
 
 def _model_identity_match(row: dict, models: set[str]) -> int:
-    """查询型号 token 与文档身份(文件名+型号字段)的匹配级别。
-
-    只做**平局裁决**,不做主排序键 —— 文件名/页眉里型号无处不在,当主键会让
-    "含型号但内容无关"的页全面胜出(与 _score_window 排除型号 token 同理)。
-    返回 2 = 身份里含完整型号 token,0 = 不含。
-    """
+    """完整查询型号与既有 model_no 的匹配,只作副本选择和平局裁决,不确认前缀变体。"""
     if not models:
         return 0
-    ident = re.sub(r"[\s_-]+", "",
-                   os.path.basename(row.get("file", "")) + " " + row.get("model_no", "")).lower()
-    return 2 if any(m in ident for m in models) else 0
+    return 2 if models.intersection(token.casefold() for token in _model_tokens(row.get("model_no", ""))) else 0
 
 
 def _rerank_and_order(cands, rows_by_key: dict, query: str, evidence_by_key: dict | None = None):
