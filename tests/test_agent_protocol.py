@@ -100,13 +100,16 @@ class ProtocolTest(unittest.TestCase):
                            "file": "a.pdf", "page": 1}}
         hit = {"file": "a.pdf", "page": 1, "model_no": "ABC123", "snippet": "Supply Current 0.45 mA",
                "snippet_ref": reference, "evidence_refs": [reference], "structured_facts": [fact],
-               "retrieval_trace": {"kind": "entity_direct", "chunk_id": "c", "scope": "retrieval_only"}}
+               "retrieval_trace": {"kind": "entity_direct", "chunk_id": "c", "scope": "retrieval_only"},
+               "source_aliases": [{"file": "alias.pdf", "model_no": "ABC124", "index_md5": "m", "scope": "same_bytes"}],
+               "source_aliases_omitted": 0}
         with patch.object(agent_api, "require_table", return_value=object()), \
              patch.object(agent_api, "check_category"), \
              patch.object(agent_api.retrieval, "search", return_value=[hit]):
             payload = self.client.get("/api/v2/search", params={"query": "ABC123 current", "structured": True}).json()
         self.assertEqual(payload["results"][0]["structured_facts"], [fact])
         self.assertEqual(payload["results"][0]["evidence_refs"], [reference])
+        self.assertEqual(payload["results"][0]["source_aliases"], hit["source_aliases"])
         self.assertEqual(payload["results"][0]["retrieval_trace"]["scope"], "retrieval_only")
         large = [{**hit, "snippet": "证据" * 450, "structured_facts": [fact] * 3} for _ in range(20)]
         with patch.object(agent_api, "require_table", return_value=object()), \

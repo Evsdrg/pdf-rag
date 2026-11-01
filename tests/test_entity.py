@@ -203,6 +203,22 @@ class StructuredChannelTest(unittest.TestCase):
         self.assertEqual(set(cands.rows), {("cat/A_1.pdf", 0)})
         self.assertAlmostEqual(cands.scores[("cat/A_1.pdf", 0)], 1 / 70)
 
+    def test_existing_page_only_gains_missing_evidence_not_score(self):
+        header = row("header", "model header")
+        answer = row("answer", "VDD 3.3 V")
+        result = entity.EntitySearch(("symbol:vdd",), ("answer",), (), "used")
+        cands = retrieval._Candidates(60, 5)
+        cands.add(header, 1)
+        before = dict(cands.scores)
+        with patch.object(entity, "search", return_value=result), \
+             patch.object(retrieval, "_hydrate", return_value={"answer": answer}):
+            for _ in range(2):
+                retrieval._channel_structured(SimpleNamespace(version=1), "QMC6309 VDD", 10,
+                                              None, None, cands, [], {})
+        self.assertEqual(cands.scores, before)
+        self.assertIs(cands.rows[(header["file"], 0)], header)
+        self.assertEqual([chunk["uid"] for chunk in cands.chunks[(header["file"], 0)]], ["header", "answer"])
+
     def test_expansion_path_is_hydrated_and_bounded(self):
         seed = row("seed", "I2C address", page=1)
         answer = row("answer", "supply voltage", page=2)

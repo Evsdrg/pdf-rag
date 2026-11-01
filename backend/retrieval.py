@@ -1,6 +1,6 @@
 """共享检索核心。
 
-流水线:多路召回(FTS / 型号子串 / 向量 / 可选实体桥)→ RRF 融合 → 跨版本去重 → 重排 → 片段。
+流水线:多路召回(FTS / 型号子串 / 向量 / 可选实体桥)→ RRF 融合 → 内容去重 → 重排 → 片段。
 
 实体桥是默认关闭的实验通道:它只从现有 chunk 文本构造确定性、有限的实体连接，
 最终仍回到原始 chunk，不改变主表或向量分区契约。
@@ -17,8 +17,8 @@
   反而让含页眉的窗口压过含参数值的窗口。
 * **中文按 2-gram 切分**:否则"发送功率电流"必须逐字命中,而文档写作"发送功率",
   中文查询对定位几乎不贡献。
-* **多版本合并以型号一致为硬前提**:仅凭标题指纹会误并不同型号 ——
-  不少中文 PDF 的元数据标题就是章节名(实测三份不同型号手册标题同为"主要特点")。
+* **内容去重只认非空 md5**:同型号、标题或块相似不足以证明厂商/文档族相同;
+  当前索引没有可靠版本继承关系,不同字节的来源保留,不猜测合并版本。
 """
 import collections
 import logging
@@ -549,7 +549,11 @@ def _channel_structured(table, query: str, limit: int, category, file, cands, de
                 if seed is None or not _accepts(seed, category, file):
                     continue
             seen.add(page_key)
-            cands.add(row, limit + rank)
+            if page_key not in cands.scores:
+                cands.add(row, limit + rank)
+            elif not any(chunk.get("uid") == uid for chunk in cands.chunks[page_key]):
+                # 已有页只补缺失块供证据定位,不重复奖励同一身份或改变代表块。
+                cands.chunks[page_key].append(row)
             cands.traces[page_key] = _entity_trace(result, uid, row, rows)
         if diag is not None:
             diag["structured"]["added_pages"] = len(seen)
@@ -694,57 +698,37 @@ def _channel_vector(table, query: str, limit: int, category, file, cands, degrad
                         min_ratio * 100, ", ".join(low))
 
 
-# ==================== 跨版本去重 ====================
+# ==================== 内容副本去重 ====================
 
 def _same_document(rows1: list[dict], rows2: list[dict]) -> bool:
-    """两份文件是否为"同一文档"。
-
-    判据按强度排列:
-
-    1. **内容 md5 相同 → 同一文档**。厂商常用一份手册覆盖整个料号族
-       (实测 MX25R3235F 的 4 个订购料号共用同一 PDF),此时 model_no 各异,
-       仅比型号会放行 4 份逐字节相同的候选,结果里全是同一份手册。
-    2. **型号一致**是版本合并的硬前提。不能只凭标题指纹:不少中文 PDF 的元数据
-       标题是章节名,实测三份不同型号的 LED 手册标题都是"主要特点",仅凭标题
-       会把它们并成一组、只留版本号最高者,其余型号被静默删除、永不出现。
-    """
-    from .doc_utils import title_key, block_sim
-    r1, r2 = rows1[0], rows2[0]
-    md1, md2 = r1.get("md5") or "", r2.get("md5") or ""
-    if md1 and md1 == md2:
-        return True
-    m1, m2 = r1.get("model_no") or "", r2.get("model_no") or ""
-    if not m1 or m1 != m2:
-        return False
-    t1k, t2k = title_key(r1.get("title", "")), title_key(r2.get("title", ""))
-    if t1k and t1k == t2k:
-        return True
-    threshold = config.get("block_sim_threshold")
-    return any(block_sim(a["text"], b["text"]) > threshold for a in rows1 for b in rows2)
+    """同字节内容才可合并;标题/型号/文本相似不能证明来源或版本继承。"""
+    md1, md2 = rows1[0].get("md5"), rows2[0].get("md5")
+    return bool(md1 and md1 == md2)
 
 
-def _pick_latest(cands, rows_by_key: dict, scores: dict):
-    """同文档多版本合并:每组只保留版本号最高的一份。"""
-    from .doc_utils import version_key
-    by_file: dict[str, list] = {}
-    for k, _ in cands:
-        by_file.setdefault(rows_by_key[k]["file"], []).append(k)
+_MAX_SOURCE_ALIASES = 4
 
-    groups: list[list[str]] = []
-    for f in by_file:
-        for g in groups:
-            if _same_document([rows_by_key[k] for k in by_file[g[0]]],
-                              [rows_by_key[k] for k in by_file[f]]):
-                g.append(f)
-                break
-        else:
-            groups.append([f])
 
+def _pick_latest(cands, rows_by_key: dict, scores: dict, query: str = "", aliases: dict | None = None):
+    """仅折叠同 MD5 副本,优先查询所指身份;保留有界别名,不推断新旧版本。"""
+    groups: dict[tuple, list] = {}
+    for key, _ in cands:
+        row = rows_by_key[key]
+        digest = row.get("md5")
+        identity = ("md5", digest, row["page"]) if digest else ("file", row["file"], row["page"])
+        groups.setdefault(identity, []).append(key)
+
+    models = {token.lower() for token in _model_tokens(query)}
     keep: set = set()
-    for g in groups:
-        best = max(g, key=lambda f: (version_key(rows_by_key[by_file[f][0]].get("version", "")),
-                                     max(scores[k] for k in by_file[f])))
-        keep.update(by_file[best])
+    for group in groups.values():
+        best = max(group, key=lambda key: (_model_identity_match(rows_by_key[key], models), scores[key]))
+        keep.add(best)
+        if aliases is not None and len(group) > 1:
+            others = [{"file": rows_by_key[key]["file"], "model_no": rows_by_key[key].get("model_no", ""),
+                       "index_md5": rows_by_key[key]["md5"], "scope": "same_bytes"}
+                      for key in group if key != best]
+            aliases[best] = {"items": others[:_MAX_SOURCE_ALIASES],
+                             "omitted": max(0, len(others) - _MAX_SOURCE_ALIASES)}
     return [(k, s) for k, s in cands if k in keep]
 
 
@@ -967,10 +951,12 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
         return []
 
     pool = max(top_k * config.get("rerank_pool_mult"), config.get("rerank_pool_floor"))
-    ranked = cands.top(len(cands.scores)) if structured else cands.top(pool)
+    ranked = cands.top(len(cands.scores))
     if structured:
-        ranked = _balance_models(ranked, cands.rows, query)[:pool]
-    picked = _pick_latest(ranked, cands.rows, cands.scores)
+        ranked = _balance_models(ranked, cands.rows, query)
+    source_aliases: dict = {}
+    # 先折叠内容副本,否则副本先占满 pool 再被删会白白丢掉其它证据页。
+    picked = _pick_latest(ranked, cands.rows, cands.scores, query, source_aliases)[:pool]
 
     evidence_by_key = None
     if structured:
@@ -986,7 +972,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
 
     if structured:
         picked = _balance_models(picked, cands.rows, query)
-    out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc, evidence_by_key)
+    out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc, evidence_by_key, source_aliases)
     _finish_diagnostics(diag, len(picked), len(out))
     if not diag["degraded"]:
         _cache_put(ckey, [dict(x) for x in out],
@@ -1014,7 +1000,8 @@ def _structured_facts(chunks: list[dict], query: str) -> list[dict]:
 
 
 def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
-                   top_k: int, max_per_doc: int, evidence_by_key: dict | None = None) -> list[dict]:
+                   top_k: int, max_per_doc: int, evidence_by_key: dict | None = None,
+                   source_aliases: dict | None = None) -> list[dict]:
     """按页去重、限制同文件条数,并组装返回结构。"""
     per_doc: dict[str, int] = {}
     out: list[dict] = []
@@ -1043,6 +1030,9 @@ def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
             item["structured_facts"] = _structured_facts(cands.chunks[k], query)
             if bundle["references"]:
                 item["snippet_ref"] = dict(bundle["references"][0])
+        if source_aliases and k in source_aliases:
+            item["source_aliases"] = source_aliases[k]["items"]
+            item["source_aliases_omitted"] = source_aliases[k]["omitted"]
         if k in cands.traces:
             item["retrieval_trace"] = dict(cands.traces[k])
         if k in rerank_scores:

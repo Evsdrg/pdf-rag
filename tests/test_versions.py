@@ -31,9 +31,9 @@ class ParseVersionTest(unittest.TestCase):
         self.assertEqual(ingest.parse_version("无版本号手册"), "")
 
 
-def row(file="a.pdf", md5="", model_no="", title="", text="x", version=""):
+def row(file="a.pdf", md5="", model_no="", title="", text="x", version="", page=0):
     return {"file": file, "md5": md5, "model_no": model_no, "title": title,
-            "text": text, "version": version}
+            "text": text, "version": version, "page": page}
 
 
 class SameDocumentTest(unittest.TestCase):
@@ -47,30 +47,44 @@ class SameDocumentTest(unittest.TestCase):
             [row(model_no="A", title="主要特点")],
             [row(model_no="B", title="主要特点")]))
 
-    def test_same_model_same_title_merges(self):
-        self.assertTrue(retrieval._same_document(
-            [row(model_no="A", title="手册 V1.0")],
-            [row(model_no="A", title="手册 V2.0")]))
+    def test_same_model_title_or_text_does_not_prove_same_source(self):
+        self.assertFalse(retrieval._same_document(
+            [row(md5="supplier-a", model_no="A", title="手册 V1.0", text="same text")],
+            [row(md5="supplier-b", model_no="A", title="手册 V2.0", text="same text")]))
 
     def test_no_model_no_merge(self):
         self.assertFalse(retrieval._same_document([row(title="x")], [row(title="x")]))
 
 
 class PickLatestTest(unittest.TestCase):
-    def test_keeps_best_version_of_each_document(self):
+    def test_distinct_bytes_keep_both_versions_and_sources(self):
         cands = [(("a.pdf", 0), 0.05), (("a_v2.pdf", 0), 0.04), (("b.pdf", 0), 0.03)]
         rows_by_key = {
-            ("a.pdf", 0): row("a.pdf", model_no="M", title="手册", text="t", version="1.0"),
-            ("a_v2.pdf", 0): row("a_v2.pdf", model_no="M", title="手册", text="t", version="2.0"),
+            ("a.pdf", 0): row("a.pdf", md5="first", model_no="M", title="手册", text="t", version="1.0"),
+            ("a_v2.pdf", 0): row("a_v2.pdf", md5="second", model_no="M", title="手册", text="t", version="2.0"),
             ("b.pdf", 0): row("b.pdf", model_no="N", title="其它", text="t"),
         }
-        scores = {k: 1.0 for k in rows_by_key}
-        from tests.support import override_config
-        with override_config(block_sim_threshold=0.4):
-            kept = retrieval._pick_latest(cands, rows_by_key, scores)
-        kept_files = {k for k, _ in kept}
-        # 同文档(a/a_v2)只留版本号最高的 a_v2;不同文档(b)保留
-        self.assertEqual(kept_files, {("a_v2.pdf", 0), ("b.pdf", 0)})
+        kept = retrieval._pick_latest(cands, rows_by_key, dict(cands))
+        self.assertEqual(kept, cands)
+
+    def test_same_bytes_dedup_is_page_local_and_prefers_requested_identity(self):
+        cands = [(("family.pdf", 0), 0.05), (("part.pdf", 0), 0.01), (("family.pdf", 1), 0.02)]
+        rows = {key: row(key[0], md5="same", model_no="MX25R3235FM2IH0" if key[0] == "part.pdf" else "MX25R3235F",
+                         page=key[1]) for key, _ in cands}
+        aliases = {}
+        kept = retrieval._pick_latest(cands, rows, dict(cands), "MX25R3235FM2IH0", aliases)
+        self.assertEqual([key for key, _ in kept], [("part.pdf", 0), ("family.pdf", 1)])
+        self.assertEqual(aliases[("part.pdf", 0)]["items"][0]["file"], "family.pdf")
+        self.assertEqual(aliases[("part.pdf", 0)]["items"][0]["scope"], "same_bytes")
+
+    def test_source_aliases_are_bounded(self):
+        cands = [((f"{i}.pdf", 0), 1 / (i + 1)) for i in range(8)]
+        rows = {key: row(key[0], md5="same") for key, _ in cands}
+        aliases = {}
+        kept = retrieval._pick_latest(cands, rows, dict(cands), aliases=aliases)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(len(aliases[kept[0][0]]["items"]), 4)
+        self.assertEqual(aliases[kept[0][0]]["omitted"], 3)
 
 
 if __name__ == "__main__":

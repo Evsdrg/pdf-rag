@@ -105,6 +105,8 @@ export interface SearchHit {
   evidence_refs?: EvidenceRef[]
   retrieval_trace?: RetrievalTrace
   structured_facts?: TableFact[]
+  source_aliases?: { file: string; model_no: string; index_md5: string; scope: 'same_bytes' }[]
+  source_aliases_omitted?: number
 }
 
 export interface ApiWarning {

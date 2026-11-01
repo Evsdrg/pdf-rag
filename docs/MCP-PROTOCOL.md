@@ -51,6 +51,11 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 可加入窗口预算，不继承已经结束的表格。开启 `rerank_on_window` 时重排正文与最终 `snippet`
 完全一致（可另外前置文档身份行）；关闭该设置时仍显式使用整代表块重排。
 
+同 MD5、同物理页的候选可折叠，优先引用查询指定身份；不同字节的同型号/相似标题文件
+不会自动合并版本。结果可含最多四个 `source_aliases`（`file/model_no/index_md5/scope=same_bytes`）
+及 `source_aliases_omitted`。仅列本次候选中折叠的内容副本，不是全库别名清单，
+也不表示料号等同、订购行正确或兼容。引用仍使用结果自身的 file/page/chunk。
+
 旧索引不含 OCR 来源、页内坐标、原始表格单元格关系，不能从引用字段推断这些信息。响应协议更新不需要重建索引，也不会自动触发索引。
 
 结构化命中的结果可含 `retrieval_trace`：`kind=entity_direct/entity_expansion`，
