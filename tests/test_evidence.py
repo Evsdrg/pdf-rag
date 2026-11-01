@@ -110,6 +110,16 @@ class EvidenceTest(unittest.TestCase):
             self.assertEqual(select.call_count, 3)
             self.assertEqual(documents, [bundles[key]["text"] for key in chunks])
 
+    def test_empty_structured_bundle_keeps_default_reference_fallback(self):
+        chunk = row("empty", " \n")
+        key = ("part.pdf", 1)
+        cands = retrieval._Candidates(60, 5)
+        cands.add(chunk, 0)
+        expected = retrieval.snippet_reference([chunk], "voltage")
+        hits = retrieval._build_results(cands.top(5), cands, {}, "voltage", 5, 0,
+                                        {key: {"text": "", "references": []}})
+        self.assertEqual(hits[0]["snippet_ref"], expected)
+
     def test_structured_results_do_not_recompute_overwritten_default_windows(self):
         chunk = row("a", "Supply voltage 3.3 V")
         key = ("part.pdf", 1)

@@ -13,6 +13,7 @@
 | `eval_evidence_efficiency.py` | 冻结20题的来源、行绑定、补查、紧凑输出分项验证 | 内部封锁socket，只读索引；研究原型不接入生产API |
 | `eval_evidence_protocol_cost.py` | 正式序列化/分页与按需详情成本情境 | 内部封锁socket；正文为索引Reader替身，不调用OCR；不是实际模型token计量 |
 | `prepare_evidence_answer_trial.py` | 离线生成4题×两组回答对照输入 | 只有prepare入口，无模型发送代码；同名文件拒绝覆盖 |
+| `bench_structured_latency.py` | 27关系题+旧55题的实体冷建、热态默认/结构化与可选重排替身对照 | 内部封锁socket，只读FTS；结果缓存关闭，替身分数不评价模型质量 |
 | `bench_logic.py` | 逻辑性能：现有向量与确定性本地重排替身 | 不调用模型；向量检索使用现有分区，只读；需要断网保护时用独立进程额外封锁socket |
 | `check_docs.py` | 跟踪Markdown相对链接与确定形态敏感信息检查 | 不访问外链，不修改文件；启发式扫描不是完备的密钥审计 |
 

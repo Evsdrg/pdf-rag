@@ -8,19 +8,25 @@ _NOT_MODEL_RE = re.compile(
     r"(?:v\d+(?:[._-]\d+)*|0x[0-9a-f]+|(?:i2c|i2s|qspi|spi|usart|uart|gpio|usb|can|sdio|pwm|adc|dac|tim|timer)\d*|"
     r"(?:sot|sop|soic|tssop|msop|qfn|dfn|dip|lga|bga)[-]?\d+[A-Za-z]*(?:-[A-Za-z0-9]+)*)$", re.I,
 )
-_INTERFACE_RE = re.compile(
-    r"(?<![a-z0-9_])(?P<name>i[2²]c|i[2²]s|qspi|spi|usart|uart|gpio|usb|can|sdio|pwm)"
-    r"\d*(?![a-z0-9_])", re.I,
+# 按共同前缀分组,避免每个字符位置重复尝试十几个同首字母分支。
+_INTERFACE_BODY = r"i[2²][cs]|qspi|s(?:pi|dio)|u(?:sart|art|sb)|gpio|can|pwm"
+_SYMBOL_BODY = (
+    r"v(?:dif[12]|dd(?:[ _\t]*(?:apc|core|mem|ioq|io|rf))?|in|out|bat|led|cc|gs|ds)|"
+    r"i(?:dd(?:[ _\t]*(?:hp|lp|pd|standby))?|bias|out)|s(?:da|cl|a0)|c(?:s|bst)|"
+    r"n?reset|en|r[ _\t]*(?:in|out)|ftype"
 )
-_SYMBOL_RE = re.compile(
-    r"(?<![a-z0-9_])(?:vdif[12]|vdd(?:[ _\t]*(?:apc|core|mem|ioq|io|rf))?|vin|vout|vbat|vled|vcc|vgs|vds|"
-    r"idd(?:[ _\t]*(?:hp|lp|pd|standby))?|ibias|iout|sda|scl|sa0|cs|n?reset|en|cbst|"
-    r"r[ _\t]*(?:in|out)|ftype)(?![a-z0-9_])", re.I,
+_INTERFACE_RE = re.compile(r"(?<![a-z0-9_])(?P<name>" + _INTERFACE_BODY + r")\d*(?![a-z0-9_])", re.I)
+_SYMBOL_RE = re.compile(r"(?<![a-z0-9_])(?:" + _SYMBOL_BODY + r")(?![a-z0-9_])", re.I)
+# 两类完整词在当前白名单和边界下互不重叠,故可合并扫描;新增词需保持该约束。
+_SIGNAL_RE = re.compile(
+    r"(?<![a-z0-9_])(?:(?P<interface>(?P<name>" + _INTERFACE_BODY + r")\d*)|"
+    r"(?P<symbol>" + _SYMBOL_BODY + r"))(?![a-z0-9_])", re.I,
 )
 # 型号内的 1G / 3.3V 不是参数值;SI 前缀仍区分大小写。
 _UNIT = (r"(?:GHz|MHz|kHz|Hz|dBm|dB|dps|ppm|°C|℃|mm|cm|[µμu]m|nm|"
          r"[pnumkMµμ]?[AVWΩFHS]|[pnumµμ]?s|G|g|%)")
-VALUE_RE = re.compile(r"(?<![A-Za-z0-9_.+#-])[±+-]?\d+(?:\.\d+)?\s*" + _UNIT + r"(?![A-Za-z0-9_])")
+# 数字/空白与后续单位首字符不相交,无需回溯尝试更短数字或空白(Python>=3.13)。
+VALUE_RE = re.compile(r"(?<![A-Za-z0-9_.+#-])[±+-]?\d++(?:\.\d++)?\s*+" + _UNIT + r"(?![A-Za-z0-9_])")
 _QUANTITY_RE = re.compile(r"[±+-]?\d+(?:\.\d+)?\s*" + _UNIT, re.I)
 _PARAMETER_ALIASES = (
     ("supply_voltage", ("supply voltage", "operating voltage", "供电电压", "工作电压", "电源电压")),
@@ -64,6 +70,9 @@ _PARAMETER_ALIASES = (
 )
 
 
+_ASCII_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
 def _compile_aliases():
     patterns = []
     for name, aliases in _PARAMETER_ALIASES:
@@ -71,7 +80,8 @@ def _compile_aliases():
         chinese = tuple(alias for alias in aliases if not alias.isascii())
         pattern = re.compile(r"(?<![a-z0-9])(?:" + "|".join(
             re.escape(alias).replace(r"\ ", r"\s+") for alias in english) + r")(?![a-z0-9])")
-        patterns.append((name, tuple(alias.split()[0] for alias in english), pattern, chinese))
+        starts = frozenset(_ASCII_WORD_RE.match(alias).group() for alias in english)
+        patterns.append((name, starts, pattern, chinese))
     return tuple(patterns)
 
 
@@ -117,19 +127,21 @@ def query_terms(query: str) -> tuple[list[str], set[str]]:
 
 def extract_entities(text: str, *, model_no: str = "", query: bool = False, limit: int = 48) -> tuple[str, ...]:
     keys = {"model:" + token.casefold() for token in model_tokens(text if query else model_no)}
-    for match in _INTERFACE_RE.finditer(text):
-        name = match["name"].casefold().replace("²", "2")
-        if name != "can" or match["name"].isupper():
-            keys.add("interface:" + name)
-    for match in _SYMBOL_RE.finditer(text):
-        keys.add("symbol:" + re.sub(r"[ _\t]+", "", match.group()).casefold())
+    for match in _SIGNAL_RE.finditer(text):
+        if match["interface"] is not None:
+            name = match["name"].casefold().replace("²", "2")
+            if name != "can" or match["name"].isupper():
+                keys.add("interface:" + name)
+        else:
+            keys.add("symbol:" + re.sub(r"[ _\t]+", "", match.group()).casefold())
     for match in islice(VALUE_RE.finditer(text), 16):
         value = re.sub(r"\s+", "", match.group()).replace("µ", "u").replace("μ", "u").replace("℃", "°C")
         keys.add("value:" + value)
     folded = text.casefold()
+    words = set(_ASCII_WORD_RE.findall(folded))
     for name, starts, pattern, chinese in _PARAMETERS:
         if any(alias in folded for alias in chinese) or (
-                any(start in folded for start in starts) and pattern.search(folded)):
+                not starts.isdisjoint(words) and pattern.search(folded)):
             keys.add("parameter:" + name)
     return tuple(sorted(keys, key=lambda key: (_PRIORITY[key.split(":", 1)[0]], key))[:limit])
 

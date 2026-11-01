@@ -1085,6 +1085,8 @@ def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
             item["structured_facts"] = _structured_facts(cands.chunks[k], query)
             if bundle["references"]:
                 item["snippet_ref"] = dict(bundle["references"][0])
+            else:
+                item["snippet_ref"] = snippet_reference(cands.chunks.get(k, [row]), query)
         if source_aliases and k in source_aliases:
             item["source_aliases"] = source_aliases[k]["items"]
             item["source_aliases_omitted"] = source_aliases[k]["omitted"]
