@@ -27,6 +27,7 @@
 | [向量分区](VECTOR-PARTITION.md) | 向量存储契约、覆盖率、多模型选择和迁移设计 |
 | [评测与实验记录](BENCHMARKS.md) | 带环境和日期约束的基线、性能数据、否定性实验和测试方法 |
 | [SAG 结构化检索实验](SAG-STRUCTURED-RETRIEVAL.md) | 默认关闭的实体桥、证据边界、离线评测与接受/拒绝条件 |
+| [回答模型对照准备](EVIDENCE-ANSWER-TRIAL.md) | 固定4题×两种证据表示的离线输入与判分规范；尚无外发授权、回答或真实usage，不是已完成实测 |
 | [证据效率逐项验证](EVIDENCE-EFFICIENCY-VALIDATION.md) | 冻结新题的来源/行条件/补查/紧凑输出实验与成本，区分字节代理和真实token/答案准确率 |
 | [SAG 退化归因](SAG-ROOT-CAUSE-ANALYSIS.md) | 来源去重、窗口、角色惩罚和评测语义错误的实证归因与修复优先级 |
 
