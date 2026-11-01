@@ -66,6 +66,9 @@ def evaluate(data, table, rows, variant="baseline"):
         records.append({"id": q["id"], "page_covered": sum(page_coverage), "snippet_covered": sum(snippet_coverage),
             "targets": len(q["targets"]), "all_pages": bool(page_coverage) and all(page_coverage),
             "negative": q["negative"], "status": result.get("status", "retrieved"),
+            "source": result.get("source", {}),
+            "wrong_source_hits": (sum(hit["file"] not in {target["file"] for target in q["targets"]}
+                                      for hit in hits) if q["id"].startswith("S") and q["targets"] else None),
             "bindings": result.get("bindings", []), "missing": result.get("missing", []),
             "calls": len(turns), "response_bytes": sum(m["bytes"] for m in measurements),
             "response_chars": sum(m["chars"] for m in measurements),
