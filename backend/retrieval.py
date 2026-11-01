@@ -799,19 +799,41 @@ def _balance_models(picked, rows_by_key: dict, query: str):
     return out + [item for item in picked if item[0] not in seen]
 
 
-def _cover_evidence(picked, cands: _Candidates, query: str):
+class _EvidenceCoverage:
+    """单次搜索内复用页/块词法,不跨请求保存正文或依赖过期实体索引。"""
+    def __init__(self, query: str):
+        self.slots = query_lex.evidence_slots(query)
+        self.text_entities: dict[str, tuple[str, ...]] = {}
+        self.model_entities: dict[str, set[str]] = {}
+        self.pages: dict[tuple, tuple[set[str], str, set[str]]] = {}
+
+    def page(self, key, cands: _Candidates):
+        if key not in self.pages:
+            chunks = cands.chunks.get(key, [cands.rows[key]])
+            texts = tuple(dict.fromkeys(chunk["text"] for chunk in chunks))
+            entities = set()
+            for text in texts:
+                if text not in self.text_entities:
+                    self.text_entities[text] = query_lex.extract_entities(text)
+                entities.update(self.text_entities[text])
+            model = cands.rows[key].get("model_no", "")
+            if model not in self.model_entities:
+                self.model_entities[model] = set(query_lex.extract_entities("", model_no=model))
+            self.pages[key] = entities, "\n".join(texts), self.model_entities[model]
+        return self.pages[key]
+
+
+def _cover_evidence(picked, cands: _Candidates, query: str, coverage: _EvidenceCoverage | None = None):
     """有界型号×参数/条件线索覆盖;只改 opt-in 名额,不修改重排分或推断条件满足。"""
-    slots = query_lex.evidence_slots(query)
+    coverage = coverage if coverage is not None else _EvidenceCoverage(query)
+    slots = coverage.slots
     if len(slots) < 2:
         return picked
     query_models = {slot.model for slot in slots if slot.model}
     page_keys, page_texts, identities = {}, {}, {}
     available = set()
     for key, _ in picked:
-        chunks = cands.chunks.get(key, [cands.rows[key]])
-        page_texts[key] = "\n".join(dict.fromkeys(chunk["text"] for chunk in chunks))
-        page_keys[key] = set().union(*(query_lex.extract_entities(chunk["text"]) for chunk in chunks))
-        identities[key] = set(query_lex.extract_entities("", model_no=cands.rows[key].get("model_no", "")))
+        page_keys[key], page_texts[key], identities[key] = coverage.page(key, cands)
         available.update(identities[key])
 
     def matches(key, model):
@@ -984,8 +1006,9 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
 
     pool = max(top_k * config.get("rerank_pool_mult"), config.get("rerank_pool_floor"))
     ranked = cands.top(len(cands.scores))
+    coverage = _EvidenceCoverage(query) if structured else None
     if structured:
-        ranked = _cover_evidence(ranked, cands, query)
+        ranked = _cover_evidence(ranked, cands, query, coverage)
     source_aliases: dict = {}
     # 先折叠内容副本,否则副本先占满 pool 再被删会白白丢掉其它证据页。
     picked = _pick_latest(ranked, cands.rows, cands.scores, query, source_aliases)[:pool]
@@ -993,7 +1016,10 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
     evidence_by_key = None
     if structured:
         from . import evidence
-        evidence_by_key = {key: evidence.select(cands.chunks[key], query) for key, _ in picked}
+        terms, models = _query_terms(query)
+        query_keys = {key for key in query_lex.extract_entities(query, query=True) if not key.startswith("model:")}
+        evidence_by_key = {key: evidence.select(cands.chunks[key], query, prepared=(terms, models, query_keys))
+                           for key, _ in picked}
     rerank_scores: dict[tuple, float] = {}
     if rerank and picked:
         try:
@@ -1003,7 +1029,7 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
             log.warning("rerank 失败: %s", e)
 
     if structured:
-        picked = _cover_evidence(picked, cands, query)
+        picked = _cover_evidence(picked, cands, query, coverage)
     out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc, evidence_by_key, source_aliases)
     _finish_diagnostics(diag, len(picked), len(out))
     if not diag["degraded"]:
@@ -1052,8 +1078,8 @@ def _build_results(picked, cands: _Candidates, rerank_scores: dict, query: str,
             "c_id": row["c_id"],
             "version": row.get("version", ""),
             "score": round(cands.scores[k], _SCORE_DECIMALS),
-            "snippet": page_snippet(cands.chunks.get(k, [row]), query),
-            "snippet_ref": snippet_reference(cands.chunks.get(k, [row]), query),
+            "snippet": "" if evidence_by_key is not None else page_snippet(cands.chunks.get(k, [row]), query),
+            "snippet_ref": {} if evidence_by_key is not None else snippet_reference(cands.chunks.get(k, [row]), query),
         }
         if evidence_by_key is not None:
             bundle = evidence_by_key[k]

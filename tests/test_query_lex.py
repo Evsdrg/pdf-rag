@@ -61,6 +61,22 @@ class QueryLexTest(unittest.TestCase):
         self.assertEqual(len(covered[:2]), 2)
         self.assertEqual({key[1] for key, _ in covered[:2]}, {0, 1})
 
+    def test_coverage_reuses_text_only_within_one_query(self):
+        cands = retrieval._Candidates(60, 5)
+        text = "input voltage 3.3 V and I2C address"
+        for page in range(2):
+            cands.add({"file": "a.pdf", "page": page, "uid": str(page), "model_no": "QMC6309", "text": text}, page)
+        query = "QMC6309 input voltage address"
+        coverage = retrieval._EvidenceCoverage(query)
+        with patch.object(query_lex, "extract_entities", wraps=query_lex.extract_entities) as parse:
+            first = retrieval._cover_evidence(cands.top(5), cands, query, coverage)
+            second = retrieval._cover_evidence(list(reversed(first)), cands, query, coverage)
+        self.assertEqual(sum(call.args == (text,) for call in parse.call_args_list), 1)
+        self.assertEqual({key for key, _ in first}, {key for key, _ in second})
+        cands.chunks[("a.pdf", 0)][0] = {**cands.rows[("a.pdf", 0)], "text": "input voltage only"}
+        fresh = retrieval._EvidenceCoverage(query)
+        self.assertNotIn("parameter:address", fresh.page(("a.pdf", 0), cands)[0])
+
     def test_substring_filters_before_limit_and_uses_parameter_relevance(self):
         rows = [{"uid": str(i), "file": "other/A.pdf", "page": i, "category": "other", "text": "ICM-42605-HXY voltage"}
                 for i in range(5)]

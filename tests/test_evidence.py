@@ -94,6 +94,18 @@ class EvidenceTest(unittest.TestCase):
             self.assertEqual(ref["page"], 2)
             self.assertIn(fact["conditions"], text[ref["start_offset"]:ref["end_offset"]])
 
+    def test_structured_results_do_not_recompute_overwritten_default_windows(self):
+        chunk = row("a", "Supply voltage 3.3 V")
+        key = ("part.pdf", 1)
+        cands = retrieval._Candidates(60, 5)
+        cands.add(chunk, 0)
+        bundle = evidence.select([chunk], "voltage")
+        with patch.object(retrieval, "page_snippet", side_effect=AssertionError("unused default window")), \
+             patch.object(retrieval, "snippet_reference", side_effect=AssertionError("unused default reference")):
+            hits = retrieval._build_results(cands.top(5), cands, {}, "voltage", 5, 0, {key: bundle})
+        self.assertEqual(hits[0]["snippet"], bundle["text"])
+        self.assertEqual(hits[0]["snippet_ref"], bundle["references"][0])
+
     def test_nonwindow_rerank_setting_remains_explicit(self):
         chunk = row("a", "full text")
         with override_config(rerank_on_window=False, rerank_meta=False):

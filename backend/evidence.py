@@ -23,21 +23,24 @@ def _table_header(text: str, start: int) -> str | None:
     return None
 
 
-def _coverage(text: str, query: str) -> set[str]:
-    terms, _ = query_lex.query_terms(query)
+def _coverage(text: str, query: str, terms=None, query_keys=None) -> set[str]:
+    if terms is None:
+        terms, _ = query_lex.query_terms(query)
     low = text.casefold()
     literal = {"term:" + term.casefold() for term in terms if term.casefold() in low}
-    query_keys = {key for key in query_lex.extract_entities(query, query=True) if not key.startswith("model:")}
+    if query_keys is None:
+        query_keys = {key for key in query_lex.extract_entities(query, query=True) if not key.startswith("model:")}
     return literal | query_keys.intersection(query_lex.extract_entities(text))
 
 
-def _window(row: dict, query: str, width: int) -> tuple[int, int]:
+def _window(row: dict, query: str, width: int, terms=None, models=None) -> tuple[int, int]:
     """在预算内选完整行;超长单行才保留显式截断,不为第二窗重定位主证据。"""
     from . import retrieval
     text = row["text"]
     if len(text) <= width:
         return 0, len(text)
-    terms, models = retrieval._query_terms(query)
+    if terms is None or models is None:
+        terms, models = retrieval._query_terms(query)
     best, score = (0, min(width, len(text))), -1.0
     starts = retrieval._window_starts(len(text), width)
     for offset in starts:
@@ -74,18 +77,22 @@ def _piece(row: dict, start: int, end: int, width: int) -> tuple[str, dict]:
     return prefix + text, reference
 
 
-def select(chunks: list[dict], query: str) -> dict:
+def select(chunks: list[dict], query: str, *, prepared=None) -> dict:
     from . import retrieval
 
     width = int(config.get("snippet_width"))
-    terms, models = retrieval._query_terms(query)
+    if prepared is None:
+        terms, models = retrieval._query_terms(query)
+        query_keys = {key for key in query_lex.extract_entities(query, query=True) if not key.startswith("model:")}
+    else:
+        terms, models, query_keys = prepared
     candidates, seen = [], set()
     for row in chunks:
         identity = row.get("uid") or (row.get("file"), row.get("page"), row["text"])
         if identity in seen or not row["text"].strip():
             continue
         seen.add(identity)
-        start, end = _window(row, query, width)
+        start, end = _window(row, query, width, terms, models)
         text = row["text"][start:end]
         candidates.append((retrieval._score_window(text, terms, models), row, start, end))
     candidates.sort(key=lambda item: -item[0])
@@ -97,7 +104,7 @@ def select(chunks: list[dict], query: str) -> dict:
     compact_start, compact_end = _compact(main, start, end, query)
     main_text, main_ref = _piece(main, compact_start, compact_end, width)
     selected = [(main_text, main_ref)]
-    covered = _coverage(main_text, query)
+    covered = _coverage(main_text, query, terms, query_keys)
     remaining = width - len(main_text) - 2
     best_secondary, best_gain = None, (0, 0.0)
     if remaining > 0:
@@ -107,7 +114,7 @@ def select(chunks: list[dict], query: str) -> dict:
             if hi - lo > remaining:
                 continue
             text, reference = _piece(row, lo, hi, remaining)
-            gain = _coverage(text, query) - covered
+            gain = _coverage(text, query, terms, query_keys) - covered
             priority = (len(gain), score)
             if gain and priority > best_gain:
                 best_secondary, best_gain = (text, reference), priority
