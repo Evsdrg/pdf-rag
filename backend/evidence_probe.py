@@ -42,14 +42,38 @@ def _condition_literal(text: str) -> str:
     return re.sub(r"[\s_]+", "", text).replace("µ", "u").replace("μ", "u")
 
 
+def _parameter_facts(row: dict, parameter: str) -> list[dict]:
+    """验证专用完整表行扫描,不能用生产输出cap4证明不存在第五条冲突。"""
+    text = row.get("text", "")
+    if not row.get("uid") or not text or len(text) > table_facts.MAX_TEXT_CHARS:
+        raise ProbeLimitError("绑定块缺少身份或超过原型预算")
+    facts = []
+    for run in table_facts._table_runs(text):
+        if not run[-1]["raw"].rstrip().endswith("|"):
+            continue
+        segment = text[run[0]["start"]:run[-1]["end"]]
+        if table_facts._HTML_RE.search(segment) or table_facts._SPAN_RE.search(segment):
+            continue
+        try:
+            parsed = table_facts._extract_from_table(run, row)
+        except table_facts._AbortTable:
+            continue
+        facts.extend(fact for fact in parsed if _literal(parameter) in
+                     {_literal(fact["parameter"]), _literal(fact["symbol"] or "")})
+        if len(facts) > 64:
+            raise ProbeLimitError("同参数行数超过原型绑定预算")
+    return facts
+
+
 def bind_rows(rows: list[dict], needs) -> tuple[list[dict], list[int]]:
     """只绑定同一显式行的参数/角色/完整字面条件;缺失项留给回读而非猜测。"""
+    if len(needs) > MAX_NEEDS:
+        raise ProbeLimitError("证据需求超过原型预算")
     bindings, missing = [], []
-    for index, need in enumerate(needs[:MAX_NEEDS]):
+    for index, need in enumerate(needs):
         candidates = []
         for row in rows:
-            # query用于让已存在提取器保留该参数,不改其每块cap4及保守空白格规则。
-            for fact in table_facts.extract(row, query=need["parameter"], max_facts=4):
+            for fact in _parameter_facts(row, need["parameter"]):
                 names = {_literal(fact["parameter"]), _literal(fact["symbol"] or "")}
                 if _literal(need["parameter"]) not in names:
                     continue

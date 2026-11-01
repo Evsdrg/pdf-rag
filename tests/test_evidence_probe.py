@@ -79,6 +79,14 @@ class BindingTest(unittest.TestCase):
         reference = bindings[0]["source"]
         self.assertIn("mode=low", row["text"][reference["start_offset"]:reference["end_offset"]])
 
+    def test_conflicting_row_beyond_output_cap_cannot_look_unique(self):
+        row = self.row()
+        row["text"] = "| Parameter | Unit | Conditions | Typ |\n|---|---|---|---|\n" + (
+            "| Voltage | V | mode=low | 2 |\n" * 5) + "| Voltage | V | mode=low | 9 |\n"
+        bindings, missing = evidence_probe.bind_rows([row], [{"parameter": "Voltage", "role": "typ", "condition": "mode=low"}])
+        self.assertEqual(bindings, [])
+        self.assertEqual(missing, [0])
+
     def test_wrong_condition_role_units_and_ambiguous_rows_remain_missing(self):
         for need in ({"parameter": "Voltage", "role": "typ"},
                      {"parameter": "Voltage", "role": "max", "condition": "mode=unknown"},
