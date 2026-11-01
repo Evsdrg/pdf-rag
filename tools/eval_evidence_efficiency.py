@@ -45,6 +45,10 @@ def binding_valid(binding, need, rows):
         return False
     if row["page"] + 1 != ref.get("page"):
         return False
+    offsets = [ref.get(key) for key in ("header_start_offset", "header_end_offset", "start_offset", "end_offset")]
+    if (any(type(value) is not int for value in offsets)
+            or not 0 <= offsets[0] < offsets[1] <= offsets[2] < offsets[3] <= len(row["text"])):
+        return False
     raw = row["text"][ref["start_offset"]:ref["end_offset"]]
     header = row["text"][ref["header_start_offset"]:ref["header_end_offset"]].splitlines()[0]
     cells = [cell.strip() for cell in raw.strip().strip("|").split("|")]
@@ -171,6 +175,12 @@ def main():
     validate(data, rows)
     result = evaluate(data, table, rows, args.variant)
     result["dataset_sha256"] = hashlib.sha256(DATASET.read_bytes()).hexdigest()
+    result["implementation_sha256"] = {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+        for path in ("backend/evidence_probe.py", "backend/retrieval.py", "backend/table_facts.py",
+                     "tools/eval_evidence_efficiency.py")}
+    result["index"] = {"version": int(table.version), "rows": len(rows), "files": len({r["file"] for r in rows}),
+        "sources_sha256": hashlib.sha256(json.dumps(sorted({(r["file"], r["md5"]) for r in rows}),
+                                                    ensure_ascii=False).encode()).hexdigest()}
     args.json.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n")
     print(json.dumps(result["summary"], ensure_ascii=False, indent=1))
 

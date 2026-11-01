@@ -16,6 +16,7 @@ class EvidenceMetricTest(unittest.TestCase):
         self.assertFalse(evaluator.binding_valid({**binding, "unit": "mV"}, need, [row]))
         self.assertFalse(evaluator.binding_valid({**binding, "values": {"max": "2"}}, need, [row]))
         self.assertFalse(evaluator.binding_valid({**binding, "source": {**binding["source"], "index_md5": "changed"}}, need, [row]))
+        self.assertFalse(evaluator.binding_valid({**binding, "source": {**binding["source"], "start_offset": -1}}, need, [row]))
 
     def test_page_context_is_equal_for_full_and_compact_and_not_silently_cut(self):
         row = probe_tests.BindingTest().row()
