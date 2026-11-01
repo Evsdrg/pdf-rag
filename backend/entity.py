@@ -252,6 +252,8 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
                     if accepts(uid) and (scope is None or uid in scope):
                         matched_posting.add(uid)
             for uid in sorted(matched_posting, key=order)[:MAX_POSTING]:
+                if len(candidates) >= MAX_QUERY_CANDIDATES:
+                    break
                 candidates.add(uid)
             if len(candidates) >= MAX_QUERY_CANDIDATES:
                 break

@@ -123,6 +123,14 @@ class EntityIndexTest(unittest.TestCase):
         self.assertEqual(result.status, "skipped")
         self.assertEqual(result.ordered_uids, ())
 
+    def test_total_query_candidate_budget_is_a_hard_limit(self):
+        rows = [row(str(i), "I2C address", page=i) for i in range(10)]
+        with patch.object(entity, "_batches", side_effect=lambda _: pa.Table.from_pylist(rows).to_batches()), \
+             patch.object(entity, "MAX_QUERY_CANDIDATES", 1):
+            result = entity.search(table_for(rows), "QMC6309 I2C address", seed_rows=[])
+        self.assertEqual(len(result.direct_uids), 1)
+        self.assertEqual(result.expanded_uids, ())
+
     def test_subquestion_slots_preserve_rare_parameter_candidate(self):
         rows = [row(f"v{i}", "input voltage 3.3 V", page=i) for i in range(8)]
         rows.append(row("address", "I2C address 0x6a", page=10))

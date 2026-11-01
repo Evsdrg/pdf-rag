@@ -23,7 +23,7 @@ class QueryLexTest(unittest.TestCase):
         self.assertEqual(query_lex.model_tokens("MSM8216-MSM8616-MSM8916"), ["MSM8216", "MSM8616", "MSM8916"])
 
     def test_units_symbols_versions_and_interfaces_are_not_models(self):
-        text = "I2C UART3 V1.2 0x6A SA0 VDD_APC SOT-23 100MHz 3.3V 1mA 1MA"
+        text = "I2C UART3 V1.2 0x6A SA0 VDD_APC Vdif1 Vdif2 SOT-89-3L 100MHz 3.3V 1mA 1MA"
         self.assertEqual(query_lex.model_tokens(text), [])
         keys = query_lex.extract_entities(text, query=True)
         self.assertTrue({"symbol:sa0", "symbol:vddapc", "value:1mA", "value:1MA"}.issubset(keys))

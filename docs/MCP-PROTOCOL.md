@@ -14,8 +14,8 @@
 - 搜索：`results/count/degraded/notice/warnings/identity/vector_partitions/structured/cached/counts`。
 
 搜索可选参数 `structured=true` 启用默认关闭的无模型实体桥实验；`structured` 响应对象
-只表示本次桥接的运行诊断，不是抽取事实或答案置信度。省略或设为 false 时，默认三路
-检索行为不变。
+只表示本次桥接的运行诊断，不是抽取事实或答案置信度。省略或设为 false 时不构建实体桥；
+共享词法、来源保全与页面惩罚仍走当前修正版，不承诺与历史版本排序相同。
 
 `page_basis=physical` 指 PDF 物理页，从 1 开始，可能与印刷页码不同；`h1_section` 指 Markdown 一级标题伪页。文件列表的 `pages_basis=indexed_max_page` 表示索引内最大页号，不承诺原文件物理总页数。
 

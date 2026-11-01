@@ -13,7 +13,7 @@ _INTERFACE_RE = re.compile(
     r"\d*(?![a-z0-9_])", re.I,
 )
 _SYMBOL_RE = re.compile(
-    r"(?<![a-z0-9_])(?:vdd(?:[ _\t]*(?:apc|core|mem|ioq|io|rf))?|vin|vout|vbat|vled|vcc|vgs|vds|"
+    r"(?<![a-z0-9_])(?:vdif[12]|vdd(?:[ _\t]*(?:apc|core|mem|ioq|io|rf))?|vin|vout|vbat|vled|vcc|vgs|vds|"
     r"idd(?:[ _\t]*(?:hp|lp|pd|standby))?|ibias|iout|sda|scl|sa0|cs|n?reset|en|cbst|"
     r"r[ _\t]*(?:in|out)|ftype)(?![a-z0-9_])", re.I,
 )

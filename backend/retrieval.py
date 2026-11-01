@@ -742,7 +742,7 @@ def _model_identity_match(row: dict, models: set[str]) -> int:
 def _rerank_and_order(cands, rows_by_key: dict, query: str, evidence_by_key: dict | None = None):
     """重排并排序。返回 (排序后的候选, {key: 重排分})。
 
-    纯重排分排序,外加一道**型号平局裁决**:同族手册两页的重排分差(实测
+    模型相关性分经内容感知的角色惩罚后排序,外加一道**型号平局裁决**:同族手册两页的重排分差(实测
     0.006,如 EC800M vs EG800Z、74LVC1G04GV vs GW)低于重排自身抖动
     (0.004-0.008),先后本质随机;分差小于 rerank_tie_tolerance 时,查询里
     的型号 token 与文件身份匹配者在前。不要改成召回名次与重排名次的融合
