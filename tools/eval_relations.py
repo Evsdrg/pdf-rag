@@ -9,14 +9,14 @@
 指标口径(全部写死在下面,避免"看起来像准确率"的解读):
 
 - all_target_evidence_coverage
-    所有 target 都被命中的题目占比。一个 target 命中 = 命中结果的**文件身份**
-    与 target.file 一致, 且该命中所在物理页的**整页索引文本**同时含全部
-    literals。这是"证据可达"的宽松口径:值可能在片段外,读页即可得。
+    所有 target 都被命中的题目占比。v2 按 source_policy 限定来源和物理页,
+    整页必须含参数词、literals 与 cond;content 仅允许同 MD5 内容别名。
+    这是"证据可达"口径,不证明参数行列语义或料号身份。
 - mean_target_recall
     逐 target 的命中率均值(同一题内各 target 等权,再对题目取平均)。
 - identity_constrained_snippet_coverage
-    每题 target 中,同文件同目标页的片段含全部 literals 与 cond 的比例,再按题平均。
-    即条件已标注时,只有数值而没带条件不算完整证据。
+    每题 target 中,允许来源同目标页的片段含全部参数词、literals 与 cond 的比例,
+    再按题平均。该历史字段名不表示订购料号已确认;identity_covered 另计字面覆盖。
 - condition_misassociation
     **明确定义为纯字面共现**:对带 cond/wrong 标注的 target,若命中片段同时
     含该 target 的全部 literals 与其 wrong 标注字面值(而 cond 条件词缺失),
@@ -33,7 +33,8 @@
 --validate-only 会逐条校验标注:文件唯一存在、物理页存在、literals 在该页共存、
 cond 在该页存在、wrong 在该页存在、forbidden 变体文件与字面值真实存在、
 target.model_no 与索引一致、multi_model 类别各 target 型号互不相同。
-校验不通过的问题**不会被静默计为成功**,而是直接报错退出。
+v2 还要求参数词、值、条件在绑定 MD5/uid 的块内偏移共存,并明确来源策略与审校状态。
+quarantined 题保留待复查但不进入评分。校验不证明语义,坏标注直接报错退出。
 """
 import argparse
 import json
@@ -91,7 +92,7 @@ def has_all(text: str, literals) -> bool:
 
 def load_dataset(path: Path = DATASET) -> dict:
     data = json.loads(path.read_text(encoding="utf-8"))
-    if data.get("version") != 1:
+    if data.get("version") not in (1, 2):
         raise ValueError(f"不支持的标注版本: {data.get('version')}")
     return data
 
@@ -126,12 +127,52 @@ def model_of(table, file: str):
     return rows[0]["model_no"] if rows else None
 
 
+def file_metadata(table) -> dict:
+    rows = table.search().select(["file", "md5", "model_no"]).limit(table.count_rows()).to_list()
+    return {row["file"]: row for row in rows}
+
+
+def quarantined_questions(dataset: dict) -> list[str]:
+    return [q["id"] for q in dataset["questions"]
+            if any(t.get("review_status") == "quarantined" for t in q["targets"])]
+
+
+def target_locations(target: dict, file: str, metadata: dict) -> set[tuple[str, int]]:
+    files = {file}
+    digest = metadata.get(file, {}).get("md5")
+    if target.get("source_policy") == "content" and digest:
+        files.update(name for name, row in metadata.items() if row.get("md5") == digest)
+    return {(name, target["page"]) for name in files}
+
+
+def _evidence_valid(target: dict, table, file: str) -> bool:
+    reference = target.get("evidence", {})
+    if not isinstance(reference, dict) or reference.get("offset_basis") != "indexed_chunk":
+        return False
+    if reference.get("review_basis") != "indexed_parameter_context":
+        return False
+    rows = table.search().where("file = '" + file.replace("'", "''") + "'").select(
+        ["uid", "page", "text", "md5"]
+    ).limit(table.count_rows()).to_list()
+    for row in rows:
+        if row.get("uid") != reference.get("chunk_id") or row.get("md5") != reference.get("index_md5"):
+            continue
+        start, end = reference.get("start_offset"), reference.get("end_offset")
+        if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(row["text"]):
+            return False
+        segment = row["text"][start:end]
+        required = target.get("literals", []) + target.get("cond", []) + target.get("parameter_terms", [])
+        return row["page"] + 1 == target["page"] and has_all(segment, required)
+    return False
+
+
 # ---------- 校验 ----------
 
 def validate(dataset: dict, table) -> list:
     """返回问题列表;每个元素是 (error_message, question_id)。"""
     errors = []
     index_files = index_file_list(table)
+    metadata = file_metadata(table) if dataset.get("version") == 2 else {}
     seen_ids = set()
     for q in dataset["questions"]:
         qid = q.get("id", "?")
@@ -181,6 +222,27 @@ def validate(dataset: dict, table) -> list:
             for w in t.get("wrong", []):
                 if norm(w) not in norm(text):
                     errors.append((f"{tag}: 错值标注 {w!r} 不在 {file} 第 {page} 页(须真实存在才能判错配)", qid))
+            if dataset.get("version") == 2:
+                if t.get("source_policy") not in ("exact", "content"):
+                    errors.append((f"{tag}: source_policy 必须明确为 exact/content", qid))
+                terms = t.get("parameter_terms")
+                if (not isinstance(terms, list) or not terms
+                        or any(not isinstance(x, str) or not x.strip() for x in terms)):
+                    errors.append((f"{tag}: parameter_terms 必须为非空字符串列表", qid))
+                elif not _evidence_valid(t, table, file):
+                    errors.append((f"{tag}: 参数/值/条件未被绑定到有效索引证据范围", qid))
+                note = t.get("review_note")
+                if (t.get("review_status") not in ("reviewed", "quarantined")
+                        or not isinstance(note, str) or not note.strip()):
+                    errors.append((f"{tag}: 缺少语义审校状态或说明", qid))
+                if "accepted_pages" in t:
+                    errors.append((f"{tag}: 额外证据页须另立带锚点的 target,不支持 accepted_pages", qid))
+                if "identity_terms" in t:
+                    identity = t["identity_terms"]
+                    if (not isinstance(identity, list) or not identity
+                            or any(not isinstance(x, str) or not x.strip() for x in identity)
+                            or not has_all(text, identity)):
+                        errors.append((f"{tag}: identity_terms 必须在目标页完整存在", qid))
             m = model_of(table, file)
             if t.get("model_no") != m:
                 errors.append((f"{tag}: model_no 标注 {t.get('model_no')!r} 与索引 {m!r} 不一致", qid))
@@ -190,7 +252,7 @@ def validate(dataset: dict, table) -> list:
         if q.get("category") == "cross_page" and (len({f for f, _ in target_pages}) != 1
                                                      or len(target_pages) < 2):
             errors.append((f"{qid}: cross_page 需要同一文件至少两页证据", qid))
-        if q.get("category") == "variant" and not q.get("forbidden_variants"):
+        if q.get("category") == "variant" and not q.get("forbidden_variants") and q.get("identity_policy") != "ordering_row":
             errors.append((f"{qid}: variant 缺少 forbidden_variants", qid))
         if q.get("category") == "condition" and not any(t.get("cond") and t.get("wrong") for t in targets):
             errors.append((f"{qid}: condition 缺少条件与错值配对", qid))
@@ -207,6 +269,11 @@ def validate(dataset: dict, table) -> list:
             for lit in fv.get("literals", []):
                 if norm(lit) not in norm(pages[page]):
                     errors.append((f"{qid}: forbidden 变体 {file} 第 {page} 页缺字面值 {lit!r}", qid))
+            if dataset.get("version") == 2 and any(
+                metadata.get(file, {}).get("md5") and metadata[file]["md5"] == metadata.get(name, {}).get("md5")
+                for target in targets for name, _ in [resolve_file(index_files, target["file"])]
+            ):
+                errors.append((f"{qid}: forbidden 不能是目标的同字节内容别名", qid))
             if files_overlap(file, [t.get("file", "") for t in targets]):
                 errors.append((f"{qid}: forbidden 变体文件与某个 target 指向同一文件", qid))
     return errors
@@ -220,9 +287,13 @@ def files_overlap(a: str, fragments) -> bool:
 
 def evaluate(dataset: dict, table, *, mode="fts", no_rerank=True, structured=False, k=5) -> dict:
     index_files = index_file_list(table)
+    metadata = file_metadata(table) if dataset.get("version") == 2 else {}
     records = []
+    quarantined = quarantined_questions(dataset)
     cand_counts = []
     for q in dataset["questions"]:
+        if q["id"] in quarantined:
+            continue
         qid = q["id"]
         resolved = []
         for t in q["targets"]:
@@ -244,24 +315,29 @@ def evaluate(dataset: dict, table, *, mode="fts", no_rerank=True, structured=Fal
         snippet_covered = 0
         misassoc = 0
         additional_reads = set()
+        identity_targets, identity_covered = 0, 0
         for t, file in resolved:
             literals = t.get("literals") or []
             cond = t.get("cond") or []
             wrong = t.get("wrong") or []
-            pages = page_texts(table, file)
             hit_page = False
             hit_snip = False
+            locations = target_locations(t, file, metadata)
             for h in hits:
-                if h["file"] != file or h["page"] != t["page"]:
+                if (h["file"], h["page"]) not in locations:
                     continue
-                required = literals + cond
-                if has_all(pages.get(t["page"], ""), required):
+                required = literals + cond + t.get("parameter_terms", [])
+                if has_all(page_texts(table, h["file"]).get(h["page"], ""), required):
                     hit_page = True
                 if has_all(h["snippet"], required):
                     hit_snip = True
                 if has_all(h["snippet"], literals) and cond and wrong:
                     if has_all(h["snippet"], wrong) and not has_all(h["snippet"], cond):
                         misassoc += 1
+            if t.get("identity_terms"):
+                identity_targets += 1
+                identity_covered += any((h["file"], h["page"]) in locations
+                                        and has_all(h["snippet"], t["identity_terms"]) for h in hits)
             if not hit_snip and hit_page:
                 # 片段没覆盖、但整页覆盖 => 只用片段还需再读这一页(代理量)。
                 additional_reads.add((file, t["page"]))
@@ -288,13 +364,21 @@ def evaluate(dataset: dict, table, *, mode="fts", no_rerank=True, structured=Fal
             "wrong_variant_hit": int(wrong_variant_hits > 0),
             "wrong_variant_hits": wrong_variant_hits,
             "additional_page_reads": len(additional_reads),
+            "identity_targets": identity_targets, "identity_covered": identity_covered,
             "elapsed_ms": elapsed_ms,
             "candidates": cand_counts[-1],
             "degraded": diag.get("degraded", []),
             "structured": diag.get("structured", {"enabled": structured, "status": "disabled"}),
             "hits": [{"file": h["file"], "page": h["page"]} for h in hits],
         })
-    return summarize(records, cand_counts, mode=mode, structured=structured, k=k)
+    result = summarize(records, cand_counts, mode=mode, structured=structured, k=k)
+    result["summary"].update(
+        dataset_version=dataset.get("version"), quarantined_questions=quarantined,
+        evidence_targets=sum(len(r["targets"]) for r in records),
+        identity_targets=sum(r.get("identity_targets", 0) for r in records),
+        identity_covered=sum(r.get("identity_covered", 0) for r in records),
+    )
+    return result
 
 
 def summarize(records, cand_counts, *, mode="fts", structured=False, k=5) -> dict:
@@ -343,7 +427,8 @@ def summarize(records, cand_counts, *, mode="fts", structured=False, k=5) -> dic
 def print_report(result: dict):
     s = result["summary"]
     print("=" * 68)
-    print(f"关系检索评测  mode={s['mode']}  structured={s['structured']}  k={s['k']}  题数={s['questions']}")
+    print(f"关系检索评测 v{s.get('dataset_version', 1)}  mode={s['mode']}  structured={s['structured']}  k={s['k']}  题数={s['questions']}")
+    print(f"隔离题: {', '.join(s.get('quarantined_questions', [])) or '无'}；证据目标: {s.get('evidence_targets', 0)}")
     print("=" * 68)
     print(f"all-target evidence coverage (整页口径) : {s['all_target_evidence_coverage']}%")
     print(f"mean target recall                       : {s['mean_target_recall']}%")
@@ -354,6 +439,7 @@ def print_report(result: dict):
     print(f"候选数 p50 / p95                         : {s['candidates_p50']} / {s['candidates_p95']}")
     print(f"延迟 ms p50 / p95                       : {s['latency_ms_p50']:.2f} / {s['latency_ms_p95']:.2f}")
     print(f"降级查询                                : {s['degraded_queries']}")
+    print(f"订购身份字面覆盖(独立,非兼容确认)        : {s.get('identity_covered', 0)} / {s.get('identity_targets', 0)}")
     if s["by_category"]:
         print("-" * 68)
         print(f"{'类别':<22}{'题数':>5}{'all-target%':>14}{'recall%':>10}{'snippet%':>11}{'错配':>7}{'变体':>7}")
@@ -362,8 +448,8 @@ def print_report(result: dict):
                   f"{v['mean_target_recall']:>10}{v['identity_constrained_snippet_coverage']:>11}"
                   f"{v['condition_misassociation_events']:>7}{v['wrong_variant_hits']:>7}")
     print("=" * 68)
-    print("口径说明: 覆盖=文件身份一致且该物理页整页索引文本含全部字面值;")
-    print("          snippet=同文件同目标页的片段同时含字面值及全部标注条件;")
+    print("口径说明: 覆盖=来源策略允许的文件与目标物理页含全部值、条件及参数词;")
+    print("          snippet=该来源/目标页的片段同时含上述全部约束;content 仅放宽到同 MD5 内容别名;")
     print("          condition-misassociation=片段同时含本 target 值与其标注错值且缺条件词(纯字面共现,不声称理解表格语义);")
     print("          additional page reads=片段未覆盖但整页覆盖的页数代理,非真实翻页统计。")
 
@@ -380,12 +466,13 @@ def main():
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--json", default="", help="把结果写入该 JSON 文件")
     ap.add_argument("--validate-only", action="store_true", help="只校验标注,不检索")
+    ap.add_argument("--dataset", type=Path, default=DATASET, help="标注 JSON;旧版可用 eval_relations.v1.json 重放")
     args = ap.parse_args()
 
     block_network()
     config.override_local({"query_cache_ttl": 0})
 
-    dataset = load_dataset()
+    dataset = load_dataset(args.dataset)
     table = library.get_table()
     if table is None:
         print("索引不可用:未找到 chunks 表", file=sys.stderr)
@@ -397,7 +484,9 @@ def main():
         for msg, qid in errors:
             print(f"  [{qid}] {msg}", file=sys.stderr)
         return 2
-    print(f"标注校验通过:{len(dataset['questions'])} 题,全部 target/cond/wrong/forbidden 均在当前索引中可核验。")
+    quarantined = quarantined_questions(dataset)
+    print(f"字面/锚点校验通过:v{dataset['version']}，{len(dataset['questions'])} 题；"
+          f"可评分 {len(dataset['questions']) - len(quarantined)} 题，隔离 {len(quarantined)} 题。此校验不证明参数语义。")
 
     if args.validate_only:
         return 0

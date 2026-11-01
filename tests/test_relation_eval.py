@@ -32,10 +32,11 @@ def t(file, page, literals, **kw):
 class FakeTable:
     """最小表替身:只提供 eval_relations 用到的搜索接口。"""
 
-    def __init__(self, pages, models=None):
+    def __init__(self, pages, models=None, digests=None):
         # pages: {file: {page: text}};models: {file: model_no}
         self.pages = pages
         self.models = models or {}
+        self.digests = digests or self.models
 
     def count_rows(self):
         return sum(len(v) for v in self.pages.values())
@@ -47,7 +48,8 @@ class FakeTable:
                 continue
             for page, text in pmap.items():
                 out.append({"file": fname, "page": page - 1, "text": text,
-                            "model_no": self.models.get(fname)})
+                            "model_no": self.models.get(fname), "md5": self.digests.get(fname),
+                            "uid": f"{fname}:{page}"})
         return out
 
     def search(self, *args, **kwargs):
@@ -237,6 +239,40 @@ class ValidateTest(unittest.TestCase):
         self.assertTrue(errs)
         self.assertIn("2-3", errs[0][0])
 
+    def test_v2_requires_valid_parameter_evidence_and_source_policy(self):
+        ds, table = self.build()
+        ds["version"] = 2
+        target = ds["questions"][0]["targets"][0]
+        target.update(source_policy="exact", parameter_terms=["Output Current"], review_status="reviewed",
+                      review_note="synthetic row", evidence={"chunk_id": "cat/A.pdf:1", "index_md5": "AAA",
+                      "start_offset": 0, "end_offset": len(table.pages["cat/A.pdf"][1]),
+                      "offset_basis": "indexed_chunk", "review_basis": "indexed_parameter_context"})
+        self.assertTrue(any("parameter_terms" in m for m, _ in er.validate(ds, table)))
+        second = ds["questions"][0]["targets"][1]
+        second.update(source_policy="exact", parameter_terms=["RDS(ON)"], review_status="reviewed",
+                      review_note="synthetic row", evidence={"chunk_id": "cat/B.pdf:2", "index_md5": "BBB",
+                      "start_offset": 0, "end_offset": len(table.pages["cat/B.pdf"][2]),
+                      "offset_basis": "indexed_chunk", "review_basis": "indexed_parameter_context"})
+        self.assertEqual(er.validate(ds, table), [])
+        target["evidence"]["start_offset"] = True
+        self.assertTrue(er.validate(ds, table))
+        target["evidence"]["start_offset"] = 0
+        target["accepted_pages"] = [1]
+        self.assertTrue(any("额外证据页" in m for m, _ in er.validate(ds, table)))
+        del target["accepted_pages"]
+        target["parameter_terms"] = ["unrelated parameter"]
+        self.assertTrue(er.validate(ds, table))
+
+    def test_v2_rejects_same_content_as_forbidden_variant(self):
+        ds, table = self.build()
+        ds["version"] = 2
+        table.pages["cat/alias.pdf"] = table.pages["cat/A.pdf"]
+        table.models["cat/alias.pdf"] = "AAA"
+        ds["questions"][0]["forbidden_variants"] = [
+            {"file": "cat/alias.pdf", "page": 1, "literals": ["500"]},
+        ]
+        self.assertTrue(any("同字节内容别名" in m for m, _ in er.validate(ds, table)))
+
     def test_duplicate_question_id_is_rejected(self):
         ds, table = self.build()
         ds["questions"].append(ds["questions"][0])
@@ -261,6 +297,14 @@ class DatasetShapeTest(unittest.TestCase):
         self.assertEqual(sorted(counts.values()), [8, 8, 8, 8])
         self.assertEqual(sum(len(item["targets"]) for item in qs), 80)
 
+    def test_versioned_dataset_keeps_historical_labels_and_quarantines(self):
+        old = er.load_dataset(ROOT / "eval_relations.v1.json")
+        self.assertEqual(old["version"], 1)
+        self.assertEqual(self.data["version"], 2)
+        self.assertEqual(set(er.quarantined_questions(self.data)), {"A04", "A05", "A06", "A07", "D03"})
+        active = [item for item in self.data["questions"] if item["id"] not in er.quarantined_questions(self.data)]
+        self.assertEqual((len(active), sum(len(item["targets"]) for item in active)), (27, 66))
+
     def test_each_question_has_two_or_three_targets(self):
         for item in self.data["questions"]:
             self.assertTrue(2 <= len(item["targets"]) <= 3, item["id"])
@@ -284,7 +328,7 @@ class DatasetShapeTest(unittest.TestCase):
         for item in self.data["questions"]:
             if item["category"] != "variant":
                 continue
-            self.assertTrue(item.get("forbidden_variants"), item["id"])
+            self.assertTrue(item.get("forbidden_variants") or item.get("identity_policy") == "ordering_row", item["id"])
 
     def test_condition_questions_declare_wrong_values(self):
         for item in self.data["questions"]:
@@ -336,6 +380,32 @@ class EvaluateLogicTest(unittest.TestCase):
             return er.evaluate(self.ds, self.table, mode="fts", no_rerank=True, k=5)
         finally:
             er.search = original
+
+    def test_content_alias_does_not_imply_part_identity_or_exact_source(self):
+        self.table.models["cat/sibling.pdf"] = "different-part"
+        self.table.digests = {"cat/right.pdf": "same-bytes", "cat/sibling.pdf": "same-bytes"}
+        target = self.ds["questions"][0]["targets"][0]
+        target.update(source_policy="content", identity_terms=["requested-order-code"])
+        self.ds.update(version=2)
+        hits = [{"file": "cat/sibling.pdf", "page": 1, "snippet": "1117-3.3 13.2 IO=10mA"}]
+        rec = self._run(hits)["records"][0]
+        self.assertTrue(rec["all_targets_snippet_covered"])
+        self.assertEqual(rec["identity_covered"], 0)
+        target["source_policy"] = "exact"
+        rec = self._run(hits)["records"][0]
+        self.assertFalse(rec["all_targets_snippet_covered"])
+
+    def test_quarantined_question_is_not_searched_or_scored(self):
+        self.ds["version"] = 2
+        self.ds["questions"][0]["targets"][0]["review_status"] = "quarantined"
+        from unittest.mock import patch
+        with patch.object(er, "search") as run_search:
+            result = er.evaluate(self.ds, self.table)
+        run_search.assert_not_called()
+        self.assertEqual(result["records"], [])
+        self.assertEqual(result["summary"]["questions"], 0)
+        self.assertEqual(result["summary"]["evidence_targets"], 0)
+        self.assertEqual(result["summary"]["quarantined_questions"], ["Q1"])
 
     def test_same_literal_in_wrong_file_does_not_count_as_hit(self):
         hits = [{"file": "cat/wrong.pdf", "page": 1, "snippet": "1117-3.3 13.2 mV 7.2 mV"}]

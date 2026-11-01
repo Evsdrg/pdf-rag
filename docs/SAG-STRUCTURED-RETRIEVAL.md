@@ -164,10 +164,15 @@ uv run --frozen python tools/bench_logic.py --structured-only --json /tmp/bench-
 
 “grounded”仍不证明数值列、单位、条件和版本正确，只排除来自错误文件的数值碰巧命中。
 纯逻辑基准把模型替换为确定性本地替身，只测计算成本，不测模型排序质量。
-新增关系集 `eval_relations.json` 含 32 题（四类各八题）和 80 个证据目标。
-先运行 `tools/eval_relations.py --validate-only` 检查标注页和字面值，再用默认离线
-`--mode fts --no-rerank`、可选 `--structured` 和 `--json` 做对照；脚本强制禁止网络。
-全证据页覆盖、平均目标召回、同身份/页/条件片段覆盖、标注错值共现事件、错误变体题占比、
+关系集 `eval_relations.json` 当前为 v2：保留 32 题、80 个目标，其中 A04/A05/A06/A07/D03
+因参数语义、OCR 单位或跨页条件疑点整题隔离，实际评分 27 题、66 个目标。历史 v1 保留在
+`eval_relations.v1.json`，可用 `--dataset eval_relations.v1.json` 重放，但不能与 v2 直接比较。
+先运行 `tools/eval_relations.py --validate-only` 检查唯一来源、参数词、值、条件和块内锚点，
+再用默认离线 `--mode fts --no-rerank`、可选 `--structured` 和 `--json` 做对照；脚本强制禁止网络。
+`source_policy=exact` 要求指定来源，`content` 只允许同 MD5 内容副本；不允许无独立锚点的额外页。
+`identity_terms` 另计订购身份字面覆盖，内容覆盖不等于料号、订购行或兼容性确认。
+`reviewed` 表示本轮按索引参数上下文审校，不是模型裁判或自动语义正确性保证。
+全证据页覆盖、平均目标召回、来源/页/参数/条件片段覆盖、标注错值共现事件、错误变体题占比、
 补读页代理及延迟分布分别报告，不折算为一个“答案准确率”。补读页只计命中整页有证据但
 片段不全的唯一文件页，不是真实 Agent 读页次数。条件错配也只是标注字面共现，不证明理解列归属。
 

@@ -1,11 +1,12 @@
 {
- "version": 1,
- "name": "pdf-rag 关系检索评测集",
- "scope": "标注的是**检索证据可达性**,不是答案语义正确性。每个 target 只记录:文件(唯一子串)、物理页(1 基)、以及必须同页共存的少量字面值。条件词(cond)与错值(wrong)同样来自索引原文,用于区分'条件归属'与'数值同现'。",
+ "version": 2,
+ "name": "PDF-RAG 关系证据审校集 v2",
+ "scope": "内容证据与指定来源分开计分;证据范围校验不代替人工语义审校。",
  "notes": [
-  "所有 literals/cond/wrong 均由 tools/eval_relations.py --validate-only 对当前索引逐条核验:字面值必须与目标页索引文本共存,cond 必须共存,wrong 必须存在于同页,禁止的变体文件与页必须真实存在且含其标注字面值。",
-  "target.model_no 是独立维度:它记录该证据所属的型号,便于按型号切分统计,multi_model 类问题里不同 target 的 model_no 必须互不相同。",
-  "命中判定是纯字面代理:只做'文件身份 + 物理页 + 字面值共存'判断,不声称理解表格行列语义。同一页出现错值只说明'同页存在歧义',不表示系统理解有误。"
+  "旧版保留在 eval_relations.v1.json，不与新版直接比较。",
+  "reviewed 表示本轮按原始行/参数上下文审校，不是答案推理正确率保证。",
+  "quarantined 题从评分中排除，但保留锚点用于复查OCR/跨页条件。",
+  "source_policy=content 允许相同MD5副本；料号身份另计，不因共享内容推断兼容。"
  ],
  "questions": [
   {
@@ -24,7 +25,21 @@
      "cond": [
       "IO=10mA",
       "VI=5V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Output Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6a9fc4674101ffe087c2",
+      "index_md5": "43494e82d35cee130065fb75f612f2bf",
+      "start_offset": 145,
+      "end_offset": 597,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C54560864_线性稳压器(LDO)_HR1117V-3.3_规格书_HR1117+SERIES_REV1.0.PDF",
@@ -36,7 +51,21 @@
      ],
      "cond": [
       "IOUT=10mA,VIN =5V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Output Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "2000fbc1de3f91802935",
+      "index_md5": "0646a19369e6c62c49bc599bc2c008c2",
+      "start_offset": 223,
+      "end_offset": 616,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C49242128_线性稳压器(LDO)_XBL1117-3.3-STR_规格书_XBLW-XBL1117+(EN)++DATASHEET-V2.0.PDF",
@@ -48,9 +77,24 @@
      ],
      "cond": [
       "lout= 10mA,Vin=5V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Output Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "006a77ea3ec6192e32a9",
+      "index_md5": "dd65a16045b984c9565f01fca9220b76",
+      "start_offset": 501,
+      "end_offset": 895,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "A02",
@@ -68,7 +112,21 @@
      ],
      "cond": [
       "ΔVR=1% IO=1A"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dropout Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6a9fc4674101ffe087c2",
+      "index_md5": "43494e82d35cee130065fb75f612f2bf",
+      "start_offset": 898,
+      "end_offset": 1102,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C55544526_线性稳压器(LDO)_LM1117-3.3V_规格书_LM1117+SERIES_REV1.1.PDF",
@@ -81,7 +139,21 @@
      ],
      "cond": [
       "IOUT = 1A"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dropout Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "34692ef457ab82c84c30",
+      "index_md5": "5627a2e06334f993035a780edc28090d",
+      "start_offset": 369,
+      "end_offset": 1326,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C49332772_线性稳压器(LDO)_SSP1117-3.3V_规格书_WJ1734557.PDF",
@@ -94,9 +166,24 @@
      ],
      "cond": [
       "Iout=1A"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dropout Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "5ecc11e56eb0b74831a9",
+      "index_md5": "c37515677c01658d5ba48656746ed420",
+      "start_offset": 8,
+      "end_offset": 528,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "A03",
@@ -114,7 +201,21 @@
      ],
      "cond": [
       "10mA<IO<1A"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Load Regulation"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6a9fc4674101ffe087c2",
+      "index_md5": "43494e82d35cee130065fb75f612f2bf",
+      "start_offset": 182,
+      "end_offset": 1045,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C18190088_线性稳压器(LDO)_AMS1117-3.3V-JSM_规格书_WJ1199429.PDF",
@@ -127,21 +228,52 @@
      ],
      "cond": [
       "Vin =4.8V,10mA≤lout≤800mA"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "AMS1117-3.3"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "4ab85f6681fc65225f5b",
+      "index_md5": "821e0c779910804fde35de7b44a9c268",
+      "start_offset": 0,
+      "end_offset": 244,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C347256_线性稳压器(LDO)_AMS1117-3.3S_规格书_WJ1878170.PDF",
      "page": 4,
      "model_no": "AMS1117-3.3S",
      "literals": [
-      "AMS1117-3.3",
-      "3.300"
+      "Load Regulation",
+      "10",
+      "18",
+      "mV"
      ],
      "cond": [
-      "IOUT=10mA, VIN=5V, TJ=25°C"
-     ]
+      "10mA≤IOUT≤1A"
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Load Regulation"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "30eb8049db8236d43470",
+      "index_md5": "71f663f5ded4039c93bc4964839a88b1",
+      "start_offset": 99,
+      "end_offset": 981,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "A04",
@@ -158,7 +290,21 @@
      ],
      "cond": [
       "Topt"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "电源电压"
+     ],
+     "review_status": "quarantined",
+     "review_note": "当前目标包含最大额定电源范围，不能与推荐工作范围混称；待拆分参数。",
+     "evidence": {
+      "chunk_id": "d9520e50160f990e9bbb",
+      "index_md5": "b8ca1efd341f8a448d62693f4fa4d370",
+      "start_offset": 122,
+      "end_offset": 347,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C5446700_RGB+LED(内置IC)_WS2812E-1313_规格书_WJ1058658.PDF",
@@ -170,7 +316,21 @@
      ],
      "cond": [
       "Topt"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "电源电压"
+     ],
+     "review_status": "quarantined",
+     "review_note": "当前目标包含最大额定电源范围，不能与推荐工作范围混称；待拆分参数。",
+     "evidence": {
+      "chunk_id": "9dc7c4e2e0ee0bbae73a",
+      "index_md5": "c35a41ccd6fad9b774ba7f29c323456f",
+      "start_offset": 5,
+      "end_offset": 229,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "SK6812MINI-HS_规格书.pdf",
@@ -182,9 +342,24 @@
      ],
      "cond": [
       "Topt"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "电压电压"
+     ],
+     "review_status": "quarantined",
+     "review_note": "当前目标包含最大额定电源范围，不能与推荐工作范围混称；待拆分参数。",
+     "evidence": {
+      "chunk_id": "2ca3ec4e41515e01794a",
+      "index_md5": "8a4c7e24ff4adb8229185cfabe3e0ccb",
+      "start_offset": 159,
+      "end_offset": 382,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "A05",
@@ -202,7 +377,21 @@
      ],
      "cond": [
       "IV"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "波长"
+     ],
+     "review_status": "quarantined",
+     "review_note": "旧目标未完整绑定两项光学参数和颜色/电流行，保留待逐行审校。",
+     "evidence": {
+      "chunk_id": "c5af607a724f8a96fe69",
+      "index_md5": "b8ca1efd341f8a448d62693f4fa4d370",
+      "start_offset": 253,
+      "end_offset": 479,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C52941389_RGB+LED(内置IC)_WS2812B-2427-V6_规格书_WS2812B-2427-V6_当_V1.1_CN.PDF",
@@ -215,7 +404,21 @@
      ],
      "cond": [
       "IV"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "波长"
+     ],
+     "review_status": "quarantined",
+     "review_note": "旧目标未完整绑定两项光学参数和颜色/电流行，保留待逐行审校。",
+     "evidence": {
+      "chunk_id": "69e7aab2c45793299221",
+      "index_md5": "ede73c3d5e8bd71a81e66eeac24e8baf",
+      "start_offset": 33,
+      "end_offset": 601,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "SK6812MINI-HS_规格书.pdf",
@@ -228,9 +431,24 @@
      ],
      "cond": [
       "SK6812MINI-HS"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "RGB LED"
+     ],
+     "review_status": "quarantined",
+     "review_note": "旧目标未完整绑定两项光学参数和颜色/电流行，保留待逐行审校。",
+     "evidence": {
+      "chunk_id": "2ca3ec4e41515e01794a",
+      "index_md5": "8a4c7e24ff4adb8229185cfabe3e0ccb",
+      "start_offset": 0,
+      "end_offset": 757,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "A06",
@@ -248,7 +466,21 @@
      "cond": [
       "P-Channel",
       "VGS=-10V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "RDS(ON)"
+     ],
+     "review_status": "quarantined",
+     "review_note": "AO3401A 电阻单位在原生提取中为mW，不能猜测修成mΩ；AO4435目标未覆盖连续电流。",
+     "evidence": {
+      "chunk_id": "fc24e195a94cddfa6372",
+      "index_md5": "a6743c2b02ed0aa81c0e4c669c8aaff7",
+      "start_offset": 0,
+      "end_offset": 418,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C5224296_场效应管(MOSFET)_AO4435_规格书_AO4435.PDF",
@@ -261,7 +493,21 @@
      "cond": [
       "@VGS=-10V",
       "@VGS=-4.5V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "RDS(ON)"
+     ],
+     "review_status": "quarantined",
+     "review_note": "AO3401A 电阻单位在原生提取中为mW，不能猜测修成mΩ；AO4435目标未覆盖连续电流。",
+     "evidence": {
+      "chunk_id": "b3250ef1831d34d83887",
+      "index_md5": "10147e8bd5869acd43e7213278b31ea6",
+      "start_offset": 221,
+      "end_offset": 616,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "AO3401A_P-MOSFET_规格书.pdf",
@@ -274,9 +520,24 @@
      "cond": [
       "P-Channel",
       "VGS=-10V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "RDS(ON)"
+     ],
+     "review_status": "quarantined",
+     "review_note": "AO3401A 电阻单位在原生提取中为mW，不能猜测修成mΩ；AO4435目标未覆盖连续电流。",
+     "evidence": {
+      "chunk_id": "d9bfb56e719b90393db5",
+      "index_md5": "27630226537bd3d272520d2c8d17106a",
+      "start_offset": 0,
+      "end_offset": 186,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "A07",
@@ -294,7 +555,21 @@
      ],
      "cond": [
       "Peak Output Current"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Peak Output Current"
+     ],
+     "review_status": "quarantined",
+     "review_note": "UMW目标缺少明确峰值数值且供电范围跨页；TP手册OCR需人工核验。",
+     "evidence": {
+      "chunk_id": "2a5dcc3bba5dfbfbb1d0",
+      "index_md5": "808333b418dd7217607ea56e52a54228",
+      "start_offset": 9,
+      "end_offset": 323,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C20623205_栅极驱动芯片_TC4424AVOA713(UMW)_规格书_WJ1798749.PDF",
@@ -306,7 +581,21 @@
      ],
      "cond": [
       "IO=100mA"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Peak output source current"
+     ],
+     "review_status": "quarantined",
+     "review_note": "UMW目标缺少明确峰值数值且供电范围跨页；TP手册OCR需人工核验。",
+     "evidence": {
+      "chunk_id": "0ed3681561dff1f27f31",
+      "index_md5": "f2c13670a24d2d101bad261630435c97",
+      "start_offset": 170,
+      "end_offset": 870,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C54780947_栅极驱动芯片_TC4424AVOA713-TP_规格书_WJ1862547.PDF",
@@ -318,9 +607,24 @@
      ],
      "cond": [
       "peak"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "source"
+     ],
+     "review_status": "quarantined",
+     "review_note": "UMW目标缺少明确峰值数值且供电范围跨页；TP手册OCR需人工核验。",
+     "evidence": {
+      "chunk_id": "c99944b3f857ae19da89",
+      "index_md5": "d7b34e042bc119b676c8a8ffd24307aa",
+      "start_offset": 45,
+      "end_offset": 702,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "A08",
@@ -329,47 +633,83 @@
    "targets": [
     {
      "file": "QMI8658A_IMU_规格书_RevD.pdf",
-     "page": 22,
+     "page": 18,
      "model_no": "QMI8658A",
      "literals": [
-      "fSPC",
-      "15",
-      "MHz",
-      "fSCL",
-      "400",
-      "kHz"
+      "±16 dps",
+      "±2048 dps"
      ],
      "cond": [
-      "Host SPI Interface Speed"
-     ]
+      "Gyroscope"
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Sensitivity"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6d5cebda724db757cb34",
+      "index_md5": "5ff0f69c22f6956a59dea104859fc7ee",
+      "start_offset": 179,
+      "end_offset": 614,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "QMI8658B_IMU_规格书_RevD.pdf",
-     "page": 19,
+     "page": 15,
      "model_no": "QMI8658B",
      "literals": [
-      "fSPC",
-      "fSCL3",
-      "12.5",
-      "MHz"
+      "±16 dps",
+      "±2048 dps"
      ],
      "cond": [
-      "Host I3C Interface Speed"
-     ]
+      "Gyroscope"
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Sensitivity"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "dad15a8fec98c1b307bd",
+      "index_md5": "117569b9bfbf6e5c24dd261c827e3948",
+      "start_offset": 826,
+      "end_offset": 1267,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C46550688_姿态传感器-陀螺仪_ICM-42605-HXY_规格书_WJ1872168.PDF",
      "page": 1,
      "model_no": "ICM-42605-HXY",
      "literals": [
-      "±125dps/±250dps/±500dps/±1000dps/±2000dps",
-      "±2g/±4g/±8g/±16g"
+      "±125dps/±250dps/±500dps/±1000dps/±2000dps"
      ],
      "cond": [
-      "加速度计量程范围"
-     ]
+      "陀螺仪"
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "陀螺仪"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "0927684190eefeb1cc0a",
+      "index_md5": "71f778625f19fd222da3c788ce2d28ad",
+      "start_offset": 134,
+      "end_offset": 607,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "B01",
@@ -381,13 +721,27 @@
      "page": 3,
      "model_no": "XC6206",
      "literals": [
+      "VIN",
       "7.0",
-      "500",
-      "SOT-89"
+      "V"
      ],
      "cond": [
+      "Input Voltage"
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
       "ABSOLUTE MAXIMUM RATINGS"
-     ]
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "a0039c2f08519eeaa24c",
+      "index_md5": "898a95835fc10e14b9f5a4246fb4a8a8",
+      "start_offset": 0,
+      "end_offset": 449,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "XC6206_LDO_规格书(Torex).pdf",
@@ -399,7 +753,21 @@
      ],
      "cond": [
       "OUTPUT VOLTAGE"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "MARKING RULE"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "eab9c9a31179b7971f3b",
+      "index_md5": "898a95835fc10e14b9f5a4246fb4a8a8",
+      "start_offset": 0,
+      "end_offset": 450,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "XC6206_LDO_规格书(Torex).pdf",
@@ -411,9 +779,24 @@
      ],
      "cond": [
       "Dropout Voltage"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dropout Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "9a7d99c7b14eb7ad2c05",
+      "index_md5": "898a95835fc10e14b9f5a4246fb4a8a8",
+      "start_offset": 66,
+      "end_offset": 447,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "B02",
@@ -427,12 +810,25 @@
      "literals": [
       "Input Voltage",
       "15",
-      "1000",
-      "mA"
+      "V"
      ],
      "cond": [
       "Absolute Maximum Ratings"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Absolute Maximum Ratings"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "83aa58b7a1d13abaa77d",
+      "index_md5": "43494e82d35cee130065fb75f612f2bf",
+      "start_offset": 12,
+      "end_offset": 443,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
@@ -445,7 +841,21 @@
      ],
      "cond": [
       "Output Voltage"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Output Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6a9fc4674101ffe087c2",
+      "index_md5": "43494e82d35cee130065fb75f612f2bf",
+      "start_offset": 226,
+      "end_offset": 607,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
@@ -458,9 +868,24 @@
      ],
      "cond": [
       "Dimension"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dimension"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "01a338f6513698dbfcdc",
+      "index_md5": "43494e82d35cee130065fb75f612f2bf",
+      "start_offset": 0,
+      "end_offset": 205,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "B03",
@@ -478,7 +903,21 @@
      ],
      "cond": [
       "Ordering information"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Ordering information"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "2422fd1a77f3d5d86059",
+      "index_md5": "dfae59d4a41cfa3ba7cf52a839f233b9",
+      "start_offset": 4,
+      "end_offset": 376,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
@@ -491,7 +930,21 @@
      ],
      "cond": [
       "VCC = 2.3 V to 2.7 V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Static characteristics"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6d021e6af1adcb59c5f0",
+      "index_md5": "dfae59d4a41cfa3ba7cf52a839f233b9",
+      "start_offset": 6,
+      "end_offset": 536,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
@@ -505,9 +958,24 @@
      ],
      "cond": [
       "VCC= 1.65 V to 1.95 V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dynamic characteristics"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "56663f761c3daab5d44c",
+      "index_md5": "dfae59d4a41cfa3ba7cf52a839f233b9",
+      "start_offset": 381,
+      "end_offset": 811,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "B04",
@@ -524,7 +992,21 @@
      ],
      "cond": [
       "Features"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Features"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "2a5dcc3bba5dfbfbb1d0",
+      "index_md5": "808333b418dd7217607ea56e52a54228",
+      "start_offset": 0,
+      "end_offset": 263,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C44150_栅极驱动芯片_TC4424AVOA713_规格书_WJ184423.PDF",
@@ -538,7 +1020,21 @@
      ],
      "cond": [
       "ELECTRICAL"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Output Resistance"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "24a796f6d52309ac8299",
+      "index_md5": "808333b418dd7217607ea56e52a54228",
+      "start_offset": 0,
+      "end_offset": 1647,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C44150_栅极驱动芯片_TC4424AVOA713_规格书_WJ184423.PDF",
@@ -549,14 +1045,29 @@
      ],
      "cond": [
       "Temperature Range"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Temperature Range"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "dca83922ce026f6e3777",
+      "index_md5": "808333b418dd7217607ea56e52a54228",
+      "start_offset": 277,
+      "end_offset": 475,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "B05",
    "category": "cross_page",
-   "query": "QMI8658A(Rev D)的 I2C 从机地址、上电时间与温漂系数分别在手册哪几页",
+   "query": "QMI8658A(Rev D)的 I2C 从机地址、加速度计启动时间与陀螺仪零偏温漂分别在哪几页",
    "targets": [
     {
      "file": "QMI8658A_IMU_规格书_RevD.pdf",
@@ -564,11 +1075,26 @@
      "model_no": "QMI8658A",
      "literals": [
       "0x6B",
+      "0x6A",
       "SA0"
      ],
      "cond": [
       "I2C Slave address"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "I2C Slave address"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "0de769213d1a96fe1ba9",
+      "index_md5": "5ff0f69c22f6956a59dea104859fc7ee",
+      "start_offset": 152,
+      "end_offset": 495,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "QMI8658A_IMU_规格书_RevD.pdf",
@@ -578,9 +1104,21 @@
       "Accel Turn On Time",
       "3 ms + 3/ODR"
      ],
-     "cond": [
-      "3 ms"
-     ]
+     "cond": [],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Accel Turn On Time"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "b859afcd5df156373492",
+      "index_md5": "5ff0f69c22f6956a59dea104859fc7ee",
+      "start_offset": 1116,
+      "end_offset": 1311,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "QMI8658A_IMU_规格书_RevD.pdf",
@@ -593,9 +1131,24 @@
      ],
      "cond": [
       "Temperature Coefficient of"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Temperature Coefficient of"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6d5cebda724db757cb34",
+      "index_md5": "5ff0f69c22f6956a59dea104859fc7ee",
+      "start_offset": 894,
+      "end_offset": 1130,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "B06",
@@ -611,7 +1164,21 @@
      ],
      "cond": [
       "High Performance"
-     ]
+     ],
+     "source_policy": "content",
+     "parameter_terms": [
+      "High Performance"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "95968b021affac68f21e",
+      "index_md5": "5fe89aafe266643b5858147c79098793",
+      "start_offset": 613,
+      "end_offset": 836,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C2802824_NOR+FLASH_MX25R3235FM1IL0_规格书_WJ137634.PDF",
@@ -624,7 +1191,21 @@
      ],
      "cond": [
       "Dummy Cycle"
-     ]
+     ],
+     "source_policy": "content",
+     "parameter_terms": [
+      "Dummy Cycle"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "799170981087e54e5f28",
+      "index_md5": "5fe89aafe266643b5858147c79098793",
+      "start_offset": 138,
+      "end_offset": 556,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C2802824_NOR+FLASH_MX25R3235FM1IL0_规格书_WJ137634.PDF",
@@ -637,9 +1218,24 @@
      ],
      "cond": [
       "ORDERING INFORMATION"
-     ]
+     ],
+     "source_policy": "content",
+     "parameter_terms": [
+      "ORDERING INFORMATION"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "0d0d4176eb84aa8a814b",
+      "index_md5": "5fe89aafe266643b5858147c79098793",
+      "start_offset": 0,
+      "end_offset": 303,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "B07",
@@ -651,13 +1247,27 @@
      "page": 2,
      "model_no": "XC6206",
      "literals": [
-      "±2.5%",
+      "Iout",
       "500",
       "mA"
      ],
      "cond": [
       "Limit parameter"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Limit parameter"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "2a978df88b93d9a2533a",
+      "index_md5": "cdfcf1c7525e060894dd62e1f4220175",
+      "start_offset": 202,
+      "end_offset": 546,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "XC6206_LDO_规格书(UMW).pdf",
@@ -670,7 +1280,21 @@
      ],
      "cond": [
       "Maximum output"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Maximum output"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "fbe75c8d65639ee1f3e5",
+      "index_md5": "cdfcf1c7525e060894dd62e1f4220175",
+      "start_offset": 168,
+      "end_offset": 448,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "XC6206_LDO_规格书(UMW).pdf",
@@ -683,9 +1307,24 @@
      ],
      "cond": [
       "Applied circuit"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Applied circuit"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "366040e83a3fbf5f6f02",
+      "index_md5": "cdfcf1c7525e060894dd62e1f4220175",
+      "start_offset": 0,
+      "end_offset": 316,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "B08",
@@ -703,7 +1342,21 @@
      ],
      "cond": [
       "主要特点"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "主要特点"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "a15a6c5af4c2904b5c78",
+      "index_md5": "b8ca1efd341f8a448d62693f4fa4d370",
+      "start_offset": 0,
+      "end_offset": 401,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C52941386_RGB+LED(内置IC)_WS2812B-MINI-V6_规格书_WS2812B-MINI-V6当_V1.1_CN.PDF",
@@ -712,13 +1365,25 @@
      "literals": [
       "tPLZ",
       "300",
-      "ns",
-      "15",
-      "pF"
+      "ns"
      ],
      "cond": [
       "CL=15pF,DIN→DOUT,RL=10KΩ"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "传输延迟时间"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "c5af607a724f8a96fe69",
+      "index_md5": "b8ca1efd341f8a448d62693f4fa4d370",
+      "start_offset": 58,
+      "end_offset": 267,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C52941386_RGB+LED(内置IC)_WS2812B-MINI-V6_规格书_WS2812B-MINI-V6当_V1.1_CN.PDF",
@@ -731,9 +1396,24 @@
      ],
      "cond": [
       "最大额定值"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "最大额定值"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "d9520e50160f990e9bbb",
+      "index_md5": "b8ca1efd341f8a448d62693f4fa4d370",
+      "start_offset": 89,
+      "end_offset": 372,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "C01",
@@ -756,7 +1436,21 @@
      "wrong": [
       "VCC = 1.65 V",
       "1.2"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "VOH"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6d021e6af1adcb59c5f0",
+      "index_md5": "dfae59d4a41cfa3ba7cf52a839f233b9",
+      "start_offset": 280,
+      "end_offset": 932,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
@@ -770,9 +1464,24 @@
      "cond": [
       "IO = -32 mA",
       "VCC = 4.5 V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "VOH"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6d021e6af1adcb59c5f0",
+      "index_md5": "dfae59d4a41cfa3ba7cf52a839f233b9",
+      "start_offset": 336,
+      "end_offset": 975,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "C02",
@@ -795,7 +1504,21 @@
      "wrong": [
       "VCC= 4.5 V to 5.5 V",
       "2.9"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "tpd"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "56663f761c3daab5d44c",
+      "index_md5": "dfae59d4a41cfa3ba7cf52a839f233b9",
+      "start_offset": 572,
+      "end_offset": 811,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C52140432_反相器_74LVC1G04GW_规格书_74LVC1G04GW.PDF",
@@ -809,9 +1532,24 @@
      ],
      "cond": [
       "VCC= 4.5 V to 5.5 V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "tpd"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "56663f761c3daab5d44c",
+      "index_md5": "dfae59d4a41cfa3ba7cf52a839f233b9",
+      "start_offset": 572,
+      "end_offset": 937,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "C03",
@@ -834,7 +1572,21 @@
      "wrong": [
       "3.4V≤VOUT(T)≤5.5V",
       "120"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Vdrop"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "fbe75c8d65639ee1f3e5",
+      "index_md5": "cdfcf1c7525e060894dd62e1f4220175",
+      "start_offset": 321,
+      "end_offset": 560,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "XC6206_LDO_规格书(UMW).pdf",
@@ -848,9 +1600,24 @@
      ],
      "cond": [
       "3.4V≤VOUT(T)≤5.5V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Vdrop"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "fbe75c8d65639ee1f3e5",
+      "index_md5": "cdfcf1c7525e060894dd62e1f4220175",
+      "start_offset": 321,
+      "end_offset": 584,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "C04",
@@ -872,7 +1639,21 @@
      "wrong": [
       "1117-1.8",
       "7.2"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Load"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6a9fc4674101ffe087c2",
+      "index_md5": "43494e82d35cee130065fb75f612f2bf",
+      "start_offset": 182,
+      "end_offset": 1045,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C20628883_线性稳压器(LDO)_AMS1117-3.3_规格书_WJ1795144.PDF",
@@ -885,9 +1666,24 @@
      "cond": [
       "Load",
       "10mA<IO<1A"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Load"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6a9fc4674101ffe087c2",
+      "index_md5": "43494e82d35cee130065fb75f612f2bf",
+      "start_offset": 182,
+      "end_offset": 1016,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "C05",
@@ -910,7 +1706,21 @@
      "wrong": [
       "Iout=1A",
       "1.5"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Vdrop"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "5ecc11e56eb0b74831a9",
+      "index_md5": "c37515677c01658d5ba48656746ed420",
+      "start_offset": 0,
+      "end_offset": 518,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C49332772_线性稳压器(LDO)_SSP1117-3.3V_规格书_WJ1734557.PDF",
@@ -924,9 +1734,24 @@
      ],
      "cond": [
       "Iout=1A"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Vdrop"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "5ecc11e56eb0b74831a9",
+      "index_md5": "c37515677c01658d5ba48656746ed420",
+      "start_offset": 0,
+      "end_offset": 528,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "C06",
@@ -949,7 +1774,21 @@
      "wrong": [
       "lout=800mA",
       "1.5"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Vdrop"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "4ab85f6681fc65225f5b",
+      "index_md5": "821e0c779910804fde35de7b44a9c268",
+      "start_offset": 0,
+      "end_offset": 332,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C18190088_线性稳压器(LDO)_AMS1117-3.3V-JSM_规格书_WJ1199429.PDF",
@@ -963,9 +1802,24 @@
      ],
      "cond": [
       "lout=800mA"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Vdrop"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "4ab85f6681fc65225f5b",
+      "index_md5": "821e0c779910804fde35de7b44a9c268",
+      "start_offset": 0,
+      "end_offset": 353,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "C07",
@@ -987,7 +1841,21 @@
      "wrong": [
       "IOUT = 10mA to 1A",
       "VOUT×0.98"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Output Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "34692ef457ab82c84c30",
+      "index_md5": "5627a2e06334f993035a780edc28090d",
+      "start_offset": 125,
+      "end_offset": 598,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C55544526_线性稳压器(LDO)_LM1117-3.3V_规格书_LM1117+SERIES_REV1.1.PDF",
@@ -1000,9 +1868,24 @@
      ],
      "cond": [
       "IOUT = 10mA to 1A"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Output Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "34692ef457ab82c84c30",
+      "index_md5": "5627a2e06334f993035a780edc28090d",
+      "start_offset": 174,
+      "end_offset": 658,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "C08",
@@ -1024,7 +1907,21 @@
      "wrong": [
       "VOUT(T)<1.8V: IOUT=60mA",
       "E-5"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dropout Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "9a7d99c7b14eb7ad2c05",
+      "index_md5": "898a95835fc10e14b9f5a4246fb4a8a8",
+      "start_offset": 66,
+      "end_offset": 447,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "XC6206_LDO_规格书(Torex).pdf",
@@ -1037,9 +1934,24 @@
      "cond": [
       "Dropout Voltage",
       "E-5"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dropout Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "9a7d99c7b14eb7ad2c05",
+      "index_md5": "898a95835fc10e14b9f5a4246fb4a8a8",
+      "start_offset": 272,
+      "end_offset": 517,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
-   ]
+   ],
+   "forbidden_variants": []
   },
   {
    "id": "D01",
@@ -1057,19 +1969,46 @@
      ],
      "cond": [
       "VIN=VOUT(T)+1V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Maximum output"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "fbe75c8d65639ee1f3e5",
+      "index_md5": "cdfcf1c7525e060894dd62e1f4220175",
+      "start_offset": 168,
+      "end_offset": 448,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "XC6206_LDO_规格书(UMW).pdf",
      "page": 1,
      "model_no": "XC6206",
      "literals": [
-      "6.0μA",
-      "250mA"
+      "6.0μA"
      ],
      "cond": [
       "static bias"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "static bias"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "97f2667877c936e0df44",
+      "index_md5": "cdfcf1c7525e060894dd62e1f4220175",
+      "start_offset": 231,
+      "end_offset": 417,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
    ],
    "forbidden_variants": [
@@ -1101,7 +2040,21 @@
      ],
      "cond": [
       "VGs=-10V,lD=-10A"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "RDS(ON)"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "e852e3a01dbe8859da77",
+      "index_md5": "68aca313c03424b02f87eb49657df158",
+      "start_offset": 247,
+      "end_offset": 475,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C5370947_场效应管(MOSFET)_AO4407_规格书_TECH+PUBLIC(台舟)场效应管(MOSFET)规格书.PDF",
@@ -1114,7 +2067,21 @@
      "cond": [
       "P-Channel",
       "VDs=-30V"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "GENERAL FEATURES"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "0938f720cd03eb288893",
+      "index_md5": "68aca313c03424b02f87eb49657df158",
+      "start_offset": 0,
+      "end_offset": 265,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
    ],
    "forbidden_variants": [
@@ -1152,7 +2119,21 @@
      ],
      "cond": [
       "peak"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "SingleSupplyRange"
+     ],
+     "review_status": "quarantined",
+     "review_note": "目标页为OCR且11ns归属上升/下降/传播延迟不明确，不能只凭同页判定。",
+     "evidence": {
+      "chunk_id": "c99944b3f857ae19da89",
+      "index_md5": "d7b34e042bc119b676c8a8ffd24307aa",
+      "start_offset": 45,
+      "end_offset": 702,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C54780947_栅极驱动芯片_TC4424AVOA713-TP_规格书_WJ1862547.PDF",
@@ -1164,7 +2145,21 @@
      ],
      "cond": [
       "VDD=4.5V"
-     ]
+     ],
+     "parameter_terms": [
+      "Rise Time"
+     ],
+     "source_policy": "exact",
+     "review_status": "quarantined",
+     "review_note": "目标页为OCR且11ns归属上升/下降/传播延迟不明确，不能只凭同页判定。",
+     "evidence": {
+      "chunk_id": "2ddeddfa4f1c1ebdc49f",
+      "index_md5": "d7b34e042bc119b676c8a8ffd24307aa",
+      "start_offset": 203,
+      "end_offset": 1116,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
    ],
    "forbidden_variants": [
@@ -1202,6 +2197,25 @@
      ],
      "cond": [
       "ORDERING INFORMATION"
+     ],
+     "source_policy": "content",
+     "parameter_terms": [
+      "ORDERING INFORMATION"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "996883476781e75803f7",
+      "index_md5": "5fe89aafe266643b5858147c79098793",
+      "start_offset": 0,
+      "end_offset": 807,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     },
+     "identity_terms": [
+      "MX25R3235FM2IH0",
+      "8-SOP (200mil)",
+      "High Peformance Mode"
      ]
     },
     {
@@ -1213,27 +2227,25 @@
      ],
      "cond": [
       "High Performance"
-     ]
+     ],
+     "source_policy": "content",
+     "parameter_terms": [
+      "High Performance"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "976f2328df507a5d55b7",
+      "index_md5": "5fe89aafe266643b5858147c79098793",
+      "start_offset": 613,
+      "end_offset": 836,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
    ],
-   "forbidden_variants": [
-    {
-     "file": "C2802824_NOR+FLASH_MX25R3235FM1IL0_规格书_WJ137634.PDF",
-     "page": 77,
-     "literals": [
-      "8-SOP (150mil)"
-     ],
-     "reason": "同系列 MX25R3235FM1IL0 的手册封装不同,命中它属于取到兄弟变体手册"
-    },
-    {
-     "file": "C2802831_NOR+FLASH_MX25R3235FZNIL0_规格书_WJ137634.PDF",
-     "page": 77,
-     "literals": [
-      "8-WSON (6x5mm)"
-     ],
-     "reason": "同系列 MX25R3235FZNIL0 的手册封装不同,命中它属于取到兄弟变体手册"
-    }
-   ]
+   "forbidden_variants": [],
+   "identity_policy": "ordering_row"
   },
   {
    "id": "D05",
@@ -1249,21 +2261,49 @@
      ],
      "cond": [
       "Low Dropout Voltage"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Low Dropout Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "4ae978dc6843ddc194b8",
+      "index_md5": "71f663f5ded4039c93bc4964839a88b1",
+      "start_offset": 385,
+      "end_offset": 581,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C347256_线性稳压器(LDO)_AMS1117-3.3S_规格书_WJ1878170.PDF",
      "page": 3,
      "model_no": "AMS1117-3.3S",
      "literals": [
-      "Absolute Maximum Ratings",
+      "Input Supply Voltage",
+      "VIN",
       "18",
-      "260",
-      "150"
+      "V"
      ],
      "cond": [
-      "Junction Temperature Range"
-     ]
+      "Absolute Maximum Ratings"
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Absolute Maximum Ratings"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "7189c8867a2a33c29824",
+      "index_md5": "71f663f5ded4039c93bc4964839a88b1",
+      "start_offset": 1,
+      "end_offset": 494,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
    ],
    "forbidden_variants": [
@@ -1303,7 +2343,21 @@
      ],
      "cond": [
       "Temperature Coefficient of"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Temperature Coefficient of"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "6d5cebda724db757cb34",
+      "index_md5": "5ff0f69c22f6956a59dea104859fc7ee",
+      "start_offset": 894,
+      "end_offset": 1130,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "QMI8658A_IMU_规格书_RevD.pdf",
@@ -1316,7 +2370,21 @@
      ],
      "cond": [
       "Host SPI Interface Speed"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Host SPI Interface Speed"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "1bd5af9777d3634289d0",
+      "index_md5": "5ff0f69c22f6956a59dea104859fc7ee",
+      "start_offset": 263,
+      "end_offset": 546,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
    ],
    "forbidden_variants": [
@@ -1346,7 +2414,21 @@
      ],
      "cond": [
       "电流限制保护"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "电流限制保护"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "dd367761af35dd575739",
+      "index_md5": "73debda82d9df00d21ad753dbe62634b",
+      "start_offset": 0,
+      "end_offset": 209,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C51038980_线性稳压器(LDO)_FS1117-3.3_规格书_FS1117.PDF",
@@ -1359,7 +2441,21 @@
      ],
      "cond": [
       "Dimension"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Dimension"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "42f502f01f761017a760",
+      "index_md5": "73debda82d9df00d21ad753dbe62634b",
+      "start_offset": 0,
+      "end_offset": 212,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
    ],
    "forbidden_variants": [
@@ -1390,7 +2486,21 @@
      ],
      "cond": [
       "Ordering Information"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Ordering Information"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "de8b1bbf4f7f3887e808",
+      "index_md5": "3c0967183f2dcaf94f81ea36a37b6439",
+      "start_offset": 472,
+      "end_offset": 1173,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     },
     {
      "file": "C19829589_反相器_74LVC1G04GV_规格书_WJ1055833.PDF",
@@ -1403,7 +2513,21 @@
      ],
      "cond": [
       "Supply Voltage"
-     ]
+     ],
+     "source_policy": "exact",
+     "parameter_terms": [
+      "Supply Voltage"
+     ],
+     "review_status": "reviewed",
+     "review_note": "按参数名称、数值、条件的索引上下文审校；证据锚点供复核。",
+     "evidence": {
+      "chunk_id": "73996ba0a6654c6c11c4",
+      "index_md5": "3c0967183f2dcaf94f81ea36a37b6439",
+      "start_offset": 0,
+      "end_offset": 232,
+      "offset_basis": "indexed_chunk",
+      "review_basis": "indexed_parameter_context"
+     }
     }
    ],
    "forbidden_variants": [
