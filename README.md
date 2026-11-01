@@ -41,6 +41,7 @@ uv run run_backend.py       # http://127.0.0.1:8100
 | 调用 MCP / REST、理解游标和错误 | [MCP/Agent 协议](docs/MCP-PROTOCOL.md) · [HTTP API 参考](docs/HTTP-API.md) |
 | 修改检索、索引或存储 | [架构设计](docs/ARCHITECTURE.md) · [向量分区](docs/VECTOR-PARTITION.md) |
 | 对比检索质量、查阅历史实验 | [评测与实验记录](docs/BENCHMARKS.md) |
+| 选择离线验证或维护脚本 | [工具入口与执行边界](tools/README.md) |
 | 接入 pi 编码 agent | [pi 扩展](clients/pi/pdf-rag-pi/README.md) |
 | 核对许可证 | [第三方声明](THIRD-PARTY.md) |
 
@@ -83,6 +84,7 @@ server.py              MCP 工具适配
 web/                   Vue 3 + TypeScript + Vite 前端
 clients/pi/            pi 原生扩展示例
 tests/                 离线关键路径测试
+tools/                 离线验证和维护工具（先读 tools/README.md 区分读写边界）
 docs/                  设计、接口、配置、运维和实验文档
 ```
 

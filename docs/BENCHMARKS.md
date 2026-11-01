@@ -658,6 +658,17 @@ full/无详情compact均57次调用，响应297572/248101字节、累计输入�
 实际模型token/答案正确率仍未验证。按需增量详情可能更合适，但本节不把尚未实现的收益记为结果。
 完整方法与门槛见[证据效率验证 §7](EVIDENCE-EFFICIENCY-VALIDATION.md#7-正式协议与按需详情成本补测)。
 
+### 4.18 阶段收尾与仓库整理（2026-11-01）
+
+按用户要求，本阶段停止在离线验证与已准备的回答模型对照输入，不执行额外LLM测试。
+§4.10–§4.17的正负结果原样保留；不将真实答案准确率或实际token节省标成已验证。
+研究原型不接入生产API，实体桥继续默认关闭。没有新增模型请求、索引、部署或推送。
+
+[工具入口](../tools/README.md)区分只读/默认可能联网/输入准备/写索引维护，
+[证据效率报告](EVIDENCE-EFFICIENCY-VALIDATION.md)保留完整结果，
+[回答模型规范](EVIDENCE-ANSWER-TRIAL.md)保留未执行测试的冻结规则。
+历史提交不压缩或改写；手册、索引、运行配置、唯一备份和本地原始实验产物不删除、不入库。
+
 ## 5. 安全与路径实测
 
 - **路径穿越**:`/api/pdf`、`/api/v2/page`、MCP 读页、强制重索引入口均经 `resolve_under()`
@@ -690,6 +701,9 @@ full/无详情compact均57次调用，响应297572/248101字节、累计输入�
 |---|---|
 | `eval_retrieval.py` | 55 条评测主入口(`--json` 导出对比,`--mode`/`--no-rerank` 隔离通道,`--legacy-snippet` 消融) |
 | `tools/eval_relations.py` | 关系证据审校集 v2（27有效/5隔离）；`--validate-only` 核对锚点，`--dataset` 选择历史 v1，默认断网 FTS（见 §4.10） |
+| `tools/eval_evidence_efficiency.py` | 冻结20题的来源/行绑定/补查/紧凑输出验证；强制断网，只读现有索引（§4.16） |
+| `tools/eval_evidence_protocol_cost.py` | 正式序列化、分页及按需详情成本情境；索引Reader替身，不是实际模型token计数（§4.17） |
+| `tools/prepare_evidence_answer_trial.py` | 只在新目录生成4题×两组未发送输入；没有模型调用入口，真实测试未执行 |
 | `tools/mine_eval3.py` → `tools/curate_eval.py` | 从索引挖掘候选用例 → 过滤/配平/合并手写用例并重校验,重新生成 `eval_queries.json` |
 | `tools/reembed_index.py` | 换嵌入模型时只重算向量(省掉 80 分钟提取),写影子索引 |
 | `tools/audit_extract.py` / `audit_ocr.py` | 提取与 OCR 质量体检 |

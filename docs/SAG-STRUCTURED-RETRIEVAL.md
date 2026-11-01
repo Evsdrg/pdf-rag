@@ -203,6 +203,11 @@ uv run --frozen python tools/bench_logic.py --structured-only --json /tmp/bench-
 证据对齐以及明确表头的同行条件事实；不是 SAG 全量引擎或持久化条件事实数据库。
 全库 LLM event 抽取、自动条件筛选、生产部署和默认开启仍在范围外。
 
+后续证据效率研究已按离线阶段收尾：来源/条件绑定、定向补查与紧凑输出仅在隔离原型中验证，
+没有接入现有API。额外回答模型测试未执行，保留输入和未验证门槛，不因收尾宣称真实准确率或
+实际token节省通过。详见[证据效率报告](EVIDENCE-EFFICIENCY-VALIDATION.md)，执行边界见
+[工具导航](../tools/README.md)。
+
 ## 8. 交付核对（2026-11-01）
 
 | 推荐项 | 实现产物 | 直接验证 |
