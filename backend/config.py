@@ -183,7 +183,7 @@ _SPECS = [
 
     # ---- 排序 ----
     Spec("penalty_cover", "封面惩罚系数", "float", 0.90, "排序",
-         "文档首页(封面)的排序惩罚系数,1.0 表示不惩罚", "PENALTY_COVER", 0.1, 1.0),
+         "有封面内容特征且无参数证据/强相关性的首页才惩罚,1.0 表示不惩罚", "PENALTY_COVER", 0.1, 1.0),
     Spec("penalty_toc_rev", "目录页惩罚系数", "float", 0.75, "排序",
          "目录/修订史页的排序惩罚系数", "PENALTY_TOC_REV", 0.1, 1.0),
     Spec("block_sim_threshold", "旧同文档阈值（已停用）", "float", 0.4, "排序",

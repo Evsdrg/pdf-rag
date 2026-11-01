@@ -49,13 +49,21 @@ class RerankOrderTest(unittest.TestCase):
         self.assertEqual([k for k, _ in picked], [("a.pdf", 1), ("a.pdf", 0), ("a.pdf", 2)])
         self.assertEqual(scores[("a.pdf", 1)], 0.9)
 
-    def test_cover_penalty_downweights_page1(self):
+    def test_only_content_confirmed_cover_is_downweighted(self):
         cands = [(("a.pdf", 0), 0.03), (("a.pdf", 1), 0.02)]
+        rows = self._rows()
+        rows[("a.pdf", 0)]["text"] = "ABC123 Datasheet"
         with override_config(penalty_cover=0.1):
-            with mock.patch.object(retrieval, "_call_reranker", return_value=[0.9, 0.5]):
-                picked, _ = retrieval._rerank_and_order(cands, self._rows(), "q")
-        # 封面页 0.9×0.1=0.09 < 0.5 → 排到普通页之后
+            with mock.patch.object(retrieval, "_call_reranker", return_value=[0.8, 0.5]):
+                picked, _ = retrieval._rerank_and_order(cands, rows, "q")
         self.assertEqual(picked[0][0], ("a.pdf", 1))
+
+    def test_first_page_parameters_and_strong_model_score_are_not_penalized(self):
+        with override_config(penalty_cover=0.1, penalty_toc_rev=0.1):
+            self.assertEqual(retrieval._role_penalty({"page": 0, "text": "Supply current 6.0µA static bias"}), 1)
+            self.assertEqual(retrieval._role_penalty({"page": 0, "text": "ABC123 Datasheet"}, relevance=0.97), 1)
+            self.assertEqual(retrieval._role_penalty({"page": 0, "text": "ordinary first page"}), 1)
+            self.assertEqual(retrieval._role_penalty({"page": 2, "text": "Table of contents"}), 0.1)
 
     def test_tie_break_prefers_model_match(self):
         rows = {("gv.pdf", 2): {"file": "X_74LVC1G04GV_规格书.PDF", "page": 2, "model_no": "74LVC1G04GV", "text": "t"},

@@ -49,11 +49,31 @@ class EvidenceTest(unittest.TestCase):
         self.assertIsNone(evidence._table_header(separate, separate.index("| detached")))
 
     def test_two_windows_share_existing_text_budget(self):
-        chunks = [row("a", "voltage 3.3 V\n" * 100), row("b", "current 2 mA\n" * 100)]
+        chunks = [row("a", "voltage 3.3 V\n" * 3), row("b", "current 2 mA\n" * 3)]
         with override_config(snippet_width=200):
             bundle = evidence.select(chunks, "voltage current")
         self.assertLessEqual(len(bundle["text"]), 200)
         self.assertEqual(len(bundle["references"]), 2)
+
+    def test_main_conditions_are_not_cut_to_make_room_for_redundant_window(self):
+        text = "Output voltage 3.3 V " + "condition IO=10mA " * 8 + "limit 18 mV\n"
+        chunks = [row("main", text), row("duplicate", "| Output voltage | 3.3 V |")]
+        with override_config(snippet_width=220):
+            bundle = evidence.select(chunks, "output voltage")
+        self.assertEqual(len(bundle["references"]), 1)
+        self.assertIn("limit 18 mV", bundle["text"])
+        self.assertIn("IO=10mA", bundle["text"])
+
+    def test_separate_condition_paragraph_is_not_removed_by_query_matching(self):
+        text = "Supply voltage 3.3 V\n\nValid only under mode=low\n"
+        bundle = evidence.select([row("main", text), row("blank", " \n")], "supply voltage")
+        self.assertIn("Valid only under mode=low", bundle["text"])
+        for reference in bundle["references"]:
+            self.assertLess(reference["start_offset"], reference["end_offset"])
+
+    def test_secondary_window_requires_new_query_evidence(self):
+        chunks = [row("a", "Supply voltage 3.3 V"), row("b", "| Supply voltage | 3.3 V |")]
+        self.assertEqual(len(evidence.select(chunks, "supply voltage")["references"]), 1)
 
     def test_structured_facts_keep_row_conditions_and_index_references(self):
         text = ("| Parameter | Symbol | Conditions | Unit | Value |\n|---|---|---|---|---|\n"

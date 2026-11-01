@@ -45,7 +45,8 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 
 搜索的 `snippet` 使用经过保守展示处理的窗口，并提供 `snippet_ref`：`chunk_id/index_md5/start_offset/end_offset/offset_basis/truncated_before/truncated_after/table_header/warnings`。偏移基于索引块，不是实时读页或图像坐标。展示可有限扩展到行边界、移除无意义控制字符，但不会猜测修复单位、公式、乱码；默认检索送重排器的窗口不因此改变。
 
-`structured=true` 时同页可选最多两个去重证据窗口，共享原有 `snippet_width` 总正文预算。
+`structured=true` 时主证据优先使用完整 `snippet_width` 预算，尽量贴齐完整行；只有余量足够
+且副窗新增查询证据时才加入第二窗，不均分预算、不为副窗截掉主证据条件。
 `evidence_refs[]` 分别提供每个窗口的块偏移及组合片段内的 `snippet_start/snippet_end`；
 `snippet_ref` 保留第一窗引用用于旧调用方，不能用它解释整个多窗片段。连续 Markdown 表头
 可加入窗口预算，不继承已经结束的表格。开启 `rerank_on_window` 时重排正文与最终 `snippet`

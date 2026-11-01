@@ -321,12 +321,21 @@ def snippet_reference(chunks: list[dict], query: str, width: int = 0) -> dict:
 
 # ==================== 页面角色 ====================
 
-def _role_penalty(row: dict) -> float:
-    """封面/目录/修订史页的排序惩罚。这类页关键词密度高,天然占优。"""
-    if int(row["page"]) == 0:
-        return config.get("penalty_cover")
-    if _TOC_REV_RE.search(row["text"][:config.get("toc_scan_chars")]):
+def _role_penalty(row: dict, query: str = "", relevance: float | None = None,
+                  evidence_text: str = "") -> float:
+    """只惩罚有内容依据的封面/目录;技术证据与强模型相关性不因首页页号受罚。"""
+    text = evidence_text or row["text"]
+    keys = query_lex.extract_entities(text)
+    technical = query_lex.VALUE_RE.search(text) and any(
+        key.startswith(("parameter:", "symbol:")) for key in keys)
+    if technical or (relevance is not None and relevance >= 0.9):
+        return 1.0
+    head = text[:config.get("toc_scan_chars")]
+    if _TOC_REV_RE.search(head):
         return config.get("penalty_toc_rev")
+    if int(row["page"]) == 0 and re.search(
+            r"\b(?:data\s*sheet|user\s+manual|product\s+specification)\b|数据手册|规格书|用户手册", head, re.I):
+        return config.get("penalty_cover")
     return 1.0
 
 
@@ -742,15 +751,17 @@ def _rerank_and_order(cands, rows_by_key: dict, query: str, evidence_by_key: dic
     docs = _rerank_docs(cands, rows_by_key, query, evidence_by_key)
     rel = _call_reranker(query, docs)
     scores = {cands[i][0]: float(rel[i]) for i in range(len(cands))}
-    order = sorted(range(len(cands)),
-                   key=lambda i: -(rel[i] * _role_penalty(rows_by_key[cands[i][0]])))
+    adjusted = [rel[i] * _role_penalty(rows_by_key[key], query, rel[i],
+                    evidence_by_key[key]["text"] if evidence_by_key is not None else "")
+                for i, (key, _) in enumerate(cands)]
+    order = sorted(range(len(cands)), key=lambda i: -adjusted[i])
     tol = float(config.get("rerank_tie_tolerance"))
     if tol > 0 and len(order) > 1:
         models = {tk.lower() for tk in _model_tokens(query)}
         if models:
             match = {cands[i][0]: _model_identity_match(rows_by_key[cands[i][0]], models)
                      for i in range(len(cands))}
-            adj = [rel[i] * _role_penalty(rows_by_key[cands[i][0]]) for i in range(len(cands))]
+            adj = adjusted
             for j in range(len(order) - 1):
                 a, b = order[j], order[j + 1]
                 if (abs(adj[a] - adj[b]) <= tol and match[cands[b][0]] > match[cands[a][0]]):

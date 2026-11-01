@@ -1,10 +1,11 @@
-"""结构化检索共用的有界证据窗口;不改变默认片段算法。"""
+"""结构化检索共用的有界证据窗口;优先保全主证据,副窗须有查询信息增益。"""
 import re
 
-from . import config
+from . import config, query_lex
 
 MAX_WINDOWS = 2
 MAX_HEADER_CHARS = 500
+_CONTROLS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 def _table_header(text: str, start: int) -> str | None:
@@ -16,62 +17,108 @@ def _table_header(text: str, start: int) -> str | None:
             return None
         if re.fullmatch(r"\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?", line):
             header = lines[i - 1] + lines[i]
-            if not lines[i - 1].lstrip().startswith("|") or re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", header):
+            if not lines[i - 1].lstrip().startswith("|") or _CONTROLS.search(header):
                 return None
             return header.rstrip() if len(header) <= MAX_HEADER_CHARS else None
     return None
+
+
+def _coverage(text: str, query: str) -> set[str]:
+    terms, _ = query_lex.query_terms(query)
+    low = text.casefold()
+    literal = {"term:" + term.casefold() for term in terms if term.casefold() in low}
+    query_keys = {key for key in query_lex.extract_entities(query, query=True) if not key.startswith("model:")}
+    return literal | query_keys.intersection(query_lex.extract_entities(text))
+
+
+def _window(row: dict, query: str, width: int) -> tuple[int, int]:
+    """在预算内选完整行;超长单行才保留显式截断,不为第二窗重定位主证据。"""
+    from . import retrieval
+    text = row["text"]
+    if len(text) <= width:
+        return 0, len(text)
+    terms, models = retrieval._query_terms(query)
+    best, score = (0, min(width, len(text))), -1.0
+    starts = retrieval._window_starts(len(text), width)
+    for offset in starts:
+        before = text.rfind("\n", max(0, offset - 120), offset)
+        start = before + 1 if before >= 0 else offset
+        end = min(len(text), start + width)
+        if end < len(text) and text[end - 1:end] != "\n":
+            boundary = text.rfind("\n", start, end)
+            if boundary > start:
+                end = boundary + 1
+        candidate_score = retrieval._score_window(text[start:end], terms, models)
+        if candidate_score > score:
+            best, score = (start, end), candidate_score
+    return best
+
+
+def _compact(row: dict, start: int, end: int, query: str) -> tuple[int, int]:
+    """只去首尾空白;条件可能另起段,不能按关键词裁掉“无关”段落。"""
+    text = row["text"][start:end]
+    return start + len(text) - len(text.lstrip()), end - len(text) + len(text.rstrip())
+
+
+def _piece(row: dict, start: int, end: int, width: int) -> tuple[str, dict]:
+    raw = row["text"]
+    text = _CONTROLS.sub("", raw[start:end])
+    header = _table_header(raw, start)
+    prefix = header + "\n" if header and len(header) + 1 + len(text) <= width else ""
+    reference = {"chunk_id": row.get("uid"), "index_md5": row.get("md5"),
+                 "start_offset": start, "end_offset": end, "offset_basis": "indexed_chunk",
+                 "truncated_before": start > 0, "truncated_after": end < len(raw),
+                 "table_header": header if prefix else None,
+                 "warnings": ([{"code": "TEXT_CONTROLS_REMOVED", "message": "展示已移除控制字符,未修复原文"}]
+                              if text != raw[start:end] else [])}
+    return prefix + text, reference
 
 
 def select(chunks: list[dict], query: str) -> dict:
     from . import retrieval
 
     width = int(config.get("snippet_width"))
-    candidates, seen = [], set()
     terms, models = retrieval._query_terms(query)
+    candidates, seen = [], set()
     for row in chunks:
-        uid = row.get("uid")
-        if uid in seen:
+        identity = row.get("uid") or (row.get("file"), row.get("page"), row["text"])
+        if identity in seen or not row["text"].strip():
             continue
-        seen.add(uid)
-        reference = retrieval.snippet_reference([row], query, width)
-        if not reference:
-            continue
-        text = reference.pop("text")
-        score = retrieval._score_window(text, terms, models)
-        reference["table_header"] = _table_header(row["text"], reference["start_offset"])
-        candidates.append((score, row, text, reference))
+        seen.add(identity)
+        start, end = _window(row, query, width)
+        text = row["text"][start:end]
+        candidates.append((retrieval._score_window(text, terms, models), row, start, end))
     candidates.sort(key=lambda item: -item[0])
-    selected, normalized = [], set()
-    for score, row, text, reference in candidates:
-        signature = re.sub(r"\s+", " ", text).strip()
-        if signature in normalized or (selected and score <= 0):
-            continue
-        normalized.add(signature)
-        selected.append((row, text, reference))
-        if len(selected) >= MAX_WINDOWS:
-            break
+    if not candidates:
+        return {"text": "", "references": []}
+
+    _, main, start, end = candidates[0]
+    # 主窗可用全部预算;只去首尾空白,有余量才考虑互补证据。
+    compact_start, compact_end = _compact(main, start, end, query)
+    main_text, main_ref = _piece(main, compact_start, compact_end, width)
+    selected = [(main_text, main_ref)]
+    covered = _coverage(main_text, query)
+    remaining = width - len(main_text) - 2
+    best_secondary, best_gain = None, (0, 0.0)
+    if remaining > 0:
+        for score, row, candidate_start, candidate_end in candidates[1:]:
+            lo, hi = _compact(row, candidate_start, candidate_end, query)
+            # 不能为塞入副窗硬切连续条件/参数行;放不下就保留单个完整主窗。
+            if hi - lo > remaining:
+                continue
+            text, reference = _piece(row, lo, hi, remaining)
+            gain = _coverage(text, query) - covered
+            priority = (len(gain), score)
+            if gain and priority > best_gain:
+                best_secondary, best_gain = (text, reference), priority
+    if best_secondary and MAX_WINDOWS > 1:
+        selected.append(best_secondary)
     pieces, references, length = [], [], 0
-    # 两个窗口共享原有 snippet_width,不把重排正文预算翻倍。
-    budget = max(1, (width - 2 * max(0, len(selected) - 1)) // max(1, len(selected)))
-    for row, _, _ in selected:
-        reference = retrieval.snippet_reference([row], query, budget)
-        reference.pop("text", None)
-        start = reference["start_offset"]
-        header = _table_header(row["text"], start)
-        if header and len(header) > budget // 3:
-            header = None
-        reference["table_header"] = header
-        prefix = header + "\n" if header else ""
-        end = min(reference["end_offset"], start + budget - len(prefix))
-        reference["end_offset"] = end
-        reference["truncated_after"] = end < len(row["text"])
-        text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", row["text"][start:end])
-        piece = prefix + text
+    for text, reference in selected:
         if pieces:
             length += 2
-        reference["snippet_start"] = length
-        reference["snippet_end"] = length + len(piece)
-        pieces.append(piece)
+        reference.update(snippet_start=length, snippet_end=length + len(text))
+        pieces.append(text)
         references.append(reference)
-        length += len(piece)
+        length += len(text)
     return {"text": "\n\n".join(pieces), "references": references}
