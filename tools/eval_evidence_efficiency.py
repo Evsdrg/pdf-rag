@@ -36,6 +36,30 @@ def validate(data, rows):
             assert contains(row["text"][target["start_offset"]:target["end_offset"]], target["required"])
 
 
+def binding_valid(binding, need, rows):
+    """评分复核独立回到引用的表头与原行,不以原型给出的状态自证正确。"""
+    by_uid = {row["uid"]: row for row in rows}
+    ref = binding["source"]
+    row = by_uid.get(ref.get("chunk_id"))
+    if not row or row["md5"] != ref.get("index_md5") or row["file"] != ref.get("file"):
+        return False
+    if row["page"] + 1 != ref.get("page"):
+        return False
+    raw = row["text"][ref["start_offset"]:ref["end_offset"]]
+    header = row["text"][ref["header_start_offset"]:ref["header_end_offset"]].splitlines()[0]
+    cells = [cell.strip() for cell in raw.strip().strip("|").split("|")]
+    labels = [cell.strip().casefold().rstrip(".") for cell in header.strip().strip("|").split("|")]
+    if len(cells) != len(labels) or need.get("role") not in labels:
+        return False
+    value = cells[labels.index(need["role"]) ]
+    condition_key = next((i for i, label in enumerate(labels) if label in ("condition", "conditions", "test conditions")), None)
+    condition = cells[condition_key] if condition_key is not None else ""
+    normalize = lambda text: re.sub(r"[\s_]+", "", text).replace("µ", "u").replace("μ", "u")
+    return (normalize(need["parameter"]).casefold() in {normalize(cell).casefold() for cell in cells}
+            and binding["values"].get(need["role"]) == value
+            and (not need.get("condition") or normalize(condition) == normalize(need["condition"])))
+
+
 def evaluate(data, table, rows, variant="baseline"):
     records = []
     by_page = {}
@@ -70,6 +94,10 @@ def evaluate(data, table, rows, variant="baseline"):
             "wrong_source_hits": (sum(hit["file"] not in {target["file"] for target in q["targets"]}
                                       for hit in hits) if q["id"].startswith("S") and q["targets"] else None),
             "bindings": result.get("bindings", []), "missing": result.get("missing", []),
+            "binding_count": len(result.get("bindings", [])),
+            "invalid_bindings": sum(not binding_valid(item, q["needs"][item["need"]], rows)
+                                    for item in result.get("bindings", [])),
+            "negative_bindings": len(result.get("bindings", [])) if q["negative"] else 0,
             "calls": len(turns), "response_bytes": sum(m["bytes"] for m in measurements),
             "response_chars": sum(m["chars"] for m in measurements),
             "lexical_units_proxy": sum(m["lexical_units_proxy"] for m in measurements),
@@ -86,6 +114,9 @@ def evaluate(data, table, rows, variant="baseline"):
         "response_bytes": sum(r["response_bytes"] for r in records),
         "cumulative_input_bytes_proxy": sum(r["cumulative_input_bytes_proxy"] for r in records),
         "tool_calls": sum(r["calls"] for r in records),
+        "binding_count": sum(r["binding_count"] for r in records),
+        "invalid_bindings": sum(r["invalid_bindings"] for r in records),
+        "negative_bindings": sum(r["negative_bindings"] for r in records),
         "token_metric": "unavailable: no target-model tokenizer; bytes/chars/lexical units only"}
     return {"summary": summary, "records": records}
 

@@ -2,9 +2,57 @@
 import re
 from dataclasses import dataclass
 
-from . import library, retrieval
+from . import library, retrieval, table_facts
 
 MAX_SOURCE_FILES = 4
+MAX_NEEDS = 8
+MAX_PAGE_BLOCKS = 64
+
+
+def _condition_literal(text: str) -> str:
+    # 只宽容空白/下标分隔,保留SI大小写,不换算、不按子串匹配条件。
+    return re.sub(r"[\s_]+", "", text).replace("µ", "u").replace("μ", "u")
+
+
+def bind_rows(rows: list[dict], needs) -> tuple[list[dict], list[int]]:
+    """只绑定同一显式行的参数/角色/完整字面条件;缺失项留给回读而非猜测。"""
+    bindings, missing = [], []
+    for index, need in enumerate(needs[:MAX_NEEDS]):
+        candidates = []
+        for row in rows:
+            # query用于让已存在提取器保留该参数,不改其每块cap4及保守空白格规则。
+            for fact in table_facts.extract(row, query=need["parameter"], max_facts=4):
+                names = {_literal(fact["parameter"]), _literal(fact["symbol"] or "")}
+                if _literal(need["parameter"]) not in names:
+                    continue
+                if need.get("role") and need["role"] not in fact["values"]:
+                    continue
+                if need.get("condition") and _condition_literal(need["condition"]) != _condition_literal(fact["conditions"]):
+                    continue
+                source = dict(fact["source"], file=row["file"], page=row["page"] + 1)
+                # 绑定只说明行字面正确,不宣称表外条件或脚注已经解决。
+                candidates.append({"need": index, **fact, "source": source,
+                    "verification": "literal_row_only", "context_status": "requires_page_context"})
+        identities = {(item["parameter"], item["symbol"], item["conditions"], item["unit"],
+                       tuple(sorted(item["values"].items()))) for item in candidates}
+        if len(identities) == 1:
+            bindings.append(candidates[0])
+        else:
+            missing.append(index)
+    return bindings, missing
+
+
+def _hit_rows(table, hits: list[dict]) -> list[dict]:
+    rows = []
+    for hit in hits:
+        file = hit["file"].replace("'", "''")
+        found = table.search().where(f"file = '{file}' AND page = {int(hit['page']) - 1}").select(
+            ["uid", "file", "page", "text", "md5", "model_no"]
+        ).limit(MAX_PAGE_BLOCKS + 1).to_list()
+        if len(found) > MAX_PAGE_BLOCKS:
+            continue
+        rows.extend(found)
+    return list({row["uid"]: row for row in rows}.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +104,8 @@ def select_sources(table, model: str, source_terms=(), revision: str = "") -> So
 
 def run(table, query: str, *, model: str, source_terms=(), revision: str = "", needs=(),
         refill: bool = False, compact: bool = False, bind: bool = True) -> dict:
+    if len(needs) > MAX_NEEDS:
+        raise ValueError("证据需求超过原型预算")
     selected = select_sources(table, model, source_terms, revision)
     source = {"status": selected.status, "files": list(selected.files),
               "candidates": list(selected.candidates), "reason": selected.reason}
@@ -66,6 +116,8 @@ def run(table, query: str, *, model: str, source_terms=(), revision: str = "", n
     diag = {}
     hits = retrieval.search(table, query, file=selected.files[0], top_k=5,
                             mode="fts", rerank=False, structured=True, diagnostics=diag)
-    result = {"status": "retrieved", "source": source, "results": hits, "bindings": [],
-              "missing": list(range(len(needs))), "degraded": diag.get("degraded", [])}
+    bindings, missing = bind_rows(_hit_rows(table, hits), needs) if bind else ([], list(range(len(needs))))
+    result = {"status": "row_evidence" if bindings else "retrieved", "source": source,
+              "results": hits, "bindings": bindings, "missing": missing,
+              "degraded": diag.get("degraded", [])}
     return {**result, "_turns": [dict(result)]}
