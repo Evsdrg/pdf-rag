@@ -31,7 +31,11 @@ if config.MCP_INPROC:
     try:
         sys.path.insert(0, str(ROOT.parent))
         from server import mcp as _mcp          # noqa: E402
-        _mcp_subapp = _mcp.http_app(path="/")
+        # stateless_http:十个工具都不接收 Context,不用 sampling/elicit/进度/订阅,
+        # 分页游标本身也是 HMAC 自包含的(见 agent_paging)。有状态会话不承载任何
+        # 业务语义,只会让进程重启后客户端拿着旧 Mcp-Session-Id 收到 "Session not found"。
+        # 关掉后每个 POST 自包含,重启/重连/多副本都不需要重新 initialize。
+        _mcp_subapp = _mcp.http_app(path="/", stateless_http=True)
     except Exception as _e:                     # 内嵌失败不应拖垮后端
         print(f"[warn] MCP 内嵌失败,将以纯 API 模式运行: {_e}", file=sys.stderr)
 

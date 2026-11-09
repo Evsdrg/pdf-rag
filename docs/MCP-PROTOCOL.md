@@ -108,8 +108,27 @@ MCP 与 `/api/v2/*` 共用领域入口，参数名基本相同；`render.clip` �
 
 Web 与 pi 使用同一结构，不猜测旧数组响应。pi 安装与工具说明见[客户端文档](../clients/pi/pdf-rag-pi/README.md)。
 
+### 传输无状态与会话
+
+MCP 的 Streamable HTTP 传输按 **无状态**（`stateless_http=True`）运行，内嵌模式与独立
+`server.py` 两种形态一致。服务端不分配、也不校验 `Mcp-Session-Id`，每个请求自包含。
+
+这样选的依据是代码事实：十个工具都不接收 FastMCP 的 `Context`，不使用 sampling、
+elicitation、进度通知、资源订阅或服务端主动推送；续读游标本身是带 HMAC 签名的
+自包含结构（见 `backend/agent_paging.py`），跨请求不需要服务端记忆。会话不承载任何业务语义。
+
+此前的有状态模式只在进程内存里保存会话，容器重启或空闲超时后，客户端继续使用旧的
+`Mcp-Session-Id` 会收到 `404` + `{"code":-32600,"message":"Session not found"}`。
+改为无状态后，重启、重连和多副本都不再需要重新 `initialize`。
+
+代价是服务端无法再主动联系客户端，即 sampling、elicitation、进度与订阅不可用。
+本服务不提供这些能力，因此无功能损失；若将来要加，需同时改回有状态并重新评估部署形态。
+
+客户端地址应写成带尾斜杠的 `/mcp/`。请求 `/mcp` 会收到 `307` 重定向到 `/mcp/`，
+不跟随重定向的客户端会失败。
+
 ## 7. 离线验收
 
-`tests/test_agent_protocol.py`、`test_agent_paging.py`、`test_agent_search.py`、`test_snippet.py` 覆盖 MCP 载荷、续读、版本失效、章节、OCR 回退、页图、空召回和来源偏移。夹具为临时文档，模型为确定性替身；协议测试禁网络连接。pi 扩展的适配测试在 `clients/pi/pdf-rag-pi/tests/`。
+`tests/test_agent_protocol.py`、`test_agent_paging.py`、`test_agent_search.py`、`test_snippet.py` 覆盖 MCP 载荷、续读、版本失效、章节、OCR 回退、页图、空召回和来源偏移。`tests/test_mcp_stateless.py` 直接打 ASGI 传输层，断言不返回 `Mcp-Session-Id`、重复 `initialize` 均成功、携带任意旧 session id 仍返回 200（有状态模式下该用例会得到 `-32600 Session not found`），并保持 10 个工具与 `structured` 默认 false 的契约。夹具为临时文档，模型为确定性替身；协议测试禁网络连接。pi 扩展的适配测试在 `clients/pi/pdf-rag-pi/tests/`。
 
 这些测试不等于新的端到端检索质量分数。真实语料排序质量仍以 [BENCHMARKS.md](BENCHMARKS.md) 的评测方法为准，不以协议测试宣称准确率提升。

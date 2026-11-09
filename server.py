@@ -143,7 +143,11 @@ if __name__ == "__main__":
     transport = os.getenv("MCP_TRANSPORT", "stdio")
     kwargs = {}
     if transport != "stdio":
+        # 与 backend/main.py 的内嵌模式保持一致:工具不使用会话能力(无 Context、
+        # 无 sampling/elicit/进度/订阅,游标自带签名),有状态只会让重启后客户端
+        # 带着旧 Mcp-Session-Id 收到 "Session not found"。两种部署形态不能行为不一致。
         kwargs = dict(host=os.getenv("MCP_HOST", "0.0.0.0"),
                       port=int(os.getenv("MCP_PORT", "8101")),
-                      path=os.getenv("MCP_PATH", "/mcp"))
+                      path=os.getenv("MCP_PATH", "/mcp"),
+                      stateless_http=True)
     mcp.run(transport=transport, **kwargs)

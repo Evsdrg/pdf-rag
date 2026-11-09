@@ -47,7 +47,9 @@ Web / MCP / REST 三种入口对外提供**同一套**能力。
 2. **MCP 与 HTTP 共用 `agent_api.py`，不各自实现**。底层复用 `library`、文档读取器
    和检索核心。Web、pi 统一使用 `/api/v2/*`，旧查询/读取路由已删除；协议与输出预算见
    [MCP-PROTOCOL.md](MCP-PROTOCOL.md)。
-   `MCP_INPROC=1`（默认）时连接与表句柄仍共享同一份单例。
+   `MCP_INPROC=1`（默认）时连接与表句柄仍共享同一份单例。MCP 的 HTTP 传输按无状态
+   运行（`stateless_http=True`，内嵌与独立进程一致）：工具不使用会话能力，续读游标
+   自带签名，服务端不需要记住客户端；详见 [MCP-PROTOCOL.md](MCP-PROTOCOL.md)。
 3. **`vecstore` 依赖 `library`，不反向**。表名列表这类薄工具放在 `library`，
    因为 `vecstore` 已经用它的 `scan_arrow`，反向导入会成环。
 
