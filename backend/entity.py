@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import math
+import os
+import pickle
 import threading
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from pathlib import Path
 
 MAX_QUERY_ENTITIES = 16
 MAX_ROW_ENTITIES = 48
@@ -16,9 +19,11 @@ MAX_SEED_INPUTS = 256
 MAX_POSTING = 256
 MAX_QUERY_CANDIDATES = 4096
 MAX_NEIGHBORS = 64
-MAX_INDEX_ROWS = 50_000
-MAX_INDEX_BYTES = 128_000_000
-MAX_INDEX_LINKS = 1_000_000
+# 索引本体实测约 1.3KB/块(8561 块 = 11MB,不含构建期 Arrow 临时量),20 万行约 260MB。
+# 旧值 5 万行在 660 个同规模手册就会撞墙,与"1000+ 手册"的目标不符。
+MAX_INDEX_ROWS = 200_000
+MAX_INDEX_BYTES = 512_000_000
+MAX_INDEX_LINKS = 4_000_000
 
 from .query_lex import evidence_slots, extract_entities
 
@@ -67,6 +72,103 @@ class EntitySearch:
 _CACHE: tuple[object, int, EntityIndex] | None = None
 _LIMIT_FAILURE: tuple[object, int, str] | None = None
 _LOCK = threading.Lock()
+
+# 持久化快照。构建一次实体索引在真实规模上要数秒到数十秒(8561 块约 2s,
+# 25k 块约 7.7s,1000 手册量级约 23s),而同一份快照反序列化只要十几毫秒。
+# 文件名绑定表版本:版本不符一律重建,绝不复用可能陈旧的数据。
+_CACHE_VERSION = 1
+
+
+def cache_path() -> Path:
+    """快照路径:与 settings.json 同目录(容器内 /app/data,随备份)。"""
+    from . import config
+
+    return Path(config.SETTINGS_FILE).parent / "entity_index.pkl"
+
+
+def _release_heap() -> None:
+    """把已释放的堆归还操作系统。
+
+    构建期 Arrow batches 会临时占用大量内存;Python 释放后 glibc 常保留在
+    自己的 arena 里。实测 8561 块:归还前 RSS +80MB,归还后 +11MB。
+    没有 malloc_trim 的平台静默跳过,不影响正确性。
+    """
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
+
+
+def _table_fingerprint(table) -> str | None:
+    """快照归属标识:表版本 + 数据目录;拿不到可靠目录时返回 None(禁用快照)。
+
+    只校验版本号是不够的——`table.version` 是**每张表各自的计数器**,不同数据库
+    里的表可以同时处于 version=1。只比版本会让 A 库的快照被 B 库误用,检索结果
+    与主表内容脱节。
+
+    反过来,如果拿不到表的数据目录(例如测试里的替身对象),就无法证明快照属于
+    这张表;此时宁可不使用快照,也不能冒险复用别人的索引。
+    """
+    import hashlib
+
+    try:
+        uri = getattr(table, "uri", None) or ""
+    except Exception:
+        uri = ""
+    if not uri:
+        return None
+    raw = f"{uri}\x00{int(table.version)}".encode()
+    return hashlib.sha256(raw).hexdigest()[:32]
+
+
+def _load_snapshot(table) -> EntityIndex | None:
+    """读取与当前表(路径+版本)匹配的快照;任何异常都返回 None 走重建。"""
+    path = cache_path()
+    version = int(table.version)
+    fingerprint = _table_fingerprint(table)
+    if fingerprint is None:
+        return None
+    try:
+        with path.open("rb") as handle:
+            payload = pickle.load(handle)
+        if not isinstance(payload, dict) or payload.get("cache_version") != _CACHE_VERSION:
+            return None
+        if payload.get("table_version") != version:
+            return None
+        if payload.get("fingerprint") != fingerprint:
+            return None
+        index = payload.get("index")
+        if not isinstance(index, EntityIndex) or index.table_version != version:
+            return None
+        return index
+    except Exception:
+        return None
+
+
+def _save_snapshot(index: EntityIndex, table=None) -> None:
+    """原子写入快照。失败只影响下次冷建速度,不影响正确性。"""
+    fingerprint = _table_fingerprint(table) if table is not None else None
+    if fingerprint is None:
+        return                       # 无法证明归属时不写,避免污染其他表的快照
+    path = cache_path()
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"cache_version": _CACHE_VERSION, "table_version": index.table_version,
+                   "fingerprint": fingerprint, "index": index}
+        with tmp.open("wb") as handle:
+            pickle.dump(payload, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        # 快照是纯加速手段:磁盘满、只读挂载、权限不足都不能影响检索本身。
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 def _batches(table):
@@ -128,6 +230,12 @@ def _cached_index(table) -> tuple[EntityIndex, bool]:
         if _LIMIT_FAILURE and _LIMIT_FAILURE[0] is table and _LIMIT_FAILURE[1] == version:
             raise IndexLimitError(_LIMIT_FAILURE[2])
         _CACHE = None
+        # 先尝试磁盘快照:表身份与版本都要匹配,不匹配就重建。
+        snapshot = _load_snapshot(table)
+        if snapshot is not None:
+            _CACHE = (table, version, snapshot)
+            _LIMIT_FAILURE = None
+            return snapshot, True
         try:
             index = build(table)
         except IndexLimitError as error:
@@ -135,6 +243,11 @@ def _cached_index(table) -> tuple[EntityIndex, bool]:
             raise
         _CACHE = (table, version, index)
         _LIMIT_FAILURE = None
+        try:
+            _save_snapshot(index, table)
+        except Exception:
+            pass                     # 快照失败只影响下次冷建速度
+        _release_heap()
         return index, False
 
 
@@ -148,11 +261,21 @@ def index_for(table) -> EntityIndex | None:
     return cached[2] if cached and cached[0] is table and cached[1] == int(table.version) else None
 
 
-def reset_cache() -> None:
+def reset_cache(clear_snapshot: bool = False) -> None:
+    """清内存缓存。`clear_snapshot=True` 同时删除磁盘快照(测试与排障用)。
+
+    默认不删快照:版本校验已能保证不读到陈旧数据,保留快照可以让进程重启后
+    仍然秒级可用。真正需要"从零重建"时显式传 True。
+    """
     global _CACHE, _LIMIT_FAILURE
     with _LOCK:
         _CACHE = None
         _LIMIT_FAILURE = None
+        if clear_snapshot:
+            try:
+                cache_path().unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 def _resolve(index: EntityIndex, keys: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
