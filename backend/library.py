@@ -1,4 +1,5 @@
 """共享索引句柄、元数据聚合、参数解析与领域错误;读取入口在 agent_documents。"""
+import json
 import os
 import re
 
@@ -277,6 +278,148 @@ def categories(table) -> list[str]:
     return cached("categories", table, lambda: sorted(
         {r["category"] for r in scan_columns(table, ["category"]) if r["category"]}))
 
+
+def _arrow_bytes(table) -> int:
+    """主表与全部分区表的真实数据字节数(含向量列),作为碎片比的分母。
+
+    用 `to_arrow().nbytes` 而不是按块数估算:向量列每块 768×4 字节,是文本的
+    数倍,漏掉它会把正常索引误判成高度碎片化。
+    """
+    total = 0
+    try:
+        total += table.to_arrow().nbytes
+    except Exception:
+        return 0
+    try:
+        import lancedb
+
+        db = lancedb.connect(str(config.DB_PATH))
+        for name in db.list_tables().tables:
+            if name.startswith("vec_") and name != "vec_meta":
+                total += db.open_table(name).to_arrow().nbytes
+    except Exception:
+        return total or 0
+    return total
+
+
+def index_health(table) -> dict:
+    """索引健康度:回答"索引是否可用、有哪些已知问题"。
+
+    只读本地文件与表元数据,不扫描正文、不访问上游。规模变大后,单看
+    "有多少文件"已经不够——还需要知道索引索引是否过期、磁盘是否被历史版本
+    撑大、上次索引进程是否留下了未处理的文件。
+
+    各字段的口径都写在返回值里,避免把代理量当成精确值:
+    * `fragmentation_ratio` 是目录体积 / 估算数据体积,>3 说明历史版本在堆积;
+    * `pending_ingest` 只表示"上次记录里有未完成项",不代表当前正在运行。
+    """
+    from pathlib import Path
+
+    db_path = Path(config.DB_PATH)
+    health: dict = {"status": "unknown", "warnings": []}
+
+    if table is None:
+        health["status"] = "missing"
+        health["warnings"].append({"code": "INDEX_MISSING", "message": "索引表不存在"})
+        return health
+
+    rows = table.count_rows()
+    health.update(rows=rows, table_version=int(table.version))
+
+    # 1) FTS 与向量索引是否就位:缺了会让检索静默降级或退化成暴力扫描。
+    try:
+        indices = list(table.list_indices())
+        health["fts_index"] = [i.name for i in indices if str(i.index_type).upper().find("FTS") >= 0
+                               or str(i.index_type).upper().find("INVERT") >= 0]
+        if not health["fts_index"]:
+            health["warnings"].append(
+                {"code": "FTS_INDEX_MISSING", "message": "主表没有全文索引,关键词检索会失败或退化"})
+    except Exception:
+        health["fts_index"] = None
+
+    try:
+        import lancedb
+
+        db = lancedb.connect(str(db_path))
+        names = [n for n in db.list_tables().tables if n.startswith("vec_") and n != "vec_meta"]
+        parts = []
+        for name in names:
+            part = db.open_table(name)
+            parts.append({"table": name, "rows": part.count_rows(),
+                          "indices": [i.name for i in part.list_indices()]})
+        health["vector_partitions"] = parts
+        if not parts:
+            health["warnings"].append(
+                {"code": "VECTOR_MISSING", "message": "没有向量分区,语义检索不可用"})
+        for part in parts:
+            if part["rows"] and not part["indices"]:
+                health["warnings"].append(
+                    {"code": "VECTOR_INDEX_MISSING",
+                     "message": f"{part['table']} 未建向量索引,检索会退化为暴力扫描"})
+            if part["rows"] != rows:
+                health["warnings"].append(
+                    {"code": "VECTOR_ROW_MISMATCH",
+                     "message": f"{part['table']} 有 {part['rows']} 行,主表 {rows} 行"})
+    except Exception as error:
+        health["vector_partitions"] = None
+        health["warnings"].append({"code": "VECTOR_UNAVAILABLE",
+                                   "message": f"向量分区不可读: {type(error).__name__}"})
+
+    # 2) 磁盘体积与碎片:长期增量会让历史版本堆积(实测曾达 9 倍开销)。
+    try:
+        files = [p for p in db_path.rglob("*") if p.is_file()]
+        total = sum(p.stat().st_size for p in files)
+        health["disk_bytes"] = total
+        health["disk_files"] = len(files)
+        # 基准必须是**真实数据量**:主表文本 + 向量列,不是按块数瞎估。
+        # 早先按 400 字节/块估算,把 768 维向量漏掉,导致 2.2 倍的正常索引
+        # 被误报成 28 倍碎片。拿不到数据量时不报这个指标,而不是给个错数。
+        data_bytes = _arrow_bytes(table)
+        if data_bytes:
+            health["data_bytes"] = data_bytes
+            ratio = total / data_bytes
+            health["fragmentation_ratio"] = round(ratio, 2)
+            # 小索引的固定开销(manifest、schema、footer)会让比值天然偏高,
+            # 例如 20 行的测试表也有 5 倍。低于 1MB 数据量时不判碎片,避免误报。
+            if data_bytes >= 1_000_000 and ratio > 4:
+                health["warnings"].append(
+                    {"code": "INDEX_FRAGMENTED",
+                     "message": f"索引目录约 {total/1048576:.0f}MB,为数据量的 {ratio:.1f} 倍;"
+                                "可运行 tools/compact_index.py 合并历史版本"})
+    except Exception:
+        health["disk_bytes"] = None
+
+    # 3) 上次索引的结果:未索引/失效引用/跳过的文件/错误。
+    try:
+        history_path = db_path.parent / "ingest_history.json"
+        records = json.loads(history_path.read_text(encoding="utf-8"))
+        last = records[-1] if records else {}
+        skipped = last.get("skipped") or []
+        health["last_ingest"] = {
+            "time": last.get("time"), "added": last.get("added"),
+            "removed": last.get("removed"), "chunks": last.get("chunks"),
+            "elapsed": last.get("elapsed"), "skipped": len(skipped),
+            "skipped_examples": skipped[:5],
+        }
+        if skipped:
+            health["warnings"].append(
+                {"code": "FILES_SKIPPED",
+                 "message": f"上次索引有 {len(skipped)} 个文件未产生文本,未进入索引"})
+    except Exception:
+        health["last_ingest"] = None
+
+    # 4) 实体桥快照:存在即说明 structured 查询可以秒级启动。
+    try:
+        snapshot = Path(config.SETTINGS_FILE).parent / "entity_index.pkl"
+        if snapshot.exists():
+            stat = snapshot.stat()
+            health["entity_snapshot"] = {"bytes": stat.st_size,
+                                         "mtime": int(stat.st_mtime)}
+    except Exception:
+        pass
+
+    health["status"] = "degraded" if health["warnings"] else "ok"
+    return health
 
 def extract_report(table, threshold: float) -> list[dict]:
     """逐文档提取质量(每页字符数、suspect 标记),按每页字符数升序。

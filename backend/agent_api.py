@@ -194,6 +194,12 @@ def status() -> dict:
                          unindexed_examples=[], missing_source_examples=[])
         source_status = "unavailable"
         warnings = [{"code": error.code, "message": str(error)}]
+    try:
+        health = library.index_health(table)
+    except Exception:
+        log.exception("索引健康度采集失败")
+        health = {"status": "unknown", "warnings": [
+            {"code": "HEALTH_UNAVAILABLE", "message": "索引健康度采集失败"}]}
     return response(indexed=table is not None, files=len(files),
                     chunks=sum(f["chunks"] for f in files),
                     categories=len({f["category"] for f in files}),
@@ -201,5 +207,6 @@ def status() -> dict:
                     last_ingest_status="recorded" if last_ingest else "unknown",
                     source_status=source_status, warnings=warnings,
                     **inventory,
+                    health=health,
                     ocr=ocr.status(),
                     checked_at=datetime.now().isoformat(timespec="seconds"))

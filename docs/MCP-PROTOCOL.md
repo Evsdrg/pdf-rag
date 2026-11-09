@@ -88,6 +88,21 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 `last_ingest_status=unknown` 明确表示没有可用的入库时间记录。状态只读本地文件名和真实调用历史，
 不主动探测嵌入、重排或 OCR 服务。
 
+`status.health` 是索引健康度，回答"索引本身是否可信"，只读本地表元数据与文件，同样不访问上游：
+
+- `status` 为 `ok` / `degraded` / `missing` / `unknown`；`degraded` 时逐条给出 `warnings[].code`。
+- `fts_index` 与 `vector_partitions[].indices` 列出实际存在的索引；缺失会报
+  `FTS_INDEX_MISSING` / `VECTOR_MISSING` / `VECTOR_INDEX_MISSING`（后者意味着向量检索退化为暴力扫描）。
+- `fragmentation_ratio` = 索引目录体积 / 真实数据体积（含向量列）。超过 4 倍报
+  `INDEX_FRAGMENTED`，提示可用 `tools/compact_index.py` 合并历史版本。
+  数据量低于 1MB 时不判碎片，避免小索引的固定开销造成误报。
+- `last_ingest` 带上次索引的 `added/removed/chunks/elapsed/skipped`；有 `skipped` 时报
+  `FILES_SKIPPED`，表示这些文件未产生文本、没有进入索引。
+- `entity_snapshot` 存在表示结构化查询可以秒级启动（见
+  [SAG 结构化检索](SAG-STRUCTURED-RETRIEVAL.md) 的快照说明）。
+
+采集失败不会让 `status` 整体失败：返回 `HEALTH_UNAVAILABLE` 并把其余字段照常给出。
+
 ## 5. 按需页图
 
 `pdf_rag_render_page(file, page, clip?, max_size=1600)` 在本地用 MuPDF 渲染 PDF，一次一页，不调用 OCR、视觉、嵌入或重排服务。
