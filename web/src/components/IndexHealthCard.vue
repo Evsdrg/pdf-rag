@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
-import { NAlert, NButton, NCard, NEmpty, NSpace, NSpin, NTag } from 'naive-ui'
+import { NAlert, NButton, NCard, NEmpty, NProgress, NSpace, NSpin, NTag } from 'naive-ui'
 import { getLibraryStatus } from '../api'
 import type { ApiWarning, LibraryStatus } from '../api'
 
@@ -13,6 +13,19 @@ const health = computed(() => status.value?.health)
 const coverage = computed(() => {
   if (!status.value) return 0
   return Math.round(status.value.indexed_files / Math.max(status.value.source_files, 1) * 100)
+})
+const coverageStatus = computed(() => status.value?.unindexed_files || status.value?.missing_source_files
+  ? 'warning' as const
+  : 'success' as const)
+const storageParts = computed(() => {
+  const disk = health.value?.disk_bytes
+  const data = health.value?.data_bytes
+  if (!disk || !data || data > disk) return []
+  // 后端没有逐项拆出索引结构/历史版本,因此只显示能被证实的两类开销。
+  return [
+    { key: 'data', label: '文档与向量数据', value: data, color: '#89b4fa' },
+    { key: 'overhead', label: '索引与版本开销', value: disk - data, color: '#b4a1e3' },
+  ]
 })
 const tone = computed(() => {
   const value = health.value?.status
@@ -111,8 +124,13 @@ onUnmounted(() => controller?.abort())
             <div class="summary-note">基于本地索引、源文件和真实入库记录检查，不探测上游模型。</div>
           </div>
           <div class="coverage" aria-label="源文件索引覆盖率">
-            <strong>{{ coverage }}<span>%</span></strong>
-            <small>文件覆盖率</small>
+            <div class="coverage-head">
+              <small>文件覆盖率</small>
+              <strong>{{ coverage }}<span>%</span></strong>
+            </div>
+            <n-progress type="line" :percentage="coverage" :status="coverageStatus"
+              :height="8" border-radius="0" :show-indicator="false" />
+            <div class="coverage-count">{{ status.indexed_files }} / {{ status.source_files }} 已索引</div>
           </div>
         </div>
 
@@ -140,6 +158,25 @@ onUnmounted(() => controller?.abort())
             </span>
           </div>
         </div>
+
+        <section v-if="storageParts.length" class="storage" aria-label="索引存储构成">
+          <div class="storage-head">
+            <span>存储构成</span>
+            <small>共 {{ bytes(health.disk_bytes) }}</small>
+          </div>
+          <div class="storage-bar" role="img"
+            :aria-label="storageParts.map((part) => `${part.label} ${bytes(part.value)}`).join('；')">
+            <div v-for="part in storageParts" :key="part.key" class="storage-part"
+              :style="{ width: `${part.value / (health.disk_bytes || 1) * 100}%`, backgroundColor: part.color }" />
+          </div>
+          <div class="storage-legend">
+            <div v-for="part in storageParts" :key="part.key" class="legend-item">
+              <i :style="{ backgroundColor: part.color }" aria-hidden="true" />
+              <span>{{ part.label }}</span>
+              <strong>{{ bytes(part.value) }}</strong>
+            </div>
+          </div>
+        </section>
 
         <div class="services">
           <div class="service">
@@ -193,14 +230,24 @@ onUnmounted(() => controller?.abort())
 .summary-title { color: #e8edf9; font-size: 15px; font-weight: 600; }
 .summary-note { margin-top: 5px; color: #7c839f; font-size: 12px; line-height: 1.6; }
 .coverage {
-  flex: 0 0 auto;
+  flex: 0 0 220px;
   padding-left: 24px;
   border-left: 1px solid #34394f;
-  text-align: right;
 }
-.coverage strong { display: block; color: #a6e3a1; font-size: 28px; font-weight: 500; line-height: 1; }
-.coverage strong span { margin-left: 2px; font-size: 16px; }
-.coverage small { display: block; margin-top: 6px; color: #7c839f; font-size: 11px; }
+.coverage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.coverage strong { color: #a6e3a1; font-size: 22px; font-weight: 500; line-height: 1; }
+.coverage strong span { margin-left: 2px; font-size: 13px; }
+.coverage small { color: #7c839f; font-size: 11px; }
+.coverage-count { margin-top: 6px; color: #6c748f; font-size: 11px; text-align: right; }
+.storage { padding: 15px 0 0; }
+.storage-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: #8993aa; font-size: 11px; }
+.storage-head small { color: #68728c; }
+.storage-bar { display: flex; gap: 2px; height: 8px; overflow: hidden; background: #2c3144; }
+.storage-part { min-width: 1px; }
+.storage-legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 8px; }
+.legend-item { display: flex; align-items: center; gap: 6px; color: #7c839f; font-size: 11px; }
+.legend-item i { width: 7px; height: 7px; }
+.legend-item strong { margin-left: 2px; color: #aab5cb; font-weight: 400; font-variant-numeric: tabular-nums; }
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
