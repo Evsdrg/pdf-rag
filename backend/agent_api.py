@@ -1,8 +1,6 @@
 """MCP 与统一 REST 查询/读取接口共享的领域入口。"""
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
 
 from . import agent_documents, agent_grep, config, library, retrieval
 from .agent_paging import MAX_RESPONSE_BYTES, bounded_items, fingerprint, json_size
@@ -176,11 +174,10 @@ def status() -> dict:
     from . import ocr
     table = library.get_table()
     files = library.files_index(table) if table is not None else []
-    history = Path(config.DB_PATH).parent / "ingest_history.json"
+    records = library.read_ingest_history()
     try:
-        records = json.loads(history.read_text(encoding="utf-8"))
         last_ingest = records[-1].get("time") if records else None
-    except (OSError, ValueError, KeyError, TypeError):
+    except (KeyError, TypeError, AttributeError):
         last_ingest = None
     try:
         inventory = library.source_inventory(files)

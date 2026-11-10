@@ -20,7 +20,6 @@ from . import agent_routes, bundle, config, doc_utils, library, retrieval, vecst
 ROOT = Path(__file__).resolve().parent
 
 STATE_FILE = ROOT.parent / "run_state.json"
-HISTORY_FILE = ROOT.parent / "ingest_history.json"
 LOCK_FILE = ROOT.parent / "ingest.lock"
 
 # MCP 可选内嵌:与 HTTP API 同进程同端口(见 config.MCP_INPROC),省一个 Python
@@ -127,13 +126,7 @@ def get_stats() -> dict:
         cat = r["category"] or "(未分类)"
         cat_counts[cat] = cat_counts.get(cat, 0) + 1
     categories = [{"name": k, "chunks": v} for k, v in sorted(cat_counts.items())]
-    hist = []
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, encoding="utf-8") as f:
-                hist = json.load(f)
-        except Exception:
-            pass
+    hist = library.read_ingest_history()
     state = _load_state()
     return {
         "indexed": True,
@@ -188,13 +181,7 @@ def _vector_status(table) -> dict:
 
 @app.get("/api/history")
 def get_history() -> list[dict]:
-    if not os.path.exists(HISTORY_FILE):
-        return []
-    try:
-        with open(HISTORY_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return []
+    return library.read_ingest_history()
 
 
 def _ingest_busy() -> str:

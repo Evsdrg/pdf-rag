@@ -2,6 +2,7 @@
 import json
 import os
 import re
+from pathlib import Path
 
 from . import config, doc_utils
 
@@ -302,6 +303,49 @@ def _arrow_bytes(table) -> int:
     return total
 
 
+def ingest_history_file() -> Path:
+    """持久化的索引历史路径。
+
+    历史是运行数据,必须放在 data/ 挂载里。早期写到代码根目录(容器内 /app),
+    每次重建容器都会被清空,资料库的“索引历史”因此一直为空。
+    """
+    return Path(config.SETTINGS_FILE).parent / "ingest_history.json"
+
+
+def read_ingest_history() -> list[dict]:
+    """读取索引历史;新路径不存在时兼容旧的容器内/仓库根目录文件。"""
+    candidates = [ingest_history_file(),
+                  Path(config.DB_PATH).parent / "ingest_history.json",
+                  Path(__file__).resolve().parent.parent / "ingest_history.json"]
+    seen = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+        except (OSError, ValueError, TypeError):
+            continue
+    return []
+
+
+def write_ingest_history(records: list[dict]) -> None:
+    """原子写入最近 100 条记录,避免中断留下半个 JSON 文件。"""
+    path = ingest_history_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(records[-100:], ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def append_ingest_history(record: dict) -> None:
+    """追加一条真实入库记录,读取旧路径后写到新的持久路径。"""
+    write_ingest_history([*read_ingest_history(), record])
+
+
 def index_health(table) -> dict:
     """索引健康度:回答"索引是否可用、有哪些已知问题"。
 
@@ -391,8 +435,7 @@ def index_health(table) -> dict:
 
     # 3) 上次索引的结果:未索引/失效引用/跳过的文件/错误。
     try:
-        history_path = db_path.parent / "ingest_history.json"
-        records = json.loads(history_path.read_text(encoding="utf-8"))
+        records = read_ingest_history()
         last = records[-1] if records else {}
         skipped = last.get("skipped") or []
         health["last_ingest"] = {

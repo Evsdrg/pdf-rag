@@ -8,13 +8,18 @@
 
 | 入口 | 用途 |
 |---|---|
-| `GET /api/stats` | 已索引文档/块数、类别、历史与各向量分区覆盖率 |
+| `GET /api/stats` | 已索引文档/块数、类别、持久化索引历史与各向量分区覆盖率 |
 | `GET /api/v2/status` | 源文件与索引覆盖差异、索引健康度、OCR 最近真实调用、入库时间是否可知 |
 | `GET /api/state` 或 `run_state.json` | 当前/最近一次索引任务进度，不是文档清单 |
 | `GET /api/extract/report` | 按文档统计提取字符量和低文本告警 |
 | `GET /api/ocr/health` | OCR 配置与最近一次真实调用；不主动探测上游 |
 
 `source_files` 是源目录 PDF/Markdown 数，`indexed_files` 是索引文件数；`unindexed_files` 与 `missing_source_files` 分别表示未索引文件和失效索引引用。`last_ingest_status=unknown` 表示没有可用历史时间，不等于刚更新或从未更新。
+
+索引历史持久化在 `data/ingest_history.json`，最多保留最近 100 次真实入库记录。早期版本把
+`ingest_history.json` 写在代码根目录；容器重建后该临时文件消失，资料库的“索引历史”因此为空。
+现在读取时兼容旧路径，下一次入库会把旧记录一并保留到 `data/`。运行状态与锁仍按进程管理，
+不把锁文件当作持久历史。
 
 Web「索引状态」页顶部的「索引健康」卡把上述覆盖差异与 `status.health` 可视化：
 文件覆盖率进度条、索引/数据体积、存储开销、全文与向量索引、实体快照及上次入库的跳过文件。

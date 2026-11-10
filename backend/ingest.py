@@ -17,6 +17,7 @@ import pyarrow as pa
 
 from . import config
 from . import doc_utils
+from . import library
 from . import ocr_policy
 from . import ocr_queue
 from . import vecstore
@@ -435,7 +436,7 @@ def esc_file(file: str) -> str:
 _PROJ_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_FILE = os.path.join(_PROJ_ROOT, "run_state.json")
 LOCK_FILE = os.path.join(_PROJ_ROOT, "ingest.lock")
-HISTORY_FILE = os.path.join(_PROJ_ROOT, "ingest_history.json")
+# 运行状态/锁保持进程级;只有需要跨容器保留的历史由 library 写到 data/。
 
 
 def pid_exists(pid: int) -> bool:
@@ -772,15 +773,11 @@ def _append_history(added: int, removed: int, n_chunks: int, elapsed: float, ski
     history = {"time": datetime.now().isoformat(timespec="seconds"), "added": added,
                "removed": removed, "chunks": n_chunks, "elapsed": elapsed, "skipped": skipped}
     try:
-        hist = []
-        if os.path.exists(HISTORY_FILE):
-            with open(HISTORY_FILE, encoding="utf-8") as f:
-                hist = json.load(f)
-        hist.append(history)
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(hist[-100:], f, ensure_ascii=False, indent=1)
-    except Exception:
-        pass
+        # 统一走 data/ 下的持久路径;读取时兼容旧的容器内历史。
+        library.append_ingest_history(history)
+    except Exception as exc:
+        # 历史写入失败不撤销已完成的索引,但必须留下可见警告。
+        print(f"  [警告] 索引历史写入失败: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 def _run(args):
