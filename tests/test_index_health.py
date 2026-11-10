@@ -11,7 +11,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import lancedb
 import pyarrow as pa
@@ -40,6 +41,7 @@ class IndexHealthTest(unittest.TestCase):
         patcher2 = patch.object(library.config, "SETTINGS_FILE", settings)
         patcher2.start()
         self.addCleanup(patcher2.stop)
+        self.addCleanup(library.reset_table)
 
     def test_healthy_index_reports_ok(self):
         self.table.create_fts_index("text", replace=True)
@@ -77,12 +79,50 @@ class IndexHealthTest(unittest.TestCase):
                      "vector": [0.01] * 768} for i in range(20)]
         self.db.create_table("vec_probe__768__", data=pa.Table.from_pylist(vec_rows))
 
-        health = library.index_health(self.table)
+        with patch("lancedb.table.Table.to_arrow",
+                   side_effect=AssertionError("状态检查不得物化整表")):
+            health = library.index_health(self.table)
         self.assertIn("data_bytes", health)
         # 向量数据必须被计入分母:768*4*20 ≈ 61KB,远超文本
         self.assertGreater(health["data_bytes"], 60_000)
         # 正常规模的小索引不应该被判为碎片化
         self.assertNotIn("INDEX_FRAGMENTED", [w["code"] for w in health["warnings"]])
+
+    def test_arrow_size_cache_avoids_repeat_scans(self):
+        self.db.create_table("vec_probe__768__", data=pa.Table.from_pylist([
+            {"uid": "u0", "file": "cat/manual.pdf", "page": 0, "category": "cat",
+             "model_no": "QMC6309", "vector": [0.01] * 768},
+        ]))
+        with patch.object(library, "_streamed_arrow_bytes",
+                          wraps=library._streamed_arrow_bytes) as scan:
+            first = library._arrow_bytes(self.table)
+            second = library._arrow_bytes(self.table)
+        self.assertEqual(first, second)
+        self.assertEqual(scan.call_count, 2, "主表和一个分区只应在首次读取时各扫描一次")
+
+    def test_fts_metadata_failure_is_explicitly_degraded(self):
+        main = SimpleNamespace(count_rows=lambda: 1, version=1,
+                               list_indices=Mock(side_effect=RuntimeError("broken")))
+        part = SimpleNamespace(count_rows=lambda: 1,
+                               list_indices=lambda: [SimpleNamespace(name="vector_idx")])
+        db = SimpleNamespace(list_tables=lambda: SimpleNamespace(tables=["vec_test"]),
+                             open_table=lambda name: part)
+        with patch("lancedb.connect", return_value=db), patch.object(library, "_arrow_bytes", return_value=None):
+            health = library.index_health(main)
+        self.assertEqual(health["status"], "degraded")
+        self.assertIsNone(health["fts_index"])
+        self.assertIsNone(health["data_bytes"])
+        self.assertIn("FTS_INDEX_UNAVAILABLE", [w["code"] for w in health["warnings"]])
+        self.assertIn("DATA_SIZE_UNAVAILABLE", [w["code"] for w in health["warnings"]])
+
+    def test_unreadable_partition_never_returns_partial_data_size(self):
+        main = SimpleNamespace(version=1)
+        parts = {name: SimpleNamespace(version=1, uri=name) for name in ("vec_good", "vec_bad")}
+        db = SimpleNamespace(list_tables=lambda: SimpleNamespace(tables=list(parts)),
+                             open_table=parts.__getitem__)
+        with patch("lancedb.connect", return_value=db), patch.object(
+                library, "_streamed_arrow_bytes", side_effect=[100, 50, RuntimeError("broken")]):
+            self.assertIsNone(library._arrow_bytes(main))
 
     def test_missing_table_reports_missing(self):
         health = library.index_health(None)
@@ -94,12 +134,15 @@ class IndexHealthTest(unittest.TestCase):
         history = self.root / "ingest_history.json"
         history.write_text(json.dumps([{
             "time": "2026-11-10T10:00:00", "added": 3, "removed": 0, "chunks": 60,
-            "elapsed": 1.5, "skipped": ["a/empty.pdf", "b/scan-only.pdf"]}]), encoding="utf-8")
+            "elapsed": 1.5, "skipped": ["a/empty.pdf", "b/scan-only.pdf"], "skipped_omitted": 8}]), encoding="utf-8")
         health = library.index_health(self.table)
-        self.assertEqual(health["last_ingest"]["skipped"], 2)
+        self.assertEqual(health["last_ingest"]["skipped"], 10)
+        self.assertEqual(health["last_ingest"]["skipped_omitted"], 8)
         self.assertEqual(health["last_ingest"]["skipped_examples"], ["a/empty.pdf", "b/scan-only.pdf"])
         codes = [w["code"] for w in health["warnings"]]
         self.assertIn("FILES_SKIPPED", codes)
+        warning = next(w for w in health["warnings"] if w["code"] == "FILES_SKIPPED")
+        self.assertIn("10 个文件", warning["message"])
 
     def test_no_history_is_not_an_ingest_record(self):
         health = library.index_health(self.table)

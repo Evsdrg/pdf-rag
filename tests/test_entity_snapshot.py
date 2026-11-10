@@ -17,6 +17,7 @@ import lancedb
 import pyarrow as pa
 
 from backend import entity
+from tools.entity_cache_benchmark import measure_entity_cache
 
 
 def _rows(tag: str, n: int = 3):
@@ -47,11 +48,22 @@ class SnapshotTest(unittest.TestCase):
 
         # 清掉内存缓存但保留快照:应当从磁盘恢复,内容一致
         entity.reset_cache(clear_snapshot=False)
-        second = entity.get_index(self.table)
+        with patch.object(entity, "_release_heap") as release:
+            second = entity.get_index(self.table)
+        release.assert_called_once_with()
         self.assertEqual(second.table_version, first.table_version)
         self.assertEqual(set(second.entities_by_uid), set(first.entities_by_uid))
         self.assertEqual(second.by_entity, first.by_entity)
         self.assertEqual(second.metadata_by_uid, first.metadata_by_uid)
+
+    def test_cache_benchmark_separates_rebuilds_and_preserves_real_snapshot(self):
+        entity.get_index(self.table)
+        original = entity.cache_path().read_bytes()
+        with patch.object(entity, "build", wraps=entity.build) as build:
+            cold, snapshot_load = measure_entity_cache(self.table, rounds=2)
+        self.assertEqual((len(cold), len(snapshot_load)), (2, 2))
+        self.assertEqual(build.call_count, 2, "两轮快照恢复不应再次构建索引")
+        self.assertEqual(entity.cache_path().read_bytes(), original)
 
     def test_stale_version_snapshot_is_rejected(self):
         """表内容变了(版本号变化),旧快照必须被拒绝并重建。"""

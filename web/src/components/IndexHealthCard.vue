@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { NAlert, NButton, NCard, NEmpty, NProgress, NSpace, NSpin, NTag } from 'naive-ui'
 import { getLibraryStatus } from '../api'
 import type { ApiWarning, LibraryStatus } from '../api'
+import { coveragePercentage } from '../indexHealth'
 
 const status = shallowRef<LibraryStatus | null>(null)
 const error = shallowRef('')
@@ -10,18 +11,17 @@ const loading = shallowRef(false)
 let controller: AbortController | undefined
 
 const health = computed(() => status.value?.health)
-const coverage = computed(() => {
-  if (!status.value) return 0
-  const raw = status.value.indexed_files / Math.max(status.value.source_files, 1) * 100
-  // 99.74% 不能被显示成 100%:旁边仍明确有 1 份待入库。
-  return raw >= 100 ? 100 : Math.min(99.9, Math.floor(raw * 10) / 10)
+const coverage = computed(() => coveragePercentage(status.value))
+const coverageLabel = computed(() => {
+  if (coverage.value === null) return '—'
+  return Number.isInteger(coverage.value) ? String(coverage.value) : coverage.value.toFixed(1)
 })
-const coverageLabel = computed(() => Number.isInteger(coverage.value)
-  ? String(coverage.value)
-  : coverage.value.toFixed(1))
-const coverageStatus = computed(() => status.value?.unindexed_files || status.value?.missing_source_files
-  ? 'warning' as const
-  : 'success' as const)
+const coverageStatus = computed(() => {
+  if (coverage.value === null) return 'default' as const
+  return status.value?.unindexed_files || status.value?.missing_source_files
+    ? 'warning' as const
+    : 'success' as const
+})
 const storageParts = computed(() => {
   const disk = health.value?.disk_bytes
   const data = health.value?.data_bytes
@@ -43,6 +43,9 @@ const statusLabel = computed(() => ({
   ok: '健康', degraded: '需关注', missing: '索引缺失', unknown: '暂不可用',
 }[health.value?.status ?? ''] ?? '未读取'))
 const caption = computed(() => {
+  if (status.value?.source_status === 'unavailable') {
+    return '源目录不可读，无法核对文件覆盖率'
+  }
   if (status.value?.unindexed_files) {
     return `${status.value.unindexed_files} 份新文档待入库`
   }
@@ -57,7 +60,7 @@ const caption = computed(() => {
 const healthWarnings = computed(() => health.value?.warnings ?? [])
 const coverageWarnings = computed<ApiWarning[]>(() => {
   if (!status.value) return []
-  const warnings: ApiWarning[] = []
+  const warnings: ApiWarning[] = [...status.value.warnings]
   if (status.value.unindexed_files) {
     warnings.push({
       code: 'UNINDEXED',
@@ -94,16 +97,18 @@ function timestamp(value?: number) {
 
 async function refresh() {
   controller?.abort()
-  controller = new AbortController()
+  const current = new AbortController()
+  controller = current
   loading.value = true
   error.value = ''
   try {
-    status.value = await getLibraryStatus(controller.signal)
+    const next = await getLibraryStatus(current.signal)
+    if (controller === current) status.value = next
   } catch (e) {
-    if (controller.signal.aborted) return
+    if (controller !== current || current.signal.aborted) return
     error.value = `无法读取索引健康状态：${(e as Error).message}`
   } finally {
-    if (!controller.signal.aborted) loading.value = false
+    if (controller === current) loading.value = false
   }
 }
 
@@ -131,19 +136,23 @@ onUnmounted(() => controller?.abort())
           <div class="coverage" aria-label="源文件索引覆盖率">
             <div class="coverage-head">
               <small>文件覆盖率</small>
-              <strong>{{ coverageLabel }}<span>%</span></strong>
+              <strong>{{ coverageLabel }}<span v-if="coverage !== null">%</span></strong>
             </div>
-            <n-progress type="line" :percentage="coverage" :status="coverageStatus"
+            <n-progress type="line" :percentage="coverage ?? 0" :status="coverageStatus"
               :height="8" border-radius="0" :show-indicator="false" />
-            <div class="coverage-count">{{ status.indexed_files }} / {{ status.source_files }} 已索引</div>
+            <div class="coverage-count">
+              {{ coverage === null ? '覆盖率未知' : `${status.indexed_files} / ${status.source_files} 已索引` }}
+            </div>
           </div>
         </div>
 
         <div class="metrics">
           <div class="metric">
             <span class="label">源文件 / 已索引</span>
-            <strong>{{ status.source_files }} <span class="unit">/ {{ status.indexed_files }}</span></strong>
-            <span class="note">{{ status.unindexed_files || 0 }} 份待入库</span>
+            <strong>{{ status.source_files ?? '—' }} <span class="unit">/ {{ status.indexed_files }}</span></strong>
+            <span class="note">
+              {{ status.source_status === 'unavailable' ? '待入库数量未知' : `${status.unindexed_files || 0} 份待入库` }}
+            </span>
           </div>
           <div class="metric">
             <span class="label">索引占用</span>

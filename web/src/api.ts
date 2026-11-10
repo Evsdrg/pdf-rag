@@ -58,7 +58,7 @@ export interface IndexHealth {
   vector_partitions?: IndexHealthVectorPartition[] | null
   disk_bytes?: number | null
   disk_files?: number
-  data_bytes?: number
+  data_bytes?: number | null
   fragmentation_ratio?: number
   last_ingest: {
     time: string | null
@@ -67,6 +67,7 @@ export interface IndexHealth {
     chunks: number | null
     elapsed: number | null
     skipped: number
+    skipped_omitted?: number
     skipped_examples: string[]
   } | null
   entity_snapshot?: { bytes: number; mtime: number }
@@ -77,10 +78,10 @@ export interface LibraryStatus {
   files: number
   chunks: number
   categories: number
-  source_files: number
+  source_files: number | null
   indexed_files: number
-  unindexed_files: number
-  missing_source_files: number
+  unindexed_files: number | null
+  missing_source_files: number | null
   source_status: string
   warnings: ApiWarning[]
   health?: IndexHealth

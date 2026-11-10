@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from backend import config, entity, library, retrieval
 from tools.eval_relations import block_network, load_dataset, quarantined_questions
+from tools.entity_cache_benchmark import measure_entity_cache
 
 
 def signature(value):
@@ -87,17 +88,14 @@ def main():
     skip = set(quarantined_questions(data))
     relations = [(q["id"], q["query"]) for q in data["questions"] if q["id"] not in skip]
     legacy = [(f"L{index:02}", q["query"]) for index, q in enumerate(json.loads((ROOT/"eval_queries.json").read_text()))]
-    cold = []
-    for _ in range(3):
-        entity.reset_cache()
-        start = time.perf_counter()
-        index = entity.get_index(table)
-        cold.append((time.perf_counter()-start)*1000)
+    cold, snapshot_load = measure_entity_cache(table)
+    index = entity.get_index(table)
     # 首次缓存构建不混进热态,但整个结果缓存保持关闭。
     for enabled in (False, True):
         retrieval.search(table, relations[0][1], mode="fts", rerank=False, structured=enabled)
     times, snapshots, inputs = measure(table, relations + legacy, args.rounds, rerank_stub=args.rerank_stub)
-    summary = {"cold_index": distribution(cold), "rerank": "local_stub" if args.rerank_stub else "off",
+    summary = {"cold_index": distribution(cold), "snapshot_load": distribution(snapshot_load),
+               "rerank": "local_stub" if args.rerank_stub else "off",
                "rerank_on_window": config.get("rerank_on_window"),
                "index": {"version": int(table.version), "rows": len(index.entities_by_uid),
                          "entities": len(index.by_entity), "links": sum(len(keys) for keys in index.entities_by_uid.values())}}

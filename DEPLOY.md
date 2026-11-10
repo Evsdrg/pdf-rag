@@ -92,12 +92,13 @@ python -c "import tarfile,zstandard as z; f=open('pdf-rag-<日期>.tar.zst','rb'
 ```json
 {
   "type": "http",
-  "url": "http://127.0.0.1:8100/mcp",
+  "url": "http://127.0.0.1:8100/mcp/",
   "timeoutMs": 60000
 }
 ```
 
-更新服务后，旧 MCP 会话可能失效，需要重启或重连客户端。容器健康不等于旧会话仍有效。
+Streamable HTTP 按无状态运行，服务更新后不要求因旧 `Mcp-Session-Id` 重新 initialize 或重连。
+客户端地址应保留尾斜杠；`/mcp` 只会收到到 `/mcp/` 的 `307` 重定向，不跟随重定向的客户端会失败。
 
 ### 4.2 独立 stdio
 

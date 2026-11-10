@@ -88,18 +88,22 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 `last_ingest_status=unknown` 明确表示没有可用的入库时间记录。状态只读本地文件名和真实调用历史，
 不主动探测嵌入、重排或 OCR 服务。
 
-`status.health` 是索引健康度，回答"索引本身是否可信"，只读本地表元数据与文件，同样不访问上游：
+`status.health` 是索引健康度，回答"索引本身是否可信"，只读本地索引与文件，不访问上游。
+数据体积使用有界分批读取，并按主表身份和各表版本缓存；首次读取或版本变化后仍需扫描表数据，
+但不会为计算体积整表物化 Arrow：
 
 - `status` 为 `ok` / `degraded` / `missing` / `unknown`；`degraded` 时逐条给出 `warnings[].code`。
 - `fts_index` 与 `vector_partitions[].indices` 列出实际存在的索引；缺失会报
   `FTS_INDEX_MISSING` / `VECTOR_MISSING` / `VECTOR_INDEX_MISSING`（后者意味着向量检索退化为暴力扫描）。
+  FTS 元数据读取失败返回 `FTS_INDEX_UNAVAILABLE`，不会把未知状态当成健康。
 - `fragmentation_ratio` = 索引目录体积 / 真实数据体积（含向量列）。超过 4 倍报
   `INDEX_FRAGMENTED`，提示可用 `tools/compact_index.py` 合并历史版本。
-  数据量低于 1MB 时不判碎片，避免小索引的固定开销造成误报。
-- `last_ingest` 带上次索引的 `added/removed/chunks/elapsed/skipped`；有 `skipped` 时报
-  `FILES_SKIPPED`，表示这些文件未产生文本、没有进入索引。
-- `entity_snapshot` 存在表示结构化查询可以秒级启动（见
-  [SAG 结构化检索](SAG-STRUCTURED-RETRIEVAL.md) 的快照说明）。
+  数据量低于 1MB 时不判碎片，避免小索引的固定开销造成误报。任一分区不可读时返回
+  `DATA_SIZE_UNAVAILABLE`，不使用部分体积计算碎片比。
+- `last_ingest` 带上次索引的 `added/removed/chunks/elapsed/skipped`；`skipped` 是保留路径与
+  `skipped_omitted` 之和，示例仍有界。有跳过时报告 `FILES_SKIPPED`，表示这些文件未产生文本、没有进入索引。
+- `entity_snapshot` 只表示快照文件存在及其大小/时间；实际是否复用仍需通过表目录和版本指纹校验，
+  失配时会重建，不能把文件存在等同于必然秒级启动。
 
 采集失败不会让 `status` 整体失败：返回 `HEALTH_UNAVAILABLE` 并把其余字段照常给出。
 

@@ -25,6 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from backend import config, entity, library, retrieval, vecstore  # noqa: E402
+from tools.entity_cache_benchmark import measure_entity_cache  # noqa: E402
 
 EVAL = ROOT / "eval_queries.json"
 # 与线上一致的检索参数,避免"测的是另一套配置"
@@ -149,13 +150,18 @@ def bench_structured(t, results: dict):
     print("\n--- 结构化实体桥成本(实验通道) ---")
     q = "QMC6309 供电电压 VDD 范围"
 
-    def cold():
-        entity.reset_cache()
-        entity.get_index(t)
+    def report(values):
+        ordered = sorted(values)
+        return {"median": statistics.median(ordered), "min": ordered[0],
+                "p95": ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))], "n": len(ordered)}
 
-    result = bench(cold, n=3, warmup=0)
+    cold, snapshot_load = measure_entity_cache(t)
+    result = report(cold)
     show("实体索引冷建", result)
     results["structured.index_cold"] = result
+    result = report(snapshot_load)
+    show("实体索引快照恢复", result)
+    results["structured.index_snapshot_load"] = result
     result = bench(lambda: entity.search(t, q), n=20, warmup=2)
     show("实体召回与扩展 [热]", result)
     results["structured.recall_hot"] = result

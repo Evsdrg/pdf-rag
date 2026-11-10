@@ -63,6 +63,15 @@ class IngestHistoryTest(unittest.TestCase):
         self.assertEqual(records[-1]["time"], "104")
         self.assertFalse(list(self.settings.parent.glob("*.tmp")))
 
+    def test_valid_legacy_json_is_also_limited_to_latest_hundred_records(self):
+        path = library.ingest_history_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps([{"time": str(i)} for i in range(105)]), encoding="utf-8")
+        records = library.read_ingest_history()
+        self.assertEqual(len(records), library.MAX_INGEST_HISTORY_RECORDS)
+        self.assertEqual(records[0]["time"], "5")
+        self.assertEqual(records[-1]["time"], "104")
+
     def test_history_size_is_bounded_by_dropping_oldest_summaries(self):
         for i in range(100):
             library.append_ingest_history({

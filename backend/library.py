@@ -41,6 +41,7 @@ class NotFound(LibraryError):
 _DB_CACHE = None
 _TABLE_CACHE = None
 _TABLE_VERSION = -1
+_ARROW_BYTES_CACHE = None
 
 
 def get_db():
@@ -105,10 +106,11 @@ def reset_table():
 
     替换 `index.lance` 目录后,旧句柄指向已删除的 inode;不重置会一直读到旧数据。
     """
-    global _DB_CACHE, _TABLE_CACHE, _TABLE_VERSION
+    global _DB_CACHE, _TABLE_CACHE, _TABLE_VERSION, _ARROW_BYTES_CACHE
     _DB_CACHE = None
     _TABLE_CACHE = None
     _TABLE_VERSION = -1
+    _ARROW_BYTES_CACHE = None
 
 
 def source_inventory(indexed: list[dict]) -> dict:
@@ -290,26 +292,41 @@ def categories(table) -> list[str]:
         {r["category"] for r in scan_columns(table, ["category"]) if r["category"]}))
 
 
-def _arrow_bytes(table) -> int:
-    """主表与全部分区表的真实数据字节数(含向量列),作为碎片比的分母。
-
-    用 `to_arrow().nbytes` 而不是按块数估算:向量列每块 768×4 字节,是文本的
-    数倍,漏掉它会把正常索引误判成高度碎片化。
-    """
-    total = 0
-    try:
-        total += table.to_arrow().nbytes
-    except Exception:
+def _streamed_arrow_bytes(table) -> int:
+    """逐批累计真实 Arrow 数据量,避免为状态检查物化整张表。"""
+    rows = table.count_rows()
+    if not rows:
         return 0
+    return sum(batch.nbytes for batch in table.search().limit(rows).to_batches(batch_size=1024))
+
+
+def _arrow_bytes(table) -> int | None:
+    """主表与全部分区表的 Arrow 字节数(含向量列),作为碎片比的分母。
+
+    分批读取把峰值内存限制在单批附近,并按主表身份及各表版本缓存。任何一个
+    分区不可读都返回 None:部分体积不是完整基准,不能拿来计算碎片比。
+    """
+    global _ARROW_BYTES_CACHE
     try:
         import lancedb
 
         db = lancedb.connect(str(config.DB_PATH))
-        for name in db.list_tables().tables:
-            if name.startswith("vec_") and name != "vec_meta":
-                total += db.open_table(name).to_arrow().nbytes
+        parts = [(name, db.open_table(name)) for name in db_table_names(db)
+                 if name.startswith("vec_") and name != "vec_meta"]
+        versions = (int(table.version), tuple(
+            (name, int(part.version), str(getattr(part, "uri", "") or "")) for name, part in parts))
     except Exception:
-        return total or 0
+        return None
+    cached = _ARROW_BYTES_CACHE
+    if cached is not None and cached[0] is table and cached[1] == versions:
+        return cached[2]
+    try:
+        total = _streamed_arrow_bytes(table)
+        for _, part in parts:
+            total += _streamed_arrow_bytes(part)
+    except Exception:
+        return None
+    _ARROW_BYTES_CACHE = (table, versions, total)
     return total
 
 
@@ -338,7 +355,7 @@ def _normalise_history_record(value: dict) -> dict:
     record["skipped"] = paths[:MAX_INGEST_SKIPPED]
     omitted = max(0, len(paths) - MAX_INGEST_SKIPPED)
     previous_omitted = value.get("skipped_omitted")
-    if isinstance(previous_omitted, int) and previous_omitted > 0:
+    if isinstance(previous_omitted, int) and not isinstance(previous_omitted, bool) and previous_omitted > 0:
         omitted += previous_omitted
     if omitted > 0:
         record["skipped_omitted"] = omitted
@@ -388,7 +405,8 @@ def read_ingest_history() -> list[dict]:
                 continue
             value = json.loads(raw)
             if isinstance(value, list):
-                return [_normalise_history_record(item) for item in value if isinstance(item, dict)]
+                records = [_normalise_history_record(item) for item in value if isinstance(item, dict)]
+                return records[-MAX_INGEST_HISTORY_RECORDS:]
         except (OSError, ValueError, TypeError):
             continue
     return []
@@ -418,12 +436,12 @@ def append_ingest_history(record: dict) -> None:
 def index_health(table) -> dict:
     """索引健康度:回答"索引是否可用、有哪些已知问题"。
 
-    只读本地文件与表元数据,不扫描正文、不访问上游。规模变大后,单看
-    "有多少文件"已经不够——还需要知道索引索引是否过期、磁盘是否被历史版本
+    只读本地文件与表数据,不访问上游。规模变大后,单看
+    "有多少文件"已经不够——还需要知道索引是否过期、磁盘是否被历史版本
     撑大、上次索引进程是否留下了未处理的文件。
 
     各字段的口径都写在返回值里,避免把代理量当成精确值:
-    * `fragmentation_ratio` 是目录体积 / 估算数据体积,>3 说明历史版本在堆积;
+    * `fragmentation_ratio` 是目录体积 / 分批累计的 Arrow 数据量,>4 说明历史版本在堆积;
     * `pending_ingest` 只表示"上次记录里有未完成项",不代表当前正在运行。
     """
     from pathlib import Path
@@ -447,8 +465,10 @@ def index_health(table) -> dict:
         if not health["fts_index"]:
             health["warnings"].append(
                 {"code": "FTS_INDEX_MISSING", "message": "主表没有全文索引,关键词检索会失败或退化"})
-    except Exception:
+    except Exception as error:
         health["fts_index"] = None
+        health["warnings"].append({"code": "FTS_INDEX_UNAVAILABLE",
+                                   "message": f"全文索引状态不可读: {type(error).__name__}"})
 
     try:
         import lancedb
@@ -488,17 +508,22 @@ def index_health(table) -> dict:
         # 早先按 400 字节/块估算,把 768 维向量漏掉,导致 2.2 倍的正常索引
         # 被误报成 28 倍碎片。拿不到数据量时不报这个指标,而不是给个错数。
         data_bytes = _arrow_bytes(table)
-        if data_bytes:
+        if data_bytes is not None:
             health["data_bytes"] = data_bytes
-            ratio = total / data_bytes
-            health["fragmentation_ratio"] = round(ratio, 2)
+            ratio = total / data_bytes if data_bytes else None
+            if ratio is not None:
+                health["fragmentation_ratio"] = round(ratio, 2)
             # 小索引的固定开销(manifest、schema、footer)会让比值天然偏高,
             # 例如 20 行的测试表也有 5 倍。低于 1MB 数据量时不判碎片,避免误报。
-            if data_bytes >= 1_000_000 and ratio > 4:
+            if data_bytes >= 1_000_000 and ratio is not None and ratio > 4:
                 health["warnings"].append(
                     {"code": "INDEX_FRAGMENTED",
                      "message": f"索引目录约 {total/1048576:.0f}MB,为数据量的 {ratio:.1f} 倍;"
                                 "可运行 tools/compact_index.py 合并历史版本"})
+        else:
+            health["data_bytes"] = None
+            health["warnings"].append({"code": "DATA_SIZE_UNAVAILABLE",
+                                       "message": "完整数据体积不可读,未计算索引碎片比"})
     except Exception:
         health["disk_bytes"] = None
 
@@ -512,20 +537,25 @@ def index_health(table) -> dict:
         else:
             last = records[-1]
             skipped = last.get("skipped") or []
+            omitted = last.get("skipped_omitted", 0)
+            if isinstance(omitted, bool) or not isinstance(omitted, int) or omitted < 0:
+                omitted = 0
+            total_skipped = len(skipped) + omitted
             health["last_ingest"] = {
                 "time": last.get("time"), "added": last.get("added"),
                 "removed": last.get("removed"), "chunks": last.get("chunks"),
-                "elapsed": last.get("elapsed"), "skipped": len(skipped),
-                "skipped_examples": skipped[:5],
+                "elapsed": last.get("elapsed"), "skipped": total_skipped,
+                "skipped_omitted": omitted, "skipped_examples": skipped[:5],
             }
-        if skipped:
+        if health["last_ingest"] and health["last_ingest"]["skipped"]:
+            total = health["last_ingest"]["skipped"]
             health["warnings"].append(
                 {"code": "FILES_SKIPPED",
-                 "message": f"上次索引有 {len(skipped)} 个文件未产生文本,未进入索引"})
+                 "message": f"上次索引有 {total} 个文件未产生文本,未进入索引"})
     except Exception:
         health["last_ingest"] = None
 
-    # 4) 实体桥快照:存在即说明 structured 查询可以秒级启动。
+    # 4) 实体桥快照:这里只报告文件是否存在;版本匹配由实际加载时校验。
     try:
         snapshot = Path(config.SETTINGS_FILE).parent / "entity_index.pkl"
         if snapshot.exists():

@@ -235,6 +235,7 @@ def _cached_index(table) -> tuple[EntityIndex, bool]:
         if snapshot is not None:
             _CACHE = (table, version, snapshot)
             _LIMIT_FAILURE = None
+            _release_heap()
             return snapshot, True
         try:
             index = build(table)
