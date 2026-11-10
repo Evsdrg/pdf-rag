@@ -436,14 +436,19 @@ def index_health(table) -> dict:
     # 3) 上次索引的结果:未索引/失效引用/跳过的文件/错误。
     try:
         records = read_ingest_history()
-        last = records[-1] if records else {}
-        skipped = last.get("skipped") or []
-        health["last_ingest"] = {
-            "time": last.get("time"), "added": last.get("added"),
-            "removed": last.get("removed"), "chunks": last.get("chunks"),
-            "elapsed": last.get("elapsed"), "skipped": len(skipped),
-            "skipped_examples": skipped[:5],
-        }
+        if not records:
+            health["last_ingest"] = None
+            last = {}
+            skipped = []
+        else:
+            last = records[-1]
+            skipped = last.get("skipped") or []
+            health["last_ingest"] = {
+                "time": last.get("time"), "added": last.get("added"),
+                "removed": last.get("removed"), "chunks": last.get("chunks"),
+                "elapsed": last.get("elapsed"), "skipped": len(skipped),
+                "skipped_examples": skipped[:5],
+            }
         if skipped:
             health["warnings"].append(
                 {"code": "FILES_SKIPPED",

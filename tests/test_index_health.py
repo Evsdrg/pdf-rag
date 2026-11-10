@@ -101,6 +101,10 @@ class IndexHealthTest(unittest.TestCase):
         codes = [w["code"] for w in health["warnings"]]
         self.assertIn("FILES_SKIPPED", codes)
 
+    def test_no_history_is_not_an_ingest_record(self):
+        health = library.index_health(self.table)
+        self.assertIsNone(health["last_ingest"])
+
     def test_health_never_raises_on_broken_paths(self):
         """健康度采集失败不能拖垮 status 接口。"""
         with patch.object(library.config, "DB_PATH", "/nonexistent/path"):
