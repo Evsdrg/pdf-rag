@@ -12,8 +12,13 @@ let controller: AbortController | undefined
 const health = computed(() => status.value?.health)
 const coverage = computed(() => {
   if (!status.value) return 0
-  return Math.round(status.value.indexed_files / Math.max(status.value.source_files, 1) * 100)
+  const raw = status.value.indexed_files / Math.max(status.value.source_files, 1) * 100
+  // 99.74% 不能被显示成 100%:旁边仍明确有 1 份待入库。
+  return raw >= 100 ? 100 : Math.min(99.9, Math.floor(raw * 10) / 10)
 })
+const coverageLabel = computed(() => Number.isInteger(coverage.value)
+  ? String(coverage.value)
+  : coverage.value.toFixed(1))
 const coverageStatus = computed(() => status.value?.unindexed_files || status.value?.missing_source_files
   ? 'warning' as const
   : 'success' as const)
@@ -74,7 +79,7 @@ const vectorLabel = computed(() => {
   const ready = partitions.every((part) => part.indices.length > 0)
   return `${partitions.length} 个分区 · ${ready ? '索引就绪' : '有待建索引'}`
 })
-const snapshotLabel = computed(() => health.value?.entity_snapshot ? '就绪 · 快速启动' : '尚未生成')
+const snapshotLabel = computed(() => health.value?.entity_snapshot ? '已生成 · 可按版本复用' : '尚未生成')
 const fragmentLabel = computed(() => health.value?.fragmentation_ratio === undefined
   ? '-'
   : `${health.value.fragmentation_ratio.toFixed(2)} ×`)
@@ -126,7 +131,7 @@ onUnmounted(() => controller?.abort())
           <div class="coverage" aria-label="源文件索引覆盖率">
             <div class="coverage-head">
               <small>文件覆盖率</small>
-              <strong>{{ coverage }}<span>%</span></strong>
+              <strong>{{ coverageLabel }}<span>%</span></strong>
             </div>
             <n-progress type="line" :percentage="coverage" :status="coverageStatus"
               :height="8" border-radius="0" :show-indicator="false" />
