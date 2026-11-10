@@ -63,6 +63,47 @@ class IngestHistoryTest(unittest.TestCase):
         self.assertEqual(records[-1]["time"], "104")
         self.assertFalse(list(self.settings.parent.glob("*.tmp")))
 
+    def test_history_size_is_bounded_by_dropping_oldest_summaries(self):
+        for i in range(100):
+            library.append_ingest_history({
+                "time": f"2026-11-10T10:{i:02}:00", "added": 1,
+                "skipped": [f"category-{i}/manual-{j}.pdf" for j in range(100)],
+            })
+        path = library.ingest_history_file()
+        self.assertLessEqual(path.stat().st_size, library.MAX_INGEST_HISTORY_BYTES)
+        records = library.read_ingest_history()
+        self.assertLessEqual(len(records), library.MAX_INGEST_HISTORY_RECORDS)
+        self.assertEqual(records[-1]["time"], "2026-11-10T10:99:00")
+
+    def test_single_large_record_keeps_counts_and_bounds_path_list(self):
+        ingest._append_history(1, 0, 1, 0.5, ["x" * 512] * 2000)
+        path = library.ingest_history_file()
+        self.assertLessEqual(path.stat().st_size, library.MAX_INGEST_HISTORY_BYTES)
+        record = library.read_ingest_history()[-1]
+        self.assertEqual(record["added"], 1)
+        self.assertEqual(len(record["skipped"]), library.MAX_INGEST_SKIPPED)
+        self.assertEqual(record["skipped_omitted"], 2000 - library.MAX_INGEST_SKIPPED)
+        # 再入库一次后,已省略的数量不能被重复归一化弄丢。
+        ingest._append_history(2, 0, 2, 0.3, [])
+        self.assertEqual(library.read_ingest_history()[0]["skipped_omitted"],
+                         2000 - library.MAX_INGEST_SKIPPED)
+
+    def test_oversized_or_corrupt_json_is_not_partially_parsed(self):
+        path = library.ingest_history_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'[' + b'x' * (library.MAX_INGEST_HISTORY_BYTES + 1))
+        self.assertEqual(library.read_ingest_history(), [])
+        path.write_text('{"not": "a list"}', encoding="utf-8")
+        self.assertEqual(library.read_ingest_history(), [])
+        path.write_text('[{"time": "ok"},', encoding="utf-8")
+        self.assertEqual(library.read_ingest_history(), [])
+
+    def test_non_finite_numbers_do_not_produce_nonstandard_json(self):
+        library.write_ingest_history([{"time": "x", "elapsed": float("nan"), "added": 1}])
+        raw = library.ingest_history_file().read_text(encoding="utf-8")
+        self.assertNotIn("NaN", raw)
+        self.assertNotIn("elapsed", json.loads(raw)[0])
+
     def test_stats_endpoint_reads_persistent_history(self):
         db = lancedb.connect(str(self.db_path))
         db.create_table("chunks", data=pa.Table.from_pylist([

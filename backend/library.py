@@ -1,10 +1,20 @@
 """共享索引句柄、元数据聚合、参数解析与领域错误;读取入口在 agent_documents。"""
 import json
+import logging
+import math
 import os
 import re
 from pathlib import Path
 
 from . import config, doc_utils
+
+log = logging.getLogger("pdfrag.library")
+
+# 历史只是入库摘要,不是完整审计日志:限制记录数、单条跳过清单和总体积。
+MAX_INGEST_HISTORY_RECORDS = 100
+MAX_INGEST_HISTORY_BYTES = 512 * 1024
+MAX_INGEST_SKIPPED = 100
+MAX_INGEST_PATH_CHARS = 512
 
 
 class LibraryError(Exception):
@@ -312,8 +322,52 @@ def ingest_history_file() -> Path:
     return Path(config.SETTINGS_FILE).parent / "ingest_history.json"
 
 
+def _normalise_history_record(value: dict) -> dict:
+    """只保留入库摘要字段,并限制自由文本与跳过清单的规模。"""
+    record: dict = {}
+    if isinstance(value.get("time"), str):
+        record["time"] = value["time"][:64]
+    for key in ("added", "removed", "chunks", "elapsed"):
+        item = value.get(key)
+        if item is None or isinstance(item, int) and not isinstance(item, bool) \
+                or isinstance(item, float) and math.isfinite(item):
+            record[key] = item
+    skipped = value.get("skipped")
+    paths = [item[:MAX_INGEST_PATH_CHARS] for item in skipped if isinstance(item, str)] \
+        if isinstance(skipped, list) else []
+    record["skipped"] = paths[:MAX_INGEST_SKIPPED]
+    omitted = max(0, len(paths) - MAX_INGEST_SKIPPED)
+    previous_omitted = value.get("skipped_omitted")
+    if isinstance(previous_omitted, int) and previous_omitted > 0:
+        omitted += previous_omitted
+    if omitted > 0:
+        record["skipped_omitted"] = omitted
+    return record
+
+
+def _serialize_history(records: list[dict]) -> bytes:
+    """生成有界 JSON:优先丢最旧摘要,绝不截断 JSON 文本本身。"""
+    bounded = [_normalise_history_record(item) for item in records if isinstance(item, dict)]
+    bounded = bounded[-MAX_INGEST_HISTORY_RECORDS:]
+    while bounded:
+        payload = (json.dumps(bounded, ensure_ascii=False, indent=1) + "\n").encode("utf-8")
+        if len(payload) <= MAX_INGEST_HISTORY_BYTES:
+            return payload
+        if len(bounded) > 1:
+            bounded = bounded[1:]
+            continue
+        # 单条也可能因大量跳过文件而超限;保留入库统计,省略路径明细。
+        record = bounded[0]
+        if record["skipped"]:
+            record["skipped_omitted"] = record.get("skipped_omitted", 0) + len(record["skipped"])
+            record["skipped"] = []
+            continue
+        raise ValueError("单条索引历史摘要超过体积上限")
+    return b"[]\n"
+
+
 def read_ingest_history() -> list[dict]:
-    """读取索引历史;新路径不存在时兼容旧的容器内/仓库根目录文件。"""
+    """读取有界且完整的 JSON;新路径不存在时兼容旧的容器内文件。"""
     candidates = [ingest_history_file(),
                   Path(config.DB_PATH).parent / "ingest_history.json",
                   Path(__file__).resolve().parent.parent / "ingest_history.json"]
@@ -324,21 +378,36 @@ def read_ingest_history() -> list[dict]:
             continue
         seen.add(key)
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
+            # 先 stat,避免异常大文件被整体读入内存;不读取被截断的 JSON 猜测内容。
+            if path.stat().st_size > MAX_INGEST_HISTORY_BYTES:
+                log.warning("索引历史超过 %d 字节,忽略: %s", MAX_INGEST_HISTORY_BYTES, path)
+                continue
+            with path.open("rb") as handle:
+                raw = handle.read(MAX_INGEST_HISTORY_BYTES + 1)
+            if len(raw) > MAX_INGEST_HISTORY_BYTES:
+                continue
+            value = json.loads(raw)
             if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
+                return [_normalise_history_record(item) for item in value if isinstance(item, dict)]
         except (OSError, ValueError, TypeError):
             continue
     return []
 
 
 def write_ingest_history(records: list[dict]) -> None:
-    """原子写入最近 100 条记录,避免中断留下半个 JSON 文件。"""
+    """原子写入有界历史,并把文件内容同步到磁盘后再替换正式文件。"""
+    payload = _serialize_history(records)
     path = ingest_history_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(records[-100:], ensure_ascii=False, indent=1), encoding="utf-8")
-    os.replace(tmp, path)
+    try:
+        with tmp.open("wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def append_ingest_history(record: dict) -> None:
