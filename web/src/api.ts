@@ -43,6 +43,50 @@ export interface HistoryEntry {
   skipped: string[]
 }
 
+export interface IndexHealthVectorPartition {
+  table: string
+  rows: number
+  indices: string[]
+}
+
+export interface IndexHealth {
+  status: 'ok' | 'degraded' | 'missing' | 'unknown' | string
+  warnings: ApiWarning[]
+  rows?: number
+  table_version?: number
+  fts_index?: string[] | null
+  vector_partitions?: IndexHealthVectorPartition[] | null
+  disk_bytes?: number | null
+  disk_files?: number
+  data_bytes?: number
+  fragmentation_ratio?: number
+  last_ingest: {
+    time: string | null
+    added: number | null
+    removed: number | null
+    chunks: number | null
+    elapsed: number | null
+    skipped: number
+    skipped_examples: string[]
+  } | null
+  entity_snapshot?: { bytes: number; mtime: number }
+}
+
+export interface LibraryStatus {
+  indexed: boolean
+  files: number
+  chunks: number
+  categories: number
+  source_files: number
+  indexed_files: number
+  unindexed_files: number
+  missing_source_files: number
+  source_status: string
+  warnings: ApiWarning[]
+  health?: IndexHealth
+  checked_at: string
+}
+
 export interface IngestState {
   phase: string
   total_files?: number
@@ -246,6 +290,8 @@ async function errorText(r: Response): Promise<string> {
 
 export const getState = () => get<IngestState>('/state')
 export const getStats = () => get<Stats>('/stats')
+export const getLibraryStatus = (signal?: AbortSignal) =>
+  get<LibraryStatus>('/v2/status', signal)
 export const getCategories = async () =>
   (await get<{ categories: string[] }>('/v2/categories')).categories
 export async function getFiles(category?: string): Promise<FileEntry[]> {

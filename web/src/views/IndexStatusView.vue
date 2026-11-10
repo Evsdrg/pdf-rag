@@ -4,6 +4,7 @@ import { NCard, NAlert, NTag, NSpace, NSpin, NButton, NPopconfirm, useMessage } 
 import { getState, runIngest } from '../api'
 import type { IngestState } from '../api'
 import ProgressBar from '../components/ProgressBar.vue'
+import IndexHealthCard from '../components/IndexHealthCard.vue'
 
 const message = useMessage()
 const state = ref<IngestState | null>(null)
@@ -70,6 +71,7 @@ const eta = computed(() => {
 </script>
 
 <template>
+  <IndexHealthCard />
   <n-card title="索引进度">
     <template #header-extra>
       <div class="head">
