@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
+import { computed, onUnmounted, shallowRef, watch } from 'vue'
 import { NAlert, NButton, NCard, NEmpty, NProgress, NSpace, NSpin, NTag } from 'naive-ui'
 import { getLibraryStatus } from '../api'
 import type { ApiWarning, LibraryStatus } from '../api'
 import { coveragePercentage } from '../indexHealth'
+
+const props = defineProps<{ refreshToken?: number }>()
 
 const status = shallowRef<LibraryStatus | null>(null)
 const error = shallowRef('')
@@ -112,7 +114,8 @@ async function refresh() {
   }
 }
 
-onMounted(refresh)
+// 挂载即读一次;此后由索引完成态驱动刷新,手动按钮仍可随时重读。
+watch(() => props.refreshToken, refresh, { immediate: true })
 onUnmounted(() => controller?.abort())
 </script>
 

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NCard, NAlert, NTag, NSpace, NSpin, NButton, NPopconfirm, useMessage } from 'naive-ui'
-import { getState, runIngest } from '../api'
+import { getState, invalidateSWR, runIngest } from '../api'
 import type { IngestState } from '../api'
+import { ingestFinishedSince } from '../indexHealth'
 import ProgressBar from '../components/ProgressBar.vue'
 import IndexHealthCard from '../components/IndexHealthCard.vue'
 
@@ -10,12 +11,25 @@ const message = useMessage()
 const state = ref<IngestState | null>(null)
 const err = ref('')
 const starting = ref(false)
+const healthRefreshToken = ref(0)
 let timer: number | undefined
+let lastFinishedAt: string | undefined
+let finishedBaselineReady = false
 
 async function poll() {
   try {
-    state.value = await getState()
+    const next = await getState()
+    state.value = next
     err.value = ''
+    // 首次成功轮询只记录基线;之后每次出现新的入库完成时间,健康卡与资料库都要重读。
+    if (!finishedBaselineReady) {
+      finishedBaselineReady = true
+      lastFinishedAt = next.finished_at
+    } else if (ingestFinishedSince(lastFinishedAt, next.finished_at)) {
+      lastFinishedAt = next.finished_at
+      healthRefreshToken.value += 1
+      invalidateSWR('stats')
+    }
   } catch (e) {
     err.value = `无法连接后端服务:${(e as Error).message}`
   }
@@ -71,7 +85,7 @@ const eta = computed(() => {
 </script>
 
 <template>
-  <IndexHealthCard />
+  <IndexHealthCard :refresh-token="healthRefreshToken" />
   <n-card title="索引进度">
     <template #header-extra>
       <div class="head">

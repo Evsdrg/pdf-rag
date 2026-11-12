@@ -10,3 +10,13 @@ export function coveragePercentage(status: CoverageStatus | null): number | null
   // 未满覆盖不能四舍五入成 100%,否则与待入库数量矛盾。
   return raw >= 100 ? 100 : Math.min(99.9, Math.floor(raw * 10) / 10)
 }
+
+/**
+ * 是否出现了新的真实入库完成标记。
+ * 用 finished_at 而不是 phase 转换:很小的增量可能在两次轮询之间完成,
+ * 页面从未观察到运行阶段;空 await 的“无需更新”不写 finished_at,也不算新入库。
+ */
+export function ingestFinishedSince(lastFinishedAt: string | undefined,
+                                    nextFinishedAt: string | undefined): boolean {
+  return Boolean(nextFinishedAt) && nextFinishedAt !== lastFinishedAt
+}
