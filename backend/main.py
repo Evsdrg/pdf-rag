@@ -15,7 +15,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import agent_routes, bundle, config, doc_utils, library, retrieval, vecstore
+from . import agent_routes, bundle, config, doc_utils, library, log_filters, retrieval, vecstore
 
 ROOT = Path(__file__).resolve().parent
 
@@ -49,6 +49,9 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PDF-RAG API", lifespan=_lifespan)
+# 飞牛 fnOS 的端口探活先发 TLS ClientHello 再发明文 HEAD;明文端口必然拒绝前者,
+# uvicorn 因此每 2 秒左右打一条固定 WARNING。只过滤这一条,见 log_filters。
+log_filters.install_probe_filter()
 app.include_router(agent_routes.router)
 
 
