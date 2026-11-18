@@ -170,9 +170,37 @@ export interface StructuredDiagnostics {
   index_entities?: number
   index_build_ms?: number
   index_cached?: boolean
+  index_source?: 'build' | 'snapshot' | 'memory' | string
+  index_load_ms?: number
   seeds?: number
   pruned_neighbors?: number
   by_model?: Record<string, number>
+}
+
+export interface SearchTimings {
+  result_cache_lookup?: number
+  fts?: number
+  substring?: number
+  vector?: number
+  structured?: number
+  candidate_finalize?: number
+  rerank?: number
+  result_render?: number
+  total?: number
+}
+
+export interface UpstreamOperationMetrics {
+  calls: number
+  attempts: number
+  retries: number
+  elapsed_ms: number
+}
+
+export interface UpstreamDiagnostics {
+  embeddings?: UpstreamOperationMetrics
+  rerank?: UpstreamOperationMetrics
+  embedding_cache_hits: number
+  embedding_cache_misses: number
 }
 
 export interface SearchResponse {
@@ -180,6 +208,9 @@ export interface SearchResponse {
   warnings: ApiWarning[]
   notice: string
   structured: StructuredDiagnostics
+  timings_ms: SearchTimings
+  upstream: UpstreamDiagnostics
+  cached: boolean
   truncated: boolean
   continuation_hint: string
 }

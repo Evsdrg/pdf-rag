@@ -6,7 +6,7 @@ import {
 import type { SelectOption } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 import { docLabel, getCategories, searchDocs, pdfUrl } from '../api'
-import type { SearchHit } from '../api'
+import type { SearchHit, SearchResponse } from '../api'
 import PageDrawer from '../components/PageDrawer.vue'
 import StructuredEvidence from '../components/StructuredEvidence.vue'
 
@@ -18,6 +18,7 @@ const results = ref<SearchHit[]>([])
 const searching = ref(false)
 const searched = ref(false)
 const diagnostics = ref('')
+const timingSummary = ref('')
 const mode = ref('mixed')
 const rerank = ref(true)
 const structured = shallowRef(false)
@@ -47,6 +48,40 @@ onMounted(async () => {
   }
 })
 
+function formatMs(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value)} ms` : ''
+}
+
+function timingLabel(response: SearchResponse) {
+  const timings = response.timings_ms ?? {}
+  const upstream = response.upstream ?? { embedding_cache_hits: 0, embedding_cache_misses: 0 }
+  const parts = [`总计 ${formatMs(timings.total) || '—'}`]
+  if (response.cached) {
+    parts.push('结果缓存命中')
+  } else {
+    const local = [
+      ['FTS', timings.fts], ['型号', timings.substring], ['向量通道', timings.vector],
+      ['结构化', timings.structured], ['本地整理', timings.candidate_finalize],
+      ['结果组装', timings.result_render],
+    ].filter((item): item is [string, number] => typeof item[1] === 'number')
+    if (local.length) parts.push(local.map(([name, ms]) => `${name} ${formatMs(ms)}`).join(' · '))
+    if (upstream.embeddings) {
+      const item = upstream.embeddings
+      parts.push(`嵌入 ${formatMs(item.elapsed_ms)}${item.retries ? `（重试 ${item.retries}）` : ''}`)
+    }
+    if (upstream.rerank) {
+      const item = upstream.rerank
+      parts.push(`重排 ${formatMs(item.elapsed_ms)}${item.retries ? `（重试 ${item.retries}）` : ''}`)
+    }
+    if (upstream.embedding_cache_hits || upstream.embedding_cache_misses) {
+      parts.push(`向量缓存 ${upstream.embedding_cache_hits} 命中 / ${upstream.embedding_cache_misses} 未命中`)
+    }
+  }
+  return parts.join('；')
+}
+
+const timingFootnote = '阶段时间彼此包含且不完全可加总；向量缓存只省嵌入调用，未缓存时仍可能执行向量检索和重排。'
+
 function pushHistory(query: string) {
   const h = [query, ...history.value.filter((x) => x !== query)].slice(0, 10)
   history.value = h
@@ -61,6 +96,7 @@ async function run(query?: string) {
   }
   q.value = queryText
   searching.value = true
+  timingSummary.value = ''
   inFlight?.abort()
   const ctrl = new AbortController()
   inFlight = ctrl
@@ -70,6 +106,7 @@ async function run(query?: string) {
       fileFilter.value.trim() || undefined, 0, ctrl.signal, structured.value,
     )
     results.value = response.results
+    timingSummary.value = timingLabel(response)
     const structuredStatus = response.structured
     const statusLabels = {
       disabled: '未启用', skipped: '未识别可连接实体', empty: '无匹配候选', used: '已参与召回', failed: '已降级',
@@ -170,6 +207,9 @@ function fileBase(file: string) {
       </template>
 
       <p v-if="diagnostics" class="diagnostics" role="status">{{ diagnostics }}</p>
+      <p v-if="timingSummary" class="timing-summary" :title="timingFootnote" aria-live="polite">
+        检索耗时：{{ timingSummary }}<span class="timing-note">{{ timingFootnote }}</span>
+      </p>
       <n-spin :show="searching">
         <div v-if="!searched" class="hint">
           <n-empty description="输入查询并搜索,将混合 BM25 全文 + 语义向量检索" />
@@ -219,6 +259,8 @@ function fileBase(file: string) {
 
 <style scoped>
 .diagnostics { color: #f9e2af; margin: 0; font-size: 13px; }
+.timing-summary { color: #a6adc8; margin: -6px 0 0; font-size: 12px; line-height: 1.5; }
+.timing-note { display: block; color: #7f849c; font-size: 11px; }
 .row {
   max-width: 760px;
 }

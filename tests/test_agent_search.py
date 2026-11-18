@@ -85,6 +85,71 @@ class DiagnosticsTest(unittest.TestCase):
         self.assertEqual(first["vector_partitions"], second["vector_partitions"])
         self.assertEqual(second["warnings"], [])
 
+    def test_timings_are_request_local_and_have_no_query_content(self):
+        def add(table, query, limit, category, file, candidates, degraded):
+            candidates.add(row("supply voltage"), 0)
+        with patch.object(retrieval, "_channel_fts", side_effect=add), \
+             patch.object(retrieval, "_channel_substring"), \
+             override_config(query_cache_ttl=600, query_cache_size=10):
+            first, second = {}, {}
+            table = SimpleNamespace(version=1)
+            retrieval.search(table, "voltage", mode="fts", rerank=False, diagnostics=first)
+            retrieval.search(table, "voltage", mode="fts", rerank=False, diagnostics=second)
+        self.assertFalse(first["cached"])
+        self.assertTrue(second["cached"])
+        self.assertIn("total", first["timings_ms"])
+        self.assertIn("result_cache_lookup", second["timings_ms"])
+        self.assertNotIn("fts", second["timings_ms"])
+        self.assertEqual(second["upstream"], {
+            "embedding_cache_hits": 0, "embedding_cache_misses": 0})
+        self.assertNotIn("voltage", repr(first["timings_ms"]))
+        self.assertNotIn("voltage", repr(first["upstream"]))
+
+    def test_upstream_metrics_count_actual_calls_and_retries(self):
+        class FakeResponse:
+            def __init__(self, status_code=200):
+                self.status_code = status_code
+                self.text = "temporary rate limit" if status_code == 429 else ""
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"data": [{"embedding": [0.0] * 768}]}
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = 0
+
+            def post(self, *args, **kwargs):
+                self.calls += 1
+                return FakeResponse(429 if self.calls == 1 else 200)
+
+        fake_client = FakeClient()
+
+        def add(table, query, limit, category, file, candidates, degraded, diagnostics):
+            retrieval.embed_query(query)
+            candidates.add(row("supply voltage"), 0)
+
+        with patch.object(retrieval, "_client", return_value=fake_client), \
+             patch("backend.retrieval.time.sleep") as sleep, \
+             patch.object(retrieval, "_channel_vector", side_effect=add), \
+             override_config(embed_cache_size=0, query_cache_ttl=0, retry_attempts=2,
+                             retry_base_delay=0.25):
+            diagnostics = {}
+            retrieval.search(SimpleNamespace(version=1), "voltage", mode="vector",
+                             rerank=False, diagnostics=diagnostics)
+        self.assertEqual(fake_client.calls, 2)
+        self.assertEqual(sleep.call_args_list[0].args, (0.25,))
+        self.assertEqual(diagnostics["upstream"]["embeddings"]["calls"], 1)
+        self.assertEqual(diagnostics["upstream"]["embeddings"]["attempts"], 2)
+        self.assertEqual(diagnostics["upstream"]["embeddings"]["retries"], 1)
+        self.assertGreaterEqual(diagnostics["upstream"]["embeddings"]["elapsed_ms"], 0)
+        self.assertLessEqual(diagnostics["upstream"]["embeddings"]["elapsed_ms"],
+                             diagnostics["timings_ms"]["vector"])
+        self.assertEqual(diagnostics["upstream"]["embedding_cache_hits"], 0)
+        self.assertEqual(diagnostics["upstream"]["embedding_cache_misses"], 1)
+
 
 class GrepTest(unittest.TestCase):
     def run_grep(self, rows, **kwargs):

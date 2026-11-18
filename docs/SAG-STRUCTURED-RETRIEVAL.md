@@ -36,7 +36,9 @@ MCP `pdf_rag_search`、Web「检索测试」的「结构化扩展（实验）」
   "index_rows": 100,
   "index_entities": 60,
   "index_build_ms": 25.0,
-  "index_cached": true
+  "index_cached": true,
+  "index_source": "snapshot",
+  "index_load_ms": 12.0
 }
 ```
 
@@ -48,8 +50,13 @@ MCP `pdf_rag_search`、Web「检索测试」的「结构化扩展（实验）」
 
 `direct_candidates/expanded_candidates` 是有限候选页数，`added_pages` 是成功回表并通过过滤后
 参与融合的页数，并非相对于其他通道的“新增页数”。`index_build_ms` 是当前内存索引最初的
-构建耗时，不是每次查询耗时；`index_cached` 表示本次是否复用了实体索引。整个搜索响应
-命中结果缓存时，这些字段是被缓存的原查询诊断，应结合顶层 `cached` 判断。
+构建耗时，不是每次查询耗时；`index_cached` 表示本次是否复用了实体索引。新增的
+`index_source` 区分 `build/snapshot/memory`，`index_load_ms` 是本次取得实体索引的实际耗时。
+整个搜索响应命中结果缓存时，结构化字段沿用缓存查询的结构化诊断，应结合顶层 `cached` 判断。
+
+查询响应还包含 `timings_ms` 与 `upstream`：前者是本次请求的阶段耗时，结果缓存命中时只报告
+缓存查找与总耗时；后者只含嵌入/重排调用、尝试、重试、累计毫秒和查询向量缓存计数。
+二者不记录查询文本、文件路径、手册正文、密钥或服务地址，也不触发额外请求。
 
 这些字段不是实体事实、正确率或条件满足证明。证据继续使用 `results[].snippet`、
 `snippet_ref`、`file/page`，必要时读页、grep 或查看页图。

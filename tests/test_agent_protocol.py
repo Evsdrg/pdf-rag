@@ -66,6 +66,8 @@ class ProtocolTest(unittest.TestCase):
             calls.append(enabled)
             kwargs["diagnostics"].update(
                 structured={"enabled": enabled, "status": "empty" if enabled else "disabled"},
+                timings_ms={"total": 0.1},
+                upstream={"embedding_cache_hits": 0, "embedding_cache_misses": 0},
                 degraded=[], warnings=[],
             )
             return []
@@ -85,6 +87,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(calls, [False, True, True])
         self.assertEqual(default["structured"], {"enabled": False, "status": "disabled"})
         self.assertEqual(enabled["structured"], {"enabled": True, "status": "empty"})
+        self.assertEqual(enabled["timings_ms"], {"total": 0.1})
+        self.assertEqual(enabled["upstream"]["embedding_cache_misses"], 0)
         self.assertEqual(len(tools), 10)
         self.assertEqual(len(mcp_result.content), 1)
         self.assertIsNone(mcp_result.structured_content)

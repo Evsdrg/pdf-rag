@@ -17,7 +17,8 @@ from tools.entity_cache_benchmark import measure_entity_cache
 def signature(value):
     if isinstance(value, dict):
         return {key: signature(item) for key, item in value.items()
-                if key not in ("index_build_ms", "index_cached", "cached")}
+                if key not in ("index_build_ms", "index_load_ms", "index_cached", "index_source",
+                               "timings_ms", "upstream", "cached")}
     if isinstance(value, (list, tuple)):
         return [signature(item) for item in value]
     return value

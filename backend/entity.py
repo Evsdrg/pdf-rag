@@ -63,6 +63,8 @@ class EntitySearch:
     pruned: int = 0
     by_model: dict[str, int] = field(default_factory=dict)
     paths: dict[str, dict] = field(default_factory=dict, repr=False, compare=False)
+    index_source: str = ""
+    index_load_ms: float = 0.0
 
     @property
     def ordered_uids(self) -> tuple[str, ...]:
@@ -220,13 +222,14 @@ def build(table) -> EntityIndex:
                        len({meta["file"] for meta in metadata.values()}))
 
 
-def _cached_index(table) -> tuple[EntityIndex, bool]:
+def _cached_index(table) -> tuple[EntityIndex, bool, str, float]:
     global _CACHE, _LIMIT_FAILURE
+    started = time.perf_counter()
     # 一次只保留一份实体索引;同版本首批并发查询共享一次冷建。
     with _LOCK:
         version = int(table.version)
         if _CACHE and _CACHE[0] is table and _CACHE[1] == version:
-            return _CACHE[2], True
+            return _CACHE[2], True, "memory", (time.perf_counter() - started) * 1000
         if _LIMIT_FAILURE and _LIMIT_FAILURE[0] is table and _LIMIT_FAILURE[1] == version:
             raise IndexLimitError(_LIMIT_FAILURE[2])
         _CACHE = None
@@ -236,7 +239,7 @@ def _cached_index(table) -> tuple[EntityIndex, bool]:
             _CACHE = (table, version, snapshot)
             _LIMIT_FAILURE = None
             _release_heap()
-            return snapshot, True
+            return snapshot, True, "snapshot", (time.perf_counter() - started) * 1000
         try:
             index = build(table)
         except IndexLimitError as error:
@@ -249,7 +252,7 @@ def _cached_index(table) -> tuple[EntityIndex, bool]:
         except Exception:
             pass                     # 快照失败只影响下次冷建速度
         _release_heap()
-        return index, False
+        return index, False, "build", (time.perf_counter() - started) * 1000
 
 
 def get_index(table) -> EntityIndex:
@@ -326,7 +329,7 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
     signals = {key for key in keys if _kind(key) not in {"model", "value"}}
     if not signals:
         return EntitySearch(keys, (), (), "skipped")
-    index, cached = _cached_index(table)
+    index, cached, index_source, index_load_ms = _cached_index(table)
     resolved = _resolve(index, keys)
     groups = model_groups(index, keys)
     model_scope = set().union(*groups.values()) if groups else set()
@@ -421,7 +424,7 @@ def search(table, query: str, *, category: str | None = None, file: str | None =
     selected = direct_uids + expanded
     counts = {key.removeprefix("model:"): sum(uid in scope for uid in selected) for key, scope in groups.items()}
     return EntitySearch(keys, direct_uids, expanded, status, index, cached, len(seeds), pruned, counts,
-                        {uid: paths[uid] for uid in expanded})
+                        {uid: paths[uid] for uid in expanded}, index_source, index_load_ms)
 
 
 def diagnostics(result: EntitySearch) -> dict:
@@ -430,5 +433,6 @@ def diagnostics(result: EntitySearch) -> dict:
            "seeds": result.seeds, "pruned_neighbors": result.pruned, "by_model": result.by_model}
     if result.index is not None:
         out.update(index_rows=len(result.index.entities_by_uid), index_entities=len(result.index.by_entity),
-                   index_build_ms=round(result.index.build_ms, 3), index_cached=result.index_cached)
+                   index_build_ms=round(result.index.build_ms, 3), index_cached=result.index_cached,
+                   index_source=result.index_source, index_load_ms=round(result.index_load_ms, 3))
     return out

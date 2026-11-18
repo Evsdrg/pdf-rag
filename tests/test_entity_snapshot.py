@@ -43,18 +43,26 @@ class SnapshotTest(unittest.TestCase):
         self.db = lancedb.connect(str(self.root / "db"))
         self.table = self.db.create_table("chunks", data=pa.Table.from_pylist(_rows("A")))
     def test_snapshot_is_written_and_reused(self):
-        first = entity.get_index(self.table)
+        first = entity.search(self.table, "QMC6309 VDD", limit=2)
+        self.assertEqual(first.status, "used")
+        self.assertEqual(first.index_source, "build")
+        self.assertGreaterEqual(first.index_load_ms, 0)
+        memory_hit = entity.search(self.table, "QMC6309 VDD", limit=2)
+        self.assertEqual(memory_hit.index_source, "memory")
+        self.assertTrue(memory_hit.index_cached)
+        self.assertGreaterEqual(memory_hit.index_load_ms, 0)
         self.assertTrue(entity.cache_path().exists(), "构建后应写出快照")
 
         # 清掉内存缓存但保留快照:应当从磁盘恢复,内容一致
         entity.reset_cache(clear_snapshot=False)
         with patch.object(entity, "_release_heap") as release:
-            second = entity.get_index(self.table)
+            second = entity.search(self.table, "QMC6309 VDD", limit=2)
         release.assert_called_once_with()
-        self.assertEqual(second.table_version, first.table_version)
-        self.assertEqual(set(second.entities_by_uid), set(first.entities_by_uid))
-        self.assertEqual(second.by_entity, first.by_entity)
-        self.assertEqual(second.metadata_by_uid, first.metadata_by_uid)
+        self.assertEqual(second.index_source, "snapshot")
+        self.assertGreaterEqual(second.index_load_ms, 0)
+        self.assertEqual(second.status, first.status)
+        self.assertEqual(second.direct_uids, first.direct_uids)
+        self.assertEqual(second.expanded_uids, first.expanded_uids)
 
     def test_cache_benchmark_separates_rebuilds_and_preserves_real_snapshot(self):
         entity.get_index(self.table)

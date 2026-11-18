@@ -28,7 +28,7 @@ GET /api/v2/search?query=QMC6309%20供电电压&file=QMC6309&top_k=3
 GET /api/v2/page?file=01_传感器/QMC6309.pdf&page=5&max_chars=8000
 ```
 
-成功返回 `schema_version=2` 的 JSON；预期错误为 `{error:{code,message,details}}` 并使用相应 HTTP 状态码。FastAPI 参数类型校验保留标准 422。长结果看 `truncated/next_cursor`，续读时保持其余参数不变。
+成功返回 `schema_version=2` 的 JSON；搜索响应包含本次请求的 `timings_ms` 阶段耗时和 `upstream` 调用/重试计数（不含查询正文或凭据）；预期错误为 `{error:{code,message,details}}` 并使用相应 HTTP 状态码。FastAPI 参数类型校验保留标准 422。长结果看 `truncated/next_cursor`，续读时保持其余参数不变。
 
 ## 2. 原文件、统计与提取质量
 

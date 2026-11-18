@@ -155,8 +155,11 @@ def evaluate(data, table, rows):
                     detail_events += packet_events(turn, scope=(q["id"], "details", index), revision=str(version))
             stable_formal = None
             if formal:
-                stable_formal = {**formal, "structured": {key: value for key, value in formal["structured"].items()
-                                                        if key != "index_build_ms"}}
+                stable_formal = {key: value for key, value in formal.items()
+                                 if key not in ("timings_ms", "upstream")}
+                stable_formal["structured"] = {key: value for key, value in formal["structured"].items()
+                                                if key not in ("index_build_ms", "index_load_ms", "index_cached",
+                                                               "index_source")}
             record = {"id": q["id"], "source_status": source["status"], "bindings": len(result["bindings"]),
                 "formal_index_build_ms": (formal or {}).get("structured", {}).get("index_build_ms"),
                 "stable_formal_signature": agent_paging.fingerprint(stable_formal),

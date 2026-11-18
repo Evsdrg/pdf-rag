@@ -21,6 +21,7 @@
   当前索引没有可靠版本继承关系,不同字节的来源保留,不猜测合并版本。
 """
 import collections
+import contextvars
 import logging
 import os
 import re
@@ -50,6 +51,20 @@ _SCORE_DECIMALS = 4
 # ==================== HTTP 层 ====================
 
 _CLIENT: httpx.Client | None = None
+_REQUEST_METRICS: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "pdfrag_retrieval_metrics", default=None)
+
+
+def _record_upstream(operation: str, elapsed_ms: float, attempts: int) -> None:
+    metrics = _REQUEST_METRICS.get()
+    if metrics is None:
+        return
+    item = metrics["upstream"].setdefault(
+        operation, {"calls": 0, "attempts": 0, "retries": 0, "elapsed_ms": 0.0})
+    item["calls"] += 1
+    item["attempts"] += attempts
+    item["retries"] += max(0, attempts - 1)
+    item["elapsed_ms"] += elapsed_ms
 
 
 def _client() -> httpx.Client:
@@ -101,21 +116,29 @@ def _post_retry(url: str, payload: dict):
     attempts = config.get("retry_attempts")
     base = config.get("retry_base_delay")
     last = ""
-    for i in range(attempts):
-        try:
-            r = _client().post(url, headers={"Authorization": f"Bearer {config.EMBED_API_KEY}"},
-                               json=payload)
-            if r.status_code not in _RETRYABLE_STATUS:
-                r.raise_for_status()
-                return r
-            if _deterministic_failure(r):
-                raise RuntimeError(f"HTTP {r.status_code} 模型无可用渠道: {r.text[:160]}")
-            last = f"HTTP {r.status_code}"
-        except httpx.HTTPError as e:
-            last = f"{type(e).__name__}: {e}"
-        if i < attempts - 1:
-            time.sleep(base * (2 ** i))
-    raise RuntimeError(f"重试 {attempts} 次仍失败: {last}")
+    started = time.perf_counter()
+    tried = 0
+    operation = url.rsplit("/", 1)[-1].split("?", 1)[0]
+    try:
+        for i in range(attempts):
+            try:
+                tried += 1
+                r = _client().post(url, headers={"Authorization": f"Bearer {config.EMBED_API_KEY}"},
+                                   json=payload)
+                if r.status_code not in _RETRYABLE_STATUS:
+                    r.raise_for_status()
+                    return r
+                if _deterministic_failure(r):
+                    raise RuntimeError(f"HTTP {r.status_code} 模型无可用渠道: {r.text[:160]}")
+                last = f"HTTP {r.status_code}"
+            except httpx.HTTPError as e:
+                last = f"{type(e).__name__}: {e}"
+            if i < attempts - 1:
+                time.sleep(base * (2 ** i))
+        raise RuntimeError(f"重试 {attempts} 次仍失败: {last}")
+    finally:
+        if operation in ("embeddings", "rerank"):
+            _record_upstream(operation, (time.perf_counter() - started) * 1000, tried)
 
 
 def _base_url() -> str:
@@ -152,7 +175,14 @@ def embed_query(text: str, input_type_override: str | None = None,
     cached = _EMBED_CACHE.get(key)
     if cached is not None:
         _EMBED_CACHE.move_to_end(key)
+        metrics = _REQUEST_METRICS.get()
+        if metrics is not None:
+            metrics["embedding_cache_hits"] += 1
         return cached
+
+    metrics = _REQUEST_METRICS.get()
+    if metrics is not None:
+        metrics["embedding_cache_misses"] += 1
 
     payload = {"model": model, "input": [text]}
     if input_type:                 # Cohere 系需要;留空则不发送(OpenAI 兼容模型)
@@ -965,10 +995,10 @@ def _finish_diagnostics(diag: dict, candidates: int, returned: int):
     diag["notice"] = "; ".join(item["message"] for item in diag["warnings"])
 
 
-def search(table, query: str, category: str | None = None, top_k: int = 5,
-           mode: str = "mixed", rerank: bool = True, file: str | None = None,
-           max_per_doc: int = 0, diagnostics: dict | None = None,
-           structured: bool = False) -> list[dict]:
+def _search(table, query: str, category: str | None = None, top_k: int = 5,
+            mode: str = "mixed", rerank: bool = True, file: str | None = None,
+            max_per_doc: int = 0, diagnostics: dict | None = None,
+            structured: bool = False) -> list[dict]:
     """混合检索,返回命中列表。
 
     file        按文件路径子串限定检索范围(如 "QMC6309")
@@ -978,13 +1008,18 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
     diag = diagnostics if diagnostics is not None else {}
     degraded: list[str] = []
     diag["degraded"] = degraded
+    timings: dict[str, float] = {}
+    diag["timings_ms"] = timings
     max_per_doc = max_per_doc or config.get("max_per_doc")
 
     ckey = _cache_key(table, query, category, top_k, mode, rerank, file, max_per_doc, structured)
+    stage_started = time.perf_counter()
     cached = _cache_get(ckey)
+    timings["result_cache_lookup"] = round((time.perf_counter() - stage_started) * 1000, 3)
     if cached is not None:
         out, cdiag = cached
         diag.update(cdiag)
+        diag["timings_ms"] = timings
         diag["cached"] = True
         return [dict(x) for x in out]
     diag["cached"] = False
@@ -993,17 +1028,26 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
     limit = max(top_k * (config.get("cand_mult_category") if category
                          else config.get("cand_mult")), config.get("cand_floor"))
     if mode in ("mixed", "fts"):
+        stage_started = time.perf_counter()
         _channel_fts(table, query, limit, category, file, cands, degraded)
+        timings["fts"] = round((time.perf_counter() - stage_started) * 1000, 3)
+        stage_started = time.perf_counter()
         _channel_substring(table, query, limit, category, file, cands, degraded)
+        timings["substring"] = round((time.perf_counter() - stage_started) * 1000, 3)
     if mode in ("mixed", "vector"):
+        stage_started = time.perf_counter()
         _channel_vector(table, query, limit, category, file, cands, degraded, diag)
+        timings["vector"] = round((time.perf_counter() - stage_started) * 1000, 3)
     if structured:
+        stage_started = time.perf_counter()
         _channel_structured(table, query, limit, category, file, cands, degraded, diag)
+        timings["structured"] = round((time.perf_counter() - stage_started) * 1000, 3)
 
     if not cands:
         _finish_diagnostics(diag, 0, 0)
         return []
 
+    stage_started = time.perf_counter()
     pool = max(top_k * config.get("rerank_pool_mult"), config.get("rerank_pool_floor"))
     ranked = cands.top(len(cands.scores))
     coverage = _EvidenceCoverage(query) if structured else None
@@ -1017,22 +1061,53 @@ def search(table, query: str, category: str | None = None, top_k: int = 5,
     if structured:
         from . import evidence
         evidence_by_key = evidence.Bundles(cands.chunks, query)
+    timings["candidate_finalize"] = round((time.perf_counter() - stage_started) * 1000, 3)
     rerank_scores: dict[tuple, float] = {}
     if rerank and picked:
+        stage_started = time.perf_counter()
         try:
             picked, rerank_scores = _rerank_and_order(picked, cands.rows, query, evidence_by_key)
         except Exception as e:
             degraded.append("rerank")
             log.warning("rerank 失败: %s", e)
+        finally:
+            timings["rerank"] = round((time.perf_counter() - stage_started) * 1000, 3)
 
     if structured:
         picked = _cover_evidence(picked, cands, query, coverage)
+    stage_started = time.perf_counter()
     out = _build_results(picked, cands, rerank_scores, query, top_k, max_per_doc, evidence_by_key, source_aliases)
+    timings["result_render"] = round((time.perf_counter() - stage_started) * 1000, 3)
     _finish_diagnostics(diag, len(picked), len(out))
     if not diag["degraded"]:
         _cache_put(ckey, [dict(x) for x in out],
-                   {k: v for k, v in diag.items() if k != "cached"})
+                   {k: v for k, v in diag.items() if k not in ("cached", "timings_ms", "upstream")})
     return out
+
+
+def search(table, query: str, category: str | None = None, top_k: int = 5,
+           mode: str = "mixed", rerank: bool = True, file: str | None = None,
+           max_per_doc: int = 0, diagnostics: dict | None = None,
+           structured: bool = False) -> list[dict]:
+    """混合检索;可选 diagnostics 只包含请求耗时与数量,不含查询或正文。"""
+    diag = diagnostics if diagnostics is not None else {}
+    metrics = {"upstream": {}, "embedding_cache_hits": 0, "embedding_cache_misses": 0}
+    started = time.perf_counter()
+    token = _REQUEST_METRICS.set(metrics)
+    try:
+        return _search(table, query, category, top_k, mode, rerank, file,
+                       max_per_doc, diag, structured)
+    finally:
+        _REQUEST_METRICS.reset(token)
+        diag.setdefault("timings_ms", {})["total"] = round(
+            (time.perf_counter() - started) * 1000, 3)
+        for item in metrics["upstream"].values():
+            item["elapsed_ms"] = round(item["elapsed_ms"], 3)
+        diag["upstream"] = {
+            **metrics["upstream"],
+            "embedding_cache_hits": metrics["embedding_cache_hits"],
+            "embedding_cache_misses": metrics["embedding_cache_misses"],
+        }
 
 
 def _structured_facts(chunks: list[dict], query: str) -> list[dict]:

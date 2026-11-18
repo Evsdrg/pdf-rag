@@ -11,7 +11,7 @@
 - 文件列表：`files/count/total/truncated/next_cursor`。
 - 目录：`outline/count/total/truncated/next_cursor`；条目含 `section_id`。
 - 精确查找：`results/count/total`，一项对应一页，内含 `contexts[]`。
-- 搜索：`results/count/degraded/notice/warnings/identity/vector_partitions/structured/cached/counts`。
+- 搜索：`results/count/degraded/notice/warnings/identity/vector_partitions/structured/timings_ms/upstream/cached/counts`。
 
 搜索可选参数 `structured=true` 启用默认关闭的无模型实体桥实验；`structured` 响应对象
 只表示本次桥接的运行诊断，不是抽取事实或答案置信度。省略或设为 false 时不构建实体桥；
@@ -78,9 +78,7 @@ OCR 失败保留可用原生文本并在 `warnings` 中给出 `OCR_FAILED`；错
 
 向量通道成功但无命中是正常空召回，不是服务故障。降级按全文、子串、嵌入、分区、维度、覆盖率、重排区分，空结果仍给出诊断；不缓存降级结果。
 
-`identity` 只检查共享词法解析的完整查询料号与既有 `model_no` 是否匹配，不以文件名子串或
-内容别名确认身份。前缀模糊召回仍可返回，但标为 `unconfirmed`；不等于全库不存在，
-也不据此过滤结果。`rerank_score` 是相关性分数，不是答案正确率概率。
+`timings_ms` 是本次请求的阶段耗时（毫秒），可能包含 `result_cache_lookup`、`fts`、`substring`、`vector`、`structured`、`candidate_finalize`、`rerank`、`result_render` 和 `total`；未执行的阶段不出现。命中结果缓存时只保留本次缓存查找与总耗时，不复用原请求的阶段耗时。`upstream` 只报告本次请求的嵌入/重排调用次数、尝试次数、重试次数和累计耗时，以及查询向量缓存命中/未命中计数；不包含查询文本、正文、密钥或服务地址。它是性能诊断，不是上游可用性探测，也不代表答案质量。
 
 `status` 中 `source_files` 是源目录内 PDF/Markdown 数，`indexed_files` 是索引文件数；
 `unindexed_files` 和 `missing_source_files` 分别表示未索引文件与失效索引引用。按格式计数、
